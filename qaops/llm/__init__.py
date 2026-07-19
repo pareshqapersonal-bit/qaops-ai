@@ -2,6 +2,7 @@
 
 Public API:
 - LLMClient (protocol), AnthropicClient, MockLLMClient
+- create_client (provider factory; GeminiClient via the 'gemini' extra)
 - LLMRequest / LLMMessage / LLMResponse / LLMUsage
 - generate_structured / extract_json_payload
 - PromptLoader
@@ -11,6 +12,7 @@ Public API:
 from qaops.llm.anthropic_client import AnthropicClient
 from qaops.llm.client import LLMClient
 from qaops.llm.errors import LLMProviderError, LLMResponseFormatError
+from qaops.llm.factory import create_client
 from qaops.llm.mock import MockLLMClient
 from qaops.llm.models import LLMMessage, LLMRequest, LLMResponse, LLMUsage
 from qaops.llm.prompt_loader import PromptLoader
@@ -27,6 +29,7 @@ __all__ = [
     "LLMUsage",
     "MockLLMClient",
     "PromptLoader",
+    "create_client",
     "extract_json_payload",
     "generate_structured",
 ]

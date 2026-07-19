@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from qaops.config import QAOpsSettings
-from qaops.llm import AnthropicClient, PromptLoader
+from qaops.llm import PromptLoader, create_client
 from qaops.models import RequirementInput, ScenarioDesignResult
 from qaops.pipelines.test_design import build_scenario_pipeline
 
@@ -35,11 +35,11 @@ def main() -> None:
     text = source.read_text(encoding="utf-8")
 
     settings = QAOpsSettings()
-    client = AnthropicClient(model=settings.model)
+    client = create_client(settings)
     prompts = PromptLoader(version=settings.prompt_version)
     pipeline = build_scenario_pipeline(client, prompts, settings)
 
-    print(f"Model: {settings.model} | prompts: {settings.prompt_version} | input: {source}")
+    print(f"Provider: {settings.provider} | prompts: {settings.prompt_version} | input: {source}")
     result = pipeline.run(RequirementInput(text=text, source_name=source.name))
     assert isinstance(result, ScenarioDesignResult)
     analysis = result.analysis

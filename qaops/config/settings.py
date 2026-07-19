@@ -25,7 +25,14 @@ class QAOpsSettings(BaseSettings):
 
     # LLM provider
     provider: str = Field(default="anthropic", description="LLM provider key.")
-    model: str = Field(default="claude-sonnet-4-6", description="Model identifier.")
+    model: str = Field(
+        default="claude-sonnet-4-6",
+        description="Model identifier for the anthropic provider.",
+    )
+    gemini_model: str = Field(
+        default="gemini-2.5-flash",
+        description="Model identifier used when provider is 'gemini'.",
+    )
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
     max_output_tokens: int = Field(default=8000, ge=256)
     llm_retries: int = Field(
@@ -53,7 +60,7 @@ class QAOpsSettings(BaseSettings):
     @field_validator("provider")
     @classmethod
     def _known_provider(cls, value: str) -> str:
-        known = {"anthropic", "mock"}
+        known = {"anthropic", "gemini", "mock"}
         if value not in known:
             msg = f"Unknown provider {value!r}. Known providers: {sorted(known)}"
             raise ValueError(msg)

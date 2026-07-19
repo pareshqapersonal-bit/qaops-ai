@@ -6,7 +6,7 @@ AI-powered Quality Engineering platform. **Version 1: Test Design Agent** — ac
 
 - **LLM generates; code validates.** Requirement analysis, scenarios, and test cases come from the model. IDs, traceability, coverage math, deduplication, and export are pure deterministic Python — the platform never asks the AI to grade its own homework.
 - **Typed data between stages.** Every pipeline stage consumes one Pydantic model and produces another. Raw dicts never cross a stage boundary.
-- **One LLM boundary.** All model calls go through the `LLMClient` interface. Anthropic is the V1 implementation; a `MockLLMClient` powers the entire unit test suite, so CI never needs an API key.
+- **One LLM boundary.** All model calls go through the `LLMClient` interface. Anthropic and Gemini are the shipped implementations, selected purely by configuration; a `MockLLMClient` powers the entire unit test suite, so CI never needs an API key.
 - **Extensible by protocol, not by registry.** Future agents (defect triage, regression impact, ...) implement the `Agent` protocol and reuse `llm/`, `models/`, `exporters/`, and `config/` unchanged.
 
 ## Architecture
@@ -18,8 +18,9 @@ qaops/
 ├── models/      # Requirement, BusinessRule, Gap, Scenario, TestCase,
 │                #   CoverageReport, TraceabilityMatrix (Pydantic, strict)
 ├── config/      # QAOpsSettings (pydantic-settings, QAOPS_* env overrides)
-├── llm/         # LLMClient, AnthropicClient, MockLLMClient, structured-
-│                #   output retry loop, versioned PromptLoader
+├── llm/         # LLMClient, AnthropicClient, GeminiClient, MockLLMClient,
+│                #   create_client factory, structured-output retry loop,
+│                #   versioned PromptLoader
 ├── prompts/     # Versioned prompt templates (analyzer_v1, rule_extractor_v1,
 │                #   gap_analyzer_v1)
 ├── pipelines/
@@ -57,7 +58,23 @@ ruff check . && ruff format --check .
 mypy qaops tests
 ```
 
-Configuration is environment-driven — see `.env.example`. The API key is read from `ANTHROPIC_API_KEY` only and never stored in config files.
+## Configuration & providers
+
+Configuration is environment-driven — see `.env.example`; every setting has a
+`QAOPS_*` override. Provider selection needs no code change:
+
+| Setting | Env var | Default |
+|---|---|---|
+| Provider | `QAOPS_PROVIDER` | `anthropic` |
+| Anthropic model | `QAOPS_MODEL` | `claude-sonnet-4-6` |
+| Gemini model | `QAOPS_GEMINI_MODEL` | `gemini-2.5-flash` |
+
+API keys come from the environment only, never config files:
+`ANTHROPIC_API_KEY` for Anthropic; `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) for
+Gemini. Gemini support installs via the optional extra:
+`pip install "qaops-ai[gemini]"` (included in `[dev]`, so CI always covers
+it). Prompts are tuned against Anthropic models; judge Gemini output quality
+with `scripts/evaluate_analysis.py` before relying on it (ADR-013).
 
 ## Roadmap
 

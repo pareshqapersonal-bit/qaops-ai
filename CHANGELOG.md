@@ -21,6 +21,42 @@ Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, docx/PDF ingestion, persistence, web UI, semantic
 deduplication.
 
+## [0.5.0-alpha] - 2026-07-19
+
+Provider enhancement (not a project phase): Google Gemini as a second
+LLM provider, validating the ADR-002 boundary before Phase 4. No
+business logic, pipeline, domain model, wire schema, or prompt changed;
+Anthropic behavior is unchanged and all existing tests pass as-is.
+
+### Added
+
+- **`GeminiClient`** (`qaops/llm/gemini_client.py`): thin
+  generate_content wrapper mirroring the AnthropicClient pattern —
+  assistant→model role mapping, system instruction, temperature and
+  token limits translated; every SDK failure wrapped in
+  `LLMProviderError`; API key from `GEMINI_API_KEY`/`GOOGLE_API_KEY`
+  env only with fail-fast `ConfigurationError` when absent; injectable
+  SDK client for offline tests.
+- **`create_client(settings)`** factory: configuration-driven provider
+  selection via `QAOPS_PROVIDER=anthropic|gemini`; `mock` rejected as
+  test-only. The evaluation script now uses it, so provider switching
+  is a pure environment change.
+- **Settings:** `gemini_model` (env `QAOPS_GEMINI_MODEL`, default
+  `gemini-2.5-flash`); provider whitelist gains `gemini`.
+- **Optional extra:** `google-genai` ships as `qaops-ai[gemini]`;
+  included in `[dev]` so CI lint/type/test coverage is unconditional.
+- **Tests:** 12 new offline tests (114 total) — request translation
+  (roles, system, temperature, token limit), response translation
+  (text, usage, finish reason), SDK error wrapping, missing-key
+  fail-fast, key-from-env construction, and factory selection including
+  the env-only Gemini switch and mock rejection. No network calls in CI.
+- **ADR-013:** second provider via factory selection and optional extra.
+
+### Changed
+
+- README gains a Configuration & providers section.
+- Package version 0.4.0 → 0.5.0.
+
 ## [0.4.0-alpha] - 2026-07-19
 
 Phase 3: scenario generation. No test cases, priorities, test data, or
@@ -165,7 +201,8 @@ establishes the contracts every later phase builds on.
 - **Documentation:** README with architecture and roadmap; nine Architecture
   Decision Records (`docs/adr/`).
 
-[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.4.0-alpha...HEAD
+[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.5.0-alpha...HEAD
+[0.5.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.4.0-alpha...v0.5.0-alpha
 [0.4.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.3.0-alpha...v0.4.0-alpha
 [0.3.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.2.0-alpha...v0.3.0-alpha
 [0.2.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.1.0-alpha...v0.2.0-alpha
