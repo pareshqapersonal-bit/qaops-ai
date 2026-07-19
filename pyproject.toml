@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qaops-ai"
-version = "0.1.0"
+version = "0.2.0"
 description = "QAOps AI - AI-powered Quality Engineering platform. V1: Test Design Agent."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,6 +13,7 @@ authors = [{ name = "Paresh Patil", email = "testerpareshpatil@gmail.com" }]
 dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    "anthropic>=0.60",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +30,7 @@ qaops = "qaops.cli.app:main"
 include = ["qaops*"]
 
 [tool.setuptools.package-data]
-qaops = ["py.typed"]
+qaops = ["py.typed", "prompts/*.md"]
 
 [tool.ruff]
 target-version = "py312"

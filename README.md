@@ -18,7 +18,8 @@ qaops/
 ├── models/      # Requirement, BusinessRule, Gap, Scenario, TestCase,
 │                #   CoverageReport, TraceabilityMatrix (Pydantic, strict)
 ├── config/      # QAOpsSettings (pydantic-settings, QAOPS_* env overrides)
-├── llm/         # LLMClient interface, AnthropicClient, MockLLMClient   (Phase 1)
+├── llm/         # LLMClient, AnthropicClient, MockLLMClient, structured-
+│                #   output retry loop, versioned PromptLoader
 ├── prompts/     # Versioned prompt templates                            (Phase 2)
 ├── pipelines/
 │   └── test_design/  # Analyzer, GapAnalyzer, RuleExtractor,
@@ -54,7 +55,7 @@ Configuration is environment-driven — see `.env.example`. The API key is read 
 | Phase | Deliverable | Status |
 |---|---|---|
 | 0 | Skeleton, domain models, protocols, config, CI | ✅ |
-| 1 | LLM abstraction: Anthropic + mock clients, structured-output retry | — |
+| 1 | LLM abstraction: Anthropic + mock clients, structured-output retry | ✅ |
 | 2 | Requirement Analyzer, Business Rule Extractor, Gap Report | — |
 | 3 | Scenario Generator (BVA, EP, negative, RBAC, state transitions) | — |
 | 4 | Test Case Generator | — |

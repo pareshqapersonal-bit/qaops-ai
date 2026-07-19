@@ -10,8 +10,6 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 Planned, in order (one phase merges only when the previous is complete — see CONTRIBUTING.md):
 
-- **Phase 1 — LLM abstraction:** `LLMClient` protocol, `AnthropicClient`,
-  `MockLLMClient`, structured-output parse → validate → retry loop (ADR-002).
 - **Phase 2 — Requirement analysis:** Requirement Analyzer, Business Rule
   Extractor, Ambiguity & Gap Report as a first-class output.
 - **Phase 3 — Scenario Generator:** positive/negative, BVA, EP, input
@@ -26,6 +24,46 @@ Planned, in order (one phase merges only when the previous is complete — see C
 Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, docx/PDF ingestion, persistence, web UI, semantic
 deduplication.
+
+## [0.2.0-alpha] - 2026-07-19
+
+Phase 1: the LLM abstraction layer (ADR-002). Still no business logic —
+this release delivers the single boundary every pipeline stage will use.
+Backward compatible: no existing public API changed.
+
+### Added
+
+- **`qaops/llm/` package:**
+  - `LLMClient` runtime-checkable protocol — the single LLM boundary.
+  - `AnthropicClient`: thin Messages-API wrapper; SDK transport retries
+    configurable; every SDK failure wrapped in `LLMProviderError`; API key
+    resolved from `ANTHROPIC_API_KEY` only; injectable SDK client for tests.
+  - `MockLLMClient`: ordered script of strings / `LLMResponse` objects /
+    exceptions, records all requests, fails loudly when over-called (ADR-008).
+  - `generate_structured()`: parse → Pydantic-validate → retry-with-feedback
+    loop; failed responses echoed back to the model with the validation error;
+    after exhausting retries raises `LLMResponseFormatError` carrying all raw
+    responses, optionally persisting them to a failure directory.
+  - `extract_json_payload()`: strips markdown fences and surrounding prose.
+  - `PromptLoader`: versioned `<name>_<version>.md` templates with strict
+    `string.Template` rendering — missing and unknown variables both fail
+    (ADR-010).
+  - LLM models (`LLMRequest`, `LLMMessage`, `LLMResponse`, `LLMUsage`) and
+    errors (`LLMProviderError`, `LLMResponseFormatError` extending core
+    `LLMError`).
+- **`qaops/prompts/` package:** template home with naming convention;
+  first templates ship in Phase 2.
+- **Tests:** 34 new offline tests (67 total) covering the mock client, the
+  retry loop (including hallucinated-field rejection via `extra="forbid"`),
+  payload extraction, prompt loading/rendering, and `AnthropicClient`
+  request/response translation via an injected SDK stub. One live eval
+  marked `@pytest.mark.llm`, excluded from CI.
+- **ADR-010:** prompt templating via `string.Template`.
+
+### Changed
+
+- New runtime dependency: `anthropic>=0.60`.
+- Package version 0.1.0 → 0.2.0.
 
 ## [0.1.0-alpha] - 2026-07-19
 
@@ -53,5 +91,6 @@ establishes the contracts every later phase builds on.
 - **Documentation:** README with architecture and roadmap; nine Architecture
   Decision Records (`docs/adr/`).
 
-[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.1.0-alpha...HEAD
+[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.2.0-alpha...HEAD
+[0.2.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.1.0-alpha...v0.2.0-alpha
 [0.1.0-alpha]: https://github.com/pareshtester/qaops-ai/releases/tag/v0.1.0-alpha
