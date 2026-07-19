@@ -1,0 +1,71 @@
+"""Wire schemas: the contracts LLM output must satisfy.
+
+These are deliberately separate from the domain models (ADR-011). The
+model never sees or invents QAOps IDs - wire objects are ID-less, and
+stage code assigns REQ-*/BR-* IDs deterministically (ADR-001) while
+mapping wire objects into the strict domain models. The only IDs a wire
+object may contain are *references* to IDs the prompt supplied, and
+stage code verifies every reference against the known set.
+
+All wire schemas forbid unknown fields (ADR-003): a hallucinated field
+fails validation inside generate_structured() and triggers the repair
+retry loop.
+"""
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from qaops.models.enums import GapSeverity
+
+
+class _WireModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExtractedRequirement(_WireModel):
+    """One requirement as extracted by the model - no ID."""
+
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    source_excerpt: str = ""
+    actors: list[str] = Field(default_factory=list)
+    inputs: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+    validations: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+
+
+class RequirementExtraction(_WireModel):
+    """Top-level analyzer output."""
+
+    requirements: list[ExtractedRequirement] = Field(default_factory=list)
+
+
+class ExtractedRule(_WireModel):
+    """One business rule referencing a requirement ID supplied in the prompt."""
+
+    requirement_id: str = Field(min_length=1)
+    rule: str = Field(min_length=1)
+    source_excerpt: str = ""
+
+
+class RuleExtraction(_WireModel):
+    """Top-level rule-extractor output."""
+
+    rules: list[ExtractedRule] = Field(default_factory=list)
+
+
+class ExtractedGap(_WireModel):
+    """One ambiguity/gap found in the requirements."""
+
+    description: str = Field(min_length=1)
+    severity: GapSeverity = GapSeverity.MAJOR
+    requirement_id: str | None = None
+    suggested_question: str = ""
+
+
+class GapExtraction(_WireModel):
+    """Top-level gap-analyzer output."""
+
+    gaps: list[ExtractedGap] = Field(default_factory=list)

@@ -20,10 +20,12 @@ qaops/
 ├── config/      # QAOpsSettings (pydantic-settings, QAOPS_* env overrides)
 ├── llm/         # LLMClient, AnthropicClient, MockLLMClient, structured-
 │                #   output retry loop, versioned PromptLoader
-├── prompts/     # Versioned prompt templates                            (Phase 2)
+├── prompts/     # Versioned prompt templates (analyzer_v1, rule_extractor_v1,
+│                #   gap_analyzer_v1)
 ├── pipelines/
-│   └── test_design/  # Analyzer, GapAnalyzer, RuleExtractor,
-│                     #   ScenarioGenerator, TestCaseGenerator          (Phases 2–4)
+│   └── test_design/  # RequirementAnalyzer, BusinessRuleExtractor, GapAnalyzer,
+│                     #   wire schemas; ScenarioGenerator + TestCaseGenerator
+│                     #   arrive in Phases 3–4
 ├── validation/  # CoverageValidator, Deduplicator — zero LLM calls      (Phase 5)
 ├── exporters/   # Markdown / CSV / XLSX / JSON                          (Phase 6)
 └── cli/         # qaops design <input> --format xlsx                    (Phase 7)
@@ -37,6 +39,13 @@ RequirementInput → RequirementAnalyzer → GapAnalyzer → BusinessRuleExtract
 ```
 
 The Gap Report is a first-class output: before designing tests, the agent reports missing validations, undefined behaviors, and ambiguities — with the question a QA engineer would ask to close each gap.
+
+## Golden examples
+
+`examples/` contains four permanent regression fixtures (`login.md`,
+`checkout.md`, `video_playback.md`, `fund_transfer.md`) — realistic
+requirement documents with deliberate gaps. They ground unit tests today and
+scenario/test-case generation plus live-eval review in later phases.
 
 ## Development
 
@@ -56,7 +65,7 @@ Configuration is environment-driven — see `.env.example`. The API key is read 
 |---|---|---|
 | 0 | Skeleton, domain models, protocols, config, CI | ✅ |
 | 1 | LLM abstraction: Anthropic + mock clients, structured-output retry | ✅ |
-| 2 | Requirement Analyzer, Business Rule Extractor, Gap Report | — |
+| 2 | Requirement Analyzer, Business Rule Extractor, Gap Report | ✅ |
 | 3 | Scenario Generator (BVA, EP, negative, RBAC, state transitions) | — |
 | 4 | Test Case Generator | — |
 | 5 | Coverage Validator, Traceability Matrix, Deduplicator | — |

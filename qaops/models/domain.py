@@ -230,6 +230,22 @@ class CoverageReport(_StrictModel):
         ]
 
 
+class RequirementAnalysisResult(_StrictModel):
+    """Aggregate output of Phase 2's requirement-analysis pipeline.
+
+    Progressively enriched: RequirementAnalyzer fills requirements,
+    BusinessRuleExtractor adds business_rules, GapAnalyzer adds
+    gap_report. source_text is retained so downstream stages can ground
+    their analysis in the original wording.
+    """
+
+    source_name: str
+    source_text: NonEmptyStr
+    requirements: list[Requirement] = Field(default_factory=list)
+    business_rules: list[BusinessRule] = Field(default_factory=list)
+    gap_report: GapReport = Field(default_factory=GapReport)
+
+
 class TestDesignResult(_StrictModel):
     """Aggregate output of the full Test Design pipeline run."""
 
