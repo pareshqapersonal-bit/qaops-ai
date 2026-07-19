@@ -13,5 +13,6 @@
 | [009](009-configuration.md) | Configuration via pydantic-settings, constructor injection | Accepted |
 | [010](010-prompt-templating.md) | Prompt templates use `string.Template`, not `str.format` | Accepted |
 | [011](011-wire-schemas.md) | Wire schemas are separate from domain models | Accepted |
+| [012](012-duplicate-policy.md) | Generation-time duplicates fail loudly; near-duplicates flag later | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

@@ -246,6 +246,18 @@ class RequirementAnalysisResult(_StrictModel):
     gap_report: GapReport = Field(default_factory=GapReport)
 
 
+class ScenarioDesignResult(_StrictModel):
+    """Aggregate output of Phase 3: the analysis plus generated scenarios.
+
+    Composes rather than copies the analysis result, so Phase 2's output
+    stays immutable and the provenance of every scenario's requirement
+    references is auditable.
+    """
+
+    analysis: RequirementAnalysisResult
+    scenarios: list[Scenario] = Field(default_factory=list)
+
+
 class TestDesignResult(_StrictModel):
     """Aggregate output of the full Test Design pipeline run."""
 

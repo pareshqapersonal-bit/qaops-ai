@@ -10,8 +10,6 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 Planned, in order (one phase merges only when the previous is complete — see CONTRIBUTING.md):
 
-- **Phase 3 — Scenario Generator:** positive/negative, BVA, EP, input
-  validation, error handling, RBAC, state transitions, integration.
 - **Phase 4 — Test Case Generator:** full manual test cases with requirement
   traceability.
 - **Phase 5 — Validation:** deterministic Coverage Validator, Traceability
@@ -22,6 +20,44 @@ Planned, in order (one phase merges only when the previous is complete — see C
 Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, docx/PDF ingestion, persistence, web UI, semantic
 deduplication.
+
+## [0.4.0-alpha] - 2026-07-19
+
+Phase 3: scenario generation. No test cases, priorities, test data, or
+expected results — those are Phase 4. Backward compatible: additions
+only.
+
+### Added
+
+- **`ScenarioGenerator`** (`RequirementAnalysisResult → ScenarioDesignResult`):
+  scenario design across functional, positive, negative, boundary-value,
+  equivalence-partition, input-validation, error-handling, CRUD, permission,
+  state-transition, integration, and UI techniques, grounded in extracted
+  requirements and business rules. Zero scenarios and unknown `REQ-*`
+  references are loud `StageError`s; exact duplicates (same category +
+  normalized title) fail the stage (ADR-012).
+- **`ScenarioDesignResult`** domain model: composes the untouched Phase 2
+  analysis with the generated scenarios.
+- **Wire schemas:** `ExtractedScenario` / `ScenarioExtraction` — ID-less,
+  category validated against the `ScenarioCategory` enum so an invalid
+  category triggers the repair retry loop.
+- **Prompt template:** `scenario_generator_v1.md` — enumerates valid
+  categories with definitions, demands grounding in requirements/rules,
+  bans duplicates and invented IDs, defers steps/data/results to Phase 4.
+- **`build_scenario_pipeline()`:** 4-stage composition (analyzer → rules →
+  gaps → scenarios).
+- **Tests:** 14 new offline tests (102 total) — SC-* ID assignment, category
+  mapping across all techniques, composition immutability, prompt content,
+  unknown-reference rejection, invalid-category repair retry, duplicate
+  rejection (including the same-title-different-category non-duplicate),
+  zero-scenario failure, stage preconditions, a Phase 3 boundary check, and
+  a full 4-stage run parametrized over all four golden examples.
+- **ADR-012:** duplicate policy split between generation and validation.
+
+### Changed
+
+- `ScenarioCategory` gains `FUNCTIONAL` (backward-compatible addition).
+- Package version 0.3.0 → 0.4.0.
 
 ## [0.3.0-alpha] - 2026-07-19
 
@@ -129,7 +165,8 @@ establishes the contracts every later phase builds on.
 - **Documentation:** README with architecture and roadmap; nine Architecture
   Decision Records (`docs/adr/`).
 
-[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.3.0-alpha...HEAD
+[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.4.0-alpha...HEAD
+[0.4.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.3.0-alpha...v0.4.0-alpha
 [0.3.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.2.0-alpha...v0.3.0-alpha
 [0.2.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.1.0-alpha...v0.2.0-alpha
 [0.1.0-alpha]: https://github.com/pareshtester/qaops-ai/releases/tag/v0.1.0-alpha

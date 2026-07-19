@@ -24,8 +24,8 @@ qaops/
 │                #   gap_analyzer_v1)
 ├── pipelines/
 │   └── test_design/  # RequirementAnalyzer, BusinessRuleExtractor, GapAnalyzer,
-│                     #   wire schemas; ScenarioGenerator + TestCaseGenerator
-│                     #   arrive in Phases 3–4
+│                     #   ScenarioGenerator, wire schemas; TestCaseGenerator
+│                     #   arrives in Phase 4
 ├── validation/  # CoverageValidator, Deduplicator — zero LLM calls      (Phase 5)
 ├── exporters/   # Markdown / CSV / XLSX / JSON                          (Phase 6)
 └── cli/         # qaops design <input> --format xlsx                    (Phase 7)
@@ -66,7 +66,7 @@ Configuration is environment-driven — see `.env.example`. The API key is read 
 | 0 | Skeleton, domain models, protocols, config, CI | ✅ |
 | 1 | LLM abstraction: Anthropic + mock clients, structured-output retry | ✅ |
 | 2 | Requirement Analyzer, Business Rule Extractor, Gap Report | ✅ |
-| 3 | Scenario Generator (BVA, EP, negative, RBAC, state transitions) | — |
+| 3 | Scenario Generator (BVA, EP, negative, RBAC, state transitions) | ✅ |
 | 4 | Test Case Generator | — |
 | 5 | Coverage Validator, Traceability Matrix, Deduplicator | — |
 | 6 | Exporters (Markdown, CSV, XLSX, JSON) | — |

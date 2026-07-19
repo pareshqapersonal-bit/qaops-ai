@@ -29,6 +29,7 @@ class TestType(StrEnum):
 class ScenarioCategory(StrEnum):
     """QA design technique or focus area a scenario belongs to."""
 
+    FUNCTIONAL = "functional"
     POSITIVE = "positive"
     NEGATIVE = "negative"
     BOUNDARY_VALUE = "boundary_value"
