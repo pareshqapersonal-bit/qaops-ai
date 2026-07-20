@@ -29,6 +29,12 @@ from qaops.models import (
     TraceabilityMatrix,
 )
 
+# Jaccard overlap on title tokens above which two same-scenario, same-requirement
+# test cases are flagged as suspected near-duplicates. Flags for human review
+# only; nothing is deleted (ADR-007). A module constant rather than a setting
+# until real-corpus calibration justifies a public knob (see ADR-015 discussion).
+DUPLICATE_TITLE_OVERLAP_THRESHOLD = 0.7
+
 
 def _normalized_title(title: str) -> str:
     return " ".join(title.casefold().split())
@@ -195,7 +201,7 @@ class CoverageValidator:
             tb = set(_normalized_title(b.title).split())
             if ta and tb:
                 overlap = len(ta & tb) / len(ta | tb)
-                if overlap >= 0.7:
+                if overlap >= DUPLICATE_TITLE_OVERLAP_THRESHOLD:
                     return f"same scenario and requirements; title overlap {overlap:.0%}"
         return ""
 
