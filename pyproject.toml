@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qaops-ai"
-version = "0.7.0"
+version = "0.8.0"
 description = "QAOps AI - AI-powered Quality Engineering platform. V1: Test Design Agent."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,6 +14,8 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "anthropic>=0.60",
+    "typer>=0.12",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -62,10 +64,10 @@ strict = true
 warn_unreachable = true
 show_error_codes = true
 
-# openpyxl ships no type stubs and is an optional runtime dependency.
-# Scope the relaxation to that library only; strict mode holds everywhere else.
+# openpyxl and PyYAML ship no type stubs and are optional/CLI dependencies.
+# Scope the relaxation to those libraries only; strict mode holds everywhere else.
 [[tool.mypy.overrides]]
-module = ["openpyxl.*"]
+module = ["openpyxl.*", "yaml"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

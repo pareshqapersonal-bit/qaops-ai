@@ -1,0 +1,26 @@
+# QAOps AI configuration (optional). Place a copy named qaops.yaml in the
+# directory you run `qaops` from, or pass --config <path>. Every key is
+# optional and falls back to a built-in default. Environment variables
+# (QAOPS_*) override any value set here.
+
+# LLM provider: anthropic (default) or gemini
+provider: anthropic
+
+# Model per provider
+model: claude-sonnet-4-6
+gemini_model: gemini-2.5-flash
+
+# Generation controls
+temperature: 0.2
+max_output_tokens: 8000
+llm_retries: 2
+
+# Input guardrail: requests larger than this (characters) are rejected
+max_input_chars: 60000
+
+# Prompt template version
+prompt_version: v1
+
+# Where reports are written, and which formats by default
+output_dir: output
+default_export_formats: [markdown, json]

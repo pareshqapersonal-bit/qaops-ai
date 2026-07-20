@@ -8,13 +8,51 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 ## [Unreleased]
 
-Planned, in order (one phase merges only when the previous is complete — see CONTRIBUTING.md):
-
-- **Phase 7 — v1.0.0:** CLI, examples, documentation, release.
+The generation, validation, and delivery pipeline is complete. Remaining
+toward v1.0: hardening, broader real-world evaluation, and documentation
+polish.
 
 Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, docx/PDF ingestion, persistence, web UI, semantic
 deduplication.
+
+## [0.8.0-alpha] - 2026-07-20
+
+Phase 7: the command-line interface. Turns the library into a usable tool —
+`qaops design <input>` runs everything and writes reports, no Python required.
+CLI layer only: no pipeline stage, domain model, validator, exporter, or
+provider was modified.
+
+### Added
+
+- **Command-line interface (`qaops design <input>`).** A QA engineer can
+  process a requirement document into reports with one command — no Python.
+  Runs the full six-stage pipeline and writes the configured export formats,
+  printing a coverage-and-gaps summary. Options: `--format/-f` (repeatable),
+  `--output-dir/-o`, `--config/-c`, `--debug`. Built on Typer; a thin
+  composition root with no business logic (ADR-017).
+- **`qaops.yaml` configuration**, layered under the existing settings so
+  environment variables still take precedence; unknown keys and invalid
+  values are rejected with friendly messages. Sample in `qaops.yaml.example`.
+- **Friendly error handling:** library exceptions map to plain one-line
+  messages and nonzero exit codes, never a traceback (`--debug` to opt in).
+- **Tests:** 16 new offline CLI tests (193 total) — happy path, format and
+  output-dir options, config loading and env-over-file precedence, and
+  friendly errors for missing input, unknown format, oversized input, and
+  invalid config. The pipeline's client is mocked, so the whole command runs
+  in CI with no API key.
+- **ADR-017:** the CLI is a thin composition root over existing components.
+
+### Changed
+
+- New base runtime dependencies: `typer>=0.12` and `pyyaml>=6.0`, declared in
+  `[project.dependencies]` (not an extra) since the CLI is the primary
+  deliverable. Verified in a clean, isolated virtual environment: installing
+  only the wheel pulls them automatically and `qaops design` runs end to end
+  with no manual package installation.
+- mypy override extended to cover `yaml` (no stubs), scoped to that module.
+- README gains a Usage section; roadmap Phase 7 complete.
+- Package version 0.7.0 → 0.8.0.
 
 ## [0.7.0-alpha] - 2026-07-19
 
@@ -321,7 +359,8 @@ establishes the contracts every later phase builds on.
 - **Documentation:** README with architecture and roadmap; nine Architecture
   Decision Records (`docs/adr/`).
 
-[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.7.0-alpha...HEAD
+[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.8.0-alpha...HEAD
+[0.8.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.7.0-alpha...v0.8.0-alpha
 [0.7.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.6.0-alpha...v0.7.0-alpha
 [0.6.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.5.0-alpha...v0.6.0-alpha
 [0.5.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.4.0-alpha...v0.5.0-alpha

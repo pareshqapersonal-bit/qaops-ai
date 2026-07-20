@@ -40,6 +40,41 @@ RequirementInput → RequirementAnalyzer → GapAnalyzer → BusinessRuleExtract
 
 The Gap Report is a first-class output: before designing tests, the agent reports missing validations, undefined behaviors, and ambiguities — with the question a QA engineer would ask to close each gap.
 
+## Usage
+
+Process a requirement document into test-design reports with one command:
+
+```bash
+pip install qaops-ai            # brings the qaops CLI
+export ANTHROPIC_API_KEY=...    # or configure Gemini (see below)
+qaops design examples/login.md
+```
+
+That runs the full pipeline (analyze → rules → gaps → scenarios → test cases →
+coverage) and writes the configured report formats to the output directory,
+printing a coverage-and-gaps summary as it goes. Options:
+
+```bash
+qaops design spec.md -f json -f markdown -f csv -f xlsx   # choose formats
+qaops design spec.md -o reports/                          # output directory
+qaops design spec.md -c path/to/qaops.yaml               # explicit config
+qaops design spec.md --debug                             # full tracebacks
+```
+
+Configuration is optional. Drop a `qaops.yaml` in the working directory to set
+defaults; environment variables (`QAOPS_*`) still override it:
+
+```yaml
+provider: anthropic
+default_export_formats: [markdown, json]
+output_dir: output
+temperature: 0.2
+```
+
+Errors are reported as plain messages with a nonzero exit code, never a Python
+traceback (use `--debug` to see one). Excel export needs the optional extra:
+`pip install "qaops-ai[excel]"`.
+
 ## Golden examples
 
 `examples/` contains four permanent regression fixtures (`login.md`,
@@ -91,6 +126,6 @@ deterministic and derives from the JSON serialization (ADR-016).
 | 4 | Test Case Generator | ✅ |
 | 5 | Coverage Validator, Traceability Matrix, Deduplicator | ✅ |
 | 6 | Exporters (JSON, Markdown, CSV, Excel) | ✅ |
-| 7 | CLI, examples, docs, v1.0 release | — |
+| 7 | CLI (`qaops design`), qaops.yaml config, docs | ✅ |
 
 **V1 non-goals:** automation code generation (Selenium/Playwright/etc.), test execution, defect analysis, docx/PDF ingestion, persistence, web UI, semantic deduplication.
