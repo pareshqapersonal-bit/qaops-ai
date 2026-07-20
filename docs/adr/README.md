@@ -15,5 +15,6 @@
 | [011](011-wire-schemas.md) | Wire schemas are separate from domain models | Accepted |
 | [012](012-duplicate-policy.md) | Generation-time duplicates fail loudly; near-duplicates flag later | Accepted |
 | [013](013-second-provider-gemini.md) | Second provider (Gemini) via factory selection and optional extra | Accepted |
+| [014](014-test-case-mapping.md) | Flat test-case wire schema, code-assigned step numbers, per-scenario reference scoping | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

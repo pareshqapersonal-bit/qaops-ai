@@ -25,8 +25,7 @@ qaops/
 │                #   gap_analyzer_v1)
 ├── pipelines/
 │   └── test_design/  # RequirementAnalyzer, BusinessRuleExtractor, GapAnalyzer,
-│                     #   ScenarioGenerator, wire schemas; TestCaseGenerator
-│                     #   arrives in Phase 4
+│                     #   ScenarioGenerator, TestCaseGenerator, wire schemas
 ├── validation/  # CoverageValidator, Deduplicator — zero LLM calls      (Phase 5)
 ├── exporters/   # Markdown / CSV / XLSX / JSON                          (Phase 6)
 └── cli/         # qaops design <input> --format xlsx                    (Phase 7)
@@ -84,7 +83,7 @@ with `scripts/evaluate_analysis.py` before relying on it (ADR-013).
 | 1 | LLM abstraction: Anthropic + mock clients, structured-output retry | ✅ |
 | 2 | Requirement Analyzer, Business Rule Extractor, Gap Report | ✅ |
 | 3 | Scenario Generator (BVA, EP, negative, RBAC, state transitions) | ✅ |
-| 4 | Test Case Generator | — |
+| 4 | Test Case Generator | ✅ |
 | 5 | Coverage Validator, Traceability Matrix, Deduplicator | — |
 | 6 | Exporters (Markdown, CSV, XLSX, JSON) | — |
 | 7 | CLI, examples, docs, v1.0 release | — |

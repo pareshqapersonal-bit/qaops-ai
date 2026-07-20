@@ -10,8 +10,6 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 Planned, in order (one phase merges only when the previous is complete — see CONTRIBUTING.md):
 
-- **Phase 4 — Test Case Generator:** full manual test cases with requirement
-  traceability.
 - **Phase 5 — Validation:** deterministic Coverage Validator, Traceability
   Matrix, heuristic Deduplicator (flags, never deletes — ADR-007).
 - **Phase 6 — Exporters:** Markdown, CSV, XLSX, JSON.
@@ -23,12 +21,51 @@ deduplication.
 
 ## [0.5.0-alpha] - 2026-07-19
 
-Provider enhancement (not a project phase): Google Gemini as a second
-LLM provider, validating the ADR-002 boundary before Phase 4. No
-business logic, pipeline, domain model, wire schema, or prompt changed;
-Anthropic behavior is unchanged and all existing tests pass as-is.
+Phase 4: manual test case generation — the final generation stage of the
+Test Design pipeline. Backward compatible: additions only; no existing
+stage, domain model, prompt, or provider was modified beyond pipeline
+composition.
 
 ### Added
+
+- **`TestCaseGenerator`** (`ScenarioDesignResult → TestDesignResult`):
+  turns each scenario into one or more production-quality manual test
+  cases with preconditions, test data, ordered steps, expected results,
+  priority, type, tags, and full scenario/requirement traceability.
+  Validation (all deterministic): unknown scenario refs, unknown
+  requirement refs, and requirement refs not linked to the case's own
+  scenario are loud `StageError`s (ADR-014); exact duplicates within a
+  scenario fail loudly (ADR-012); mandatory fields and 1..N step ordering
+  are enforced by the strict domain models. Coverage is left untouched
+  for Phase 5.
+- **Wire schemas:** `ExtractedTestStep` (no number — order from list
+  position), `ExtractedTestCase` (flat, carries its own `scenario_id`),
+  `TestCaseExtraction`. Step numbers and TC-* IDs are assigned by code,
+  never the model (ADR-001, ADR-014).
+- **Prompt template:** `test_case_generator_v1.md` — grounds cases in
+  scenarios/requirements/rules, forbids invented IDs and step numbers,
+  requires tester-executable steps with concrete data, bans duplicates.
+- **`build_test_design_pipeline()`:** the full 5-stage composition
+  (analyzer → rules → gaps → scenarios → test cases).
+- **Tests:** 18 new offline tests — TC-* ID assignment, field mapping,
+  code-assigned step ordering, artifact pass-through, prompt content,
+  unknown scenario/requirement rejection, per-scenario cross-link
+  rejection, duplicate handling (including same-title-across-scenarios
+  non-duplicate), mandatory-field and invalid-priority repair retries,
+  zero-case failure, stage precondition, and the full 5-stage pipeline
+  across all four golden examples.
+- **ADR-014:** flat wire schema, code-assigned step numbers, per-scenario
+  reference scoping.
+
+### Also included: Google Gemini provider
+
+Built between Phases 3 and 4 to validate the ADR-002 LLM boundary. It was
+never released or tagged independently — end-to-end validation could not
+be completed because Gemini authentication failed at the provider level
+(outside QAOps AI), so it ships for the first time as part of this
+release rather than as a standalone version. No business logic, pipeline,
+domain model, wire schema, or prompt changed; Anthropic behavior is
+unchanged and all existing tests pass as-is.
 
 - **`GeminiClient`** (`qaops/llm/gemini_client.py`): thin
   generate_content wrapper mirroring the AnthropicClient pattern —
@@ -39,17 +76,17 @@ Anthropic behavior is unchanged and all existing tests pass as-is.
   SDK client for offline tests.
 - **`create_client(settings)`** factory: configuration-driven provider
   selection via `QAOPS_PROVIDER=anthropic|gemini`; `mock` rejected as
-  test-only. The evaluation script now uses it, so provider switching
-  is a pure environment change.
+  test-only. The evaluation script uses it, so provider switching is a
+  pure environment change.
 - **Settings:** `gemini_model` (env `QAOPS_GEMINI_MODEL`, default
   `gemini-2.5-flash`); provider whitelist gains `gemini`.
 - **Optional extra:** `google-genai` ships as `qaops-ai[gemini]`;
   included in `[dev]` so CI lint/type/test coverage is unconditional.
-- **Tests:** 12 new offline tests (114 total) — request translation
-  (roles, system, temperature, token limit), response translation
-  (text, usage, finish reason), SDK error wrapping, missing-key
-  fail-fast, key-from-env construction, and factory selection including
-  the env-only Gemini switch and mock rejection. No network calls in CI.
+- **Tests:** 12 offline provider tests — request translation (roles,
+  system, temperature, token limit), response translation (text, usage,
+  finish reason), SDK error wrapping, missing-key fail-fast, key-from-env
+  construction, and factory selection including the env-only Gemini
+  switch and mock rejection. No network calls in CI.
 - **ADR-013:** second provider via factory selection and optional extra.
 
 ### Changed
