@@ -17,5 +17,6 @@
 | [013](013-second-provider-gemini.md) | Second provider (Gemini) via factory selection and optional extra | Accepted |
 | [014](014-test-case-mapping.md) | Flat test-case wire schema, code-assigned step numbers, per-scenario reference scoping | Accepted |
 | [015](015-deterministic-validation.md) | Validation stage is deterministic, with no LLM in its signature | Accepted |
+| [016](016-exporter-framework.md) | JSON is canonical; other exporters derive from it; CSV is intentionally lossy | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

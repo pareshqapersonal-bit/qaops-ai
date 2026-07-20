@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qaops-ai"
-version = "0.6.0"
+version = "0.7.0"
 description = "QAOps AI - AI-powered Quality Engineering platform. V1: Test Design Agent."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -20,8 +20,12 @@ dependencies = [
 gemini = [
     "google-genai>=1.0",
 ]
+excel = [
+    "openpyxl>=3.1",
+]
 dev = [
     "google-genai>=1.0",
+    "openpyxl>=3.1",
     "pytest>=8.0",
     "ruff>=0.5",
     "mypy>=1.10",
@@ -57,6 +61,12 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 show_error_codes = true
+
+# openpyxl ships no type stubs and is an optional runtime dependency.
+# Scope the relaxation to that library only; strict mode holds everywhere else.
+[[tool.mypy.overrides]]
+module = ["openpyxl.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

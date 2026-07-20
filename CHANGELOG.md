@@ -10,12 +10,51 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 Planned, in order (one phase merges only when the previous is complete — see CONTRIBUTING.md):
 
-- **Phase 6 — Exporters:** Markdown, CSV, XLSX, JSON.
 - **Phase 7 — v1.0.0:** CLI, examples, documentation, release.
 
 Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, docx/PDF ingestion, persistence, web UI, semantic
 deduplication.
+
+## [0.7.0-alpha] - 2026-07-19
+
+Phase 6: reporting & export framework. Implements the `Exporter`
+protocol defined back in Phase 0 (ADR-001). Turns a validated
+`TestDesignResult` into consumable artifacts. Zero LLM usage; exporters
+never mutate their input. Backward compatible: additions only.
+
+### Added
+
+- **`JsonExporter`** — the canonical serialization (ADR-016). Full
+  result including coverage, pretty-printed, declaration-order keys,
+  round-trips back into the model. Every other exporter derives from it.
+- **`MarkdownExporter`** — human-readable QA report: coverage summary
+  with percentages, requirements, gap report, scenarios, and full test
+  cases with step tables and traceability.
+- **`CsvExporter`** — the test-case table (one row per case, list/mapping
+  fields joined deterministically), RFC-4180 CRLF. Intentionally lossy;
+  the full graph lives in JSON and Excel (ADR-016).
+- **`ExcelExporter`** — multi-sheet workbook (Coverage Summary,
+  Requirements, Scenarios, Test Cases, Traceability), values-only so no
+  recalculation is needed, professional font. Needs the optional
+  `[excel]` extra (`openpyxl`); a missing install raises `ExportError`
+  with an actionable message.
+- **`qaops/exporters/` package** with shared canonical-serialization and
+  deterministic-join helpers.
+- **Tests:** 24 new offline tests — protocol conformance, input
+  immutability, determinism (export twice → byte-identical for
+  JSON/CSV/Markdown, identical cell values for Excel), no-timestamp
+  check, JSON round-trip, per-format content, and all four formats
+  exported from the full six-stage pipeline across all four golden
+  examples. No LLM calls in any exporter test.
+- **ADR-016:** JSON canonical, derived formats, intentionally-lossy CSV.
+
+### Changed
+
+- New optional dependency: `openpyxl>=3.1` as the `[excel]` extra (in
+  `[dev]` so CI covers it); scoped mypy override for its missing stubs.
+- README gains an exporters note in Configuration & providers.
+- Package version 0.6.0 → 0.7.0.
 
 ## [0.6.0-alpha] - 2026-07-19
 
@@ -282,7 +321,8 @@ establishes the contracts every later phase builds on.
 - **Documentation:** README with architecture and roadmap; nine Architecture
   Decision Records (`docs/adr/`).
 
-[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.6.0-alpha...HEAD
+[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.7.0-alpha...HEAD
+[0.7.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.6.0-alpha...v0.7.0-alpha
 [0.6.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.5.0-alpha...v0.6.0-alpha
 [0.5.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.4.0-alpha...v0.5.0-alpha
 [0.4.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.3.0-alpha...v0.4.0-alpha

@@ -27,7 +27,7 @@ qaops/
 │   └── test_design/  # RequirementAnalyzer, BusinessRuleExtractor, GapAnalyzer,
 │                     #   ScenarioGenerator, TestCaseGenerator, wire schemas
 ├── validation/  # CoverageValidator, Deduplicator — zero LLM calls      (Phase 5)
-├── exporters/   # Markdown / CSV / XLSX / JSON                          (Phase 6)
+├── exporters/   # JSON (canonical), Markdown, CSV, Excel — all derive from JSON
 └── cli/         # qaops design <input> --format xlsx                    (Phase 7)
 ```
 
@@ -75,6 +75,11 @@ Gemini. Gemini support installs via the optional extra:
 it). Prompts are tuned against Anthropic models; judge Gemini output quality
 with `scripts/evaluate_analysis.py` before relying on it (ADR-013).
 
+Exporters render a `TestDesignResult` to JSON (canonical), Markdown, CSV, and
+Excel. JSON, Markdown, and CSV need no extra dependency; Excel installs via
+`pip install "qaops-ai[excel]"` (included in `[dev]`). All output is
+deterministic and derives from the JSON serialization (ADR-016).
+
 ## Roadmap
 
 | Phase | Deliverable | Status |
@@ -85,7 +90,7 @@ with `scripts/evaluate_analysis.py` before relying on it (ADR-013).
 | 3 | Scenario Generator (BVA, EP, negative, RBAC, state transitions) | ✅ |
 | 4 | Test Case Generator | ✅ |
 | 5 | Coverage Validator, Traceability Matrix, Deduplicator | ✅ |
-| 6 | Exporters (Markdown, CSV, XLSX, JSON) | — |
+| 6 | Exporters (JSON, Markdown, CSV, Excel) | ✅ |
 | 7 | CLI, examples, docs, v1.0 release | — |
 
 **V1 non-goals:** automation code generation (Selenium/Playwright/etc.), test execution, defect analysis, docx/PDF ingestion, persistence, web UI, semantic deduplication.
