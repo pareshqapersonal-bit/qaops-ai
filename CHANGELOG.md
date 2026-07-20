@@ -10,14 +10,58 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 Planned, in order (one phase merges only when the previous is complete — see CONTRIBUTING.md):
 
-- **Phase 5 — Validation:** deterministic Coverage Validator, Traceability
-  Matrix, heuristic Deduplicator (flags, never deletes — ADR-007).
 - **Phase 6 — Exporters:** Markdown, CSV, XLSX, JSON.
 - **Phase 7 — v1.0.0:** CLI, examples, documentation, release.
 
 Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, docx/PDF ingestion, persistence, web UI, semantic
 deduplication.
+
+## [0.6.0-alpha] - 2026-07-19
+
+Phase 5: coverage validation — the first fully deterministic stage.
+Zero LLM calls: the "LLM generates, code validates" principle (ADR-001)
+now has its validating half. Backward compatible: `CoverageReport` is
+extended additively and no existing generation stage changed beyond
+pipeline composition.
+
+### Added
+
+- **`CoverageValidator`** (`TestDesignResult → TestDesignResult` with
+  `coverage` filled): pure deterministic computation from the
+  traceability graph. Its constructor takes no LLM client — the
+  zero-LLM guarantee is structural, not a promise (ADR-015). Computes:
+  requirement coverage (covered/partial/uncovered, with partial driven
+  by missing scenario categories), business-rule coverage (transitive
+  via the rule's requirement), scenario coverage, a requirement→test-case
+  traceability matrix, aggregate metrics with coverage percentages,
+  heuristic near-duplicate flagging (identical titles or same
+  scenario+requirements with ≥0.7 title overlap; flags, never deletes —
+  ADR-007), and invalid-reference detection (reported, never trusted
+  away). Input result is never mutated (`model_copy`).
+- **`CoverageReport` extensions (additive, defaults):**
+  `per_business_rule`, `per_scenario`, `metrics`, `duplicate_pairs`,
+  `invalid_references`, plus `uncovered_business_rule_ids`,
+  `uncovered_scenario_ids`, and `has_invalid_references` accessors. The
+  legacy `suspected_duplicates` field is retained and mirrored.
+- **New models:** `BusinessRuleCoverage`, `ScenarioCoverage`,
+  `CoverageMetrics` (with percentage properties), `DuplicatePair`,
+  `InvalidReference`.
+- **`build_full_pipeline()`:** the complete 6-stage composition
+  (analyzer → rules → gaps → scenarios → test cases → coverage).
+- **Tests:** 21 new offline tests — determinism (identical repeated
+  runs, no input mutation, no-client constructor), requirement/rule/
+  scenario coverage including partial, traceability, duplicate flagging
+  (identical and high-overlap) and non-flagging of distinct cases,
+  invalid-reference reporting, metrics/percentages and zero-denominator
+  safety, stage precondition, and the full 6-stage pipeline across all
+  four golden examples. No LLM calls in any coverage test.
+- **ADR-015:** deterministic validation stage with no LLM in its
+  signature.
+
+### Changed
+
+- Package version 0.5.0 → 0.6.0.
 
 ## [0.5.0-alpha] - 2026-07-19
 
@@ -238,7 +282,8 @@ establishes the contracts every later phase builds on.
 - **Documentation:** README with architecture and roadmap; nine Architecture
   Decision Records (`docs/adr/`).
 
-[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.5.0-alpha...HEAD
+[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.6.0-alpha...HEAD
+[0.6.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.5.0-alpha...v0.6.0-alpha
 [0.5.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.4.0-alpha...v0.5.0-alpha
 [0.4.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.3.0-alpha...v0.4.0-alpha
 [0.3.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.2.0-alpha...v0.3.0-alpha

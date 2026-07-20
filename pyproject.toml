@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qaops-ai"
-version = "0.5.0"
+version = "0.6.0"
 description = "QAOps AI - AI-powered Quality Engineering platform. V1: Test Design Agent."
 readme = "README.md"
 requires-python = ">=3.12"

@@ -84,7 +84,7 @@ with `scripts/evaluate_analysis.py` before relying on it (ADR-013).
 | 2 | Requirement Analyzer, Business Rule Extractor, Gap Report | ✅ |
 | 3 | Scenario Generator (BVA, EP, negative, RBAC, state transitions) | ✅ |
 | 4 | Test Case Generator | ✅ |
-| 5 | Coverage Validator, Traceability Matrix, Deduplicator | — |
+| 5 | Coverage Validator, Traceability Matrix, Deduplicator | ✅ |
 | 6 | Exporters (Markdown, CSV, XLSX, JSON) | — |
 | 7 | CLI, examples, docs, v1.0 release | — |
 

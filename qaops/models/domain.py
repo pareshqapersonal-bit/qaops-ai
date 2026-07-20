@@ -205,6 +205,82 @@ class RequirementCoverage(_StrictModel):
     missing_categories: list[ScenarioCategory] = Field(default_factory=list)
 
 
+class BusinessRuleCoverage(_StrictModel):
+    """Coverage verdict for one business rule, computed transitively.
+
+    A rule has no direct test-case link; it is covered when a test case
+    covers the requirement the rule belongs to. test_case_ids lists the
+    cases that reach the rule's requirement.
+    """
+
+    rule_id: NonEmptyStr
+    requirement_id: NonEmptyStr
+    status: CoverageStatus
+    test_case_ids: list[str] = Field(default_factory=list)
+
+
+class ScenarioCoverage(_StrictModel):
+    """Coverage verdict for one scenario, computed by code."""
+
+    scenario_id: NonEmptyStr
+    status: CoverageStatus
+    test_case_ids: list[str] = Field(default_factory=list)
+
+
+class DuplicatePair(_StrictModel):
+    """Two test cases flagged as suspected near-duplicates, with the reason."""
+
+    test_case_id_a: NonEmptyStr
+    test_case_id_b: NonEmptyStr
+    reason: str = ""
+
+
+class InvalidReference(_StrictModel):
+    """A test-case reference pointing at an ID absent from the result.
+
+    Prior stages reject these at generation, so at the validation layer
+    this list should always be empty; a non-empty list is a defect
+    report, not a normal outcome.
+    """
+
+    test_case_id: NonEmptyStr
+    reference_kind: str  # "scenario" or "requirement"
+    missing_id: NonEmptyStr
+
+
+class CoverageMetrics(_StrictModel):
+    """Aggregate coverage percentages, computed by code.
+
+    Percentages are 0.0-100.0, rounded to one decimal. A denominator of
+    zero yields 0.0 (nothing to cover is reported as 0% covered, never a
+    division error).
+    """
+
+    total_requirements: int = 0
+    covered_requirements: int = 0
+    total_business_rules: int = 0
+    covered_business_rules: int = 0
+    total_scenarios: int = 0
+    covered_scenarios: int = 0
+    total_test_cases: int = 0
+
+    @staticmethod
+    def _pct(covered: int, total: int) -> float:
+        return round(100.0 * covered / total, 1) if total else 0.0
+
+    @property
+    def requirement_coverage_pct(self) -> float:
+        return self._pct(self.covered_requirements, self.total_requirements)
+
+    @property
+    def business_rule_coverage_pct(self) -> float:
+        return self._pct(self.covered_business_rules, self.total_business_rules)
+
+    @property
+    def scenario_coverage_pct(self) -> float:
+        return self._pct(self.covered_scenarios, self.total_scenarios)
+
+
 class TraceabilityMatrix(_StrictModel):
     """Requirement -> test case mapping, computed deterministically."""
 
@@ -212,13 +288,26 @@ class TraceabilityMatrix(_StrictModel):
 
 
 class CoverageReport(_StrictModel):
-    """Full coverage validation output. Pure code, zero LLM calls."""
+    """Full coverage validation output. Pure code, zero LLM calls.
+
+    Extended in Phase 5 with business-rule and scenario coverage,
+    aggregate metrics, structured duplicate pairs, and invalid-reference
+    reporting. All additions are optional with defaults, so the Phase 0
+    construction (`CoverageReport()`) and the Phase 4 pass-through remain
+    valid; `suspected_duplicates` is retained for backward compatibility.
+    """
 
     per_requirement: list[RequirementCoverage] = Field(default_factory=list)
+    per_business_rule: list[BusinessRuleCoverage] = Field(default_factory=list)
+    per_scenario: list[ScenarioCoverage] = Field(default_factory=list)
     traceability: TraceabilityMatrix = Field(default_factory=TraceabilityMatrix)
+    metrics: CoverageMetrics = Field(default_factory=CoverageMetrics)
+    duplicate_pairs: list[DuplicatePair] = Field(default_factory=list)
+    invalid_references: list[InvalidReference] = Field(default_factory=list)
     suspected_duplicates: list[tuple[str, str]] = Field(
         default_factory=list,
-        description="Pairs of test case IDs flagged as likely duplicates.",
+        description="Backward-compatible flat pairs of test case IDs flagged as "
+        "likely duplicates. Mirrors duplicate_pairs.",
     )
 
     @property
@@ -228,6 +317,20 @@ class CoverageReport(_StrictModel):
             for rc in self.per_requirement
             if rc.status is CoverageStatus.UNCOVERED
         ]
+
+    @property
+    def uncovered_business_rule_ids(self) -> list[str]:
+        return [
+            bc.rule_id for bc in self.per_business_rule if bc.status is CoverageStatus.UNCOVERED
+        ]
+
+    @property
+    def uncovered_scenario_ids(self) -> list[str]:
+        return [sc.scenario_id for sc in self.per_scenario if sc.status is CoverageStatus.UNCOVERED]
+
+    @property
+    def has_invalid_references(self) -> bool:
+        return bool(self.invalid_references)
 
 
 class RequirementAnalysisResult(_StrictModel):
