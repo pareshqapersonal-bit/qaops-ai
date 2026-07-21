@@ -27,6 +27,7 @@ qaops/
 │   └── test_design/  # RequirementAnalyzer, BusinessRuleExtractor, GapAnalyzer,
 │                     #   ScenarioGenerator, TestCaseGenerator, wire schemas
 ├── validation/  # CoverageValidator, Deduplicator — zero LLM calls      (Phase 5)
+├── ingestion/   # DocumentLoader: text/markdown + PDF -> normalized text
 ├── exporters/   # JSON (canonical), Markdown, CSV, Excel — all derive from JSON
 └── cli/         # qaops design <input> --format xlsx                    (Phase 7)
 ```
@@ -52,7 +53,9 @@ qaops design examples/login.md
 
 That runs the full pipeline (analyze → rules → gaps → scenarios → test cases →
 coverage) and writes the configured report formats to the output directory,
-printing a coverage-and-gaps summary as it goes. Options:
+printing a coverage-and-gaps summary as it goes. The input may be Markdown,
+plain text, or PDF; PDF support installs via `pip install "qaops-ai[pdf]"`.
+Options:
 
 ```bash
 qaops design spec.md -f json -f markdown -f csv -f xlsx   # choose formats
@@ -127,5 +130,6 @@ deterministic and derives from the JSON serialization (ADR-016).
 | 5 | Coverage Validator, Traceability Matrix, Deduplicator | ✅ |
 | 6 | Exporters (JSON, Markdown, CSV, Excel) | ✅ |
 | 7 | CLI (`qaops design`), qaops.yaml config, docs | ✅ |
+| 8 | Document ingestion (text/markdown, PDF; DOCX/HTML stubs) | ✅ |
 
 **V1 non-goals:** automation code generation (Selenium/Playwright/etc.), test execution, defect analysis, docx/PDF ingestion, persistence, web UI, semantic deduplication.

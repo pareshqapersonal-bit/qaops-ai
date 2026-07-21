@@ -19,5 +19,6 @@
 | [015](015-deterministic-validation.md) | Validation stage is deterministic, with no LLM in its signature | Accepted |
 | [016](016-exporter-framework.md) | JSON is canonical; other exporters derive from it; CSV is intentionally lossy | Accepted |
 | [017](017-cli-composition-root.md) | The CLI is a thin composition root over existing components | Accepted |
+| [018](018-document-ingestion.md) | A DocumentLoader ingestion layer, not per-format branching | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

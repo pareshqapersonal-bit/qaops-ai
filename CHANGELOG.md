@@ -8,13 +8,58 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 ## [Unreleased]
 
-The generation, validation, and delivery pipeline is complete. Remaining
-toward v1.0: hardening, broader real-world evaluation, and documentation
-polish.
+Remaining toward v1.0: broader real-world evaluation and documentation polish.
 
 Deferred beyond v1.0 (see README non-goals): automation code generation,
-test execution, docx/PDF ingestion, persistence, web UI, semantic
-deduplication.
+test execution, persistence, web UI, semantic deduplication. (DOCX and HTML
+ingestion are registered stubs, implementable behind the existing
+DocumentLoader interface without further architecture.)
+
+## [0.9.0-alpha] - 2026-07-20
+
+Phase 8: document ingestion framework. Fixes the first real-world defect —
+QAOps assumed every input was UTF-8 text and failed immediately on PDFs — by
+introducing a document-ingestion layer rather than PDF-specific patching. The
+pipeline contract is unchanged (`RequirementInput(text)`); everything before
+it is now ingestion, everything after is analysis.
+
+### Added
+
+- **`qaops/ingestion/` package** — the third pluggable-format abstraction
+  (after providers and exporters, same shape): a `DocumentLoader` protocol,
+  concrete loaders, an `{extension: loader}` registry, and a single
+  `load_document(path)` dispatcher (ADR-018).
+- **Implemented loaders:** `TextLoader` (.txt/.md/.markdown) and `PdfLoader`
+  (.pdf, via the optional `[pdf]` extra). `PdfLoader` extracts linear page
+  text and raises a clear error on image-only/scanned PDFs rather than running
+  the pipeline on emptiness.
+- **Registered stub loaders:** `DocxLoader` (.docx) and `HtmlLoader`
+  (.html/.htm) — recognized formats that raise a clear "planned, not yet
+  implemented" message. Implementing either is a drop-in change behind the
+  existing interface.
+- **Normalization contract** (`normalize_text`): valid UTF-8, BOM stripped,
+  CRLF/CR → LF, per-line trailing-whitespace trim, 3+ blank lines collapsed,
+  leading/trailing blanks removed — so every downstream stage gets uniform
+  input regardless of source format.
+- **New errors:** `UnsupportedDocumentFormatError` (unknown extension, with
+  supported list + install hint for a friendly multi-line CLI message) and
+  `DocumentLoadError` (a registered format failed to read/extract).
+- **CLI:** `qaops design` now accepts PDF as well as text/markdown; the input
+  read is a single call to `load_document`. Unsupported formats produce a
+  friendly, actionable message, never a traceback.
+- **Tests:** 25 new offline tests (218 total) — normalization rules, each
+  loader, protocol conformance, registry dispatch, real PDF extraction
+  (against a PDF built at test time), empty-PDF and stub behavior, and the
+  CLI running end-to-end from a PDF plus the unsupported-format UX.
+- **ADR-018:** document-ingestion layer, not per-format branching.
+
+### Changed
+
+- New optional dependency: `pypdf>=4.0` as the `[pdf]` extra (in `[dev]` so CI
+  covers it). Text/Markdown input needs no new dependency.
+- The CLI's input read moved from `read_text(encoding="utf-8")` to
+  `load_document`; the argument help now lists `.md, .txt, .pdf`.
+- Package version 0.8.0 → 0.9.0.
 
 ## [0.8.0-alpha] - 2026-07-20
 
@@ -359,7 +404,8 @@ establishes the contracts every later phase builds on.
 - **Documentation:** README with architecture and roadmap; nine Architecture
   Decision Records (`docs/adr/`).
 
-[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.8.0-alpha...HEAD
+[Unreleased]: https://github.com/pareshtester/qaops-ai/compare/v0.9.0-alpha...HEAD
+[0.9.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.8.0-alpha...v0.9.0-alpha
 [0.8.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.7.0-alpha...v0.8.0-alpha
 [0.7.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.6.0-alpha...v0.7.0-alpha
 [0.6.0-alpha]: https://github.com/pareshtester/qaops-ai/compare/v0.5.0-alpha...v0.6.0-alpha

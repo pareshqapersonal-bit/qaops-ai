@@ -20,12 +20,15 @@ from qaops.cli.registry import EXPORTERS, ExporterInstance, resolve_exporters
 from qaops.config import QAOpsSettings
 from qaops.core.errors import (
     ConfigurationError,
+    DocumentLoadError,
     ExportError,
     InputTooLargeError,
     LLMError,
     QAOpsError,
     StageError,
+    UnsupportedDocumentFormatError,
 )
+from qaops.ingestion import load_document
 from qaops.llm import PromptLoader, create_client
 from qaops.models import RequirementInput, TestDesignResult
 from qaops.pipelines.test_design import build_full_pipeline
@@ -62,7 +65,10 @@ def _fail(message: str, code: int = 1) -> None:
 def design(
     input_path: Annotated[
         Path,
-        typer.Argument(help="Path to the requirement document (.md or .txt).", show_default=False),
+        typer.Argument(
+            help="Path to the requirement document (.md, .txt, or .pdf).",
+            show_default=False,
+        ),
     ],
     output_dir: Annotated[
         Path | None,
@@ -95,6 +101,14 @@ def design(
 
 
 def _message_for(exc: Exception) -> str:
+    if isinstance(exc, UnsupportedDocumentFormatError):
+        lines = [str(exc), "", "Supported formats:"]
+        lines += [f"  - {ext}" for ext in exc.supported]
+        if exc.install_hint:
+            lines += ["", exc.install_hint]
+        return "\n".join(lines)
+    if isinstance(exc, DocumentLoadError):
+        return f"Could not read the document. {exc}"
     if isinstance(exc, InputTooLargeError):
         return str(exc)
     if isinstance(exc, ConfigurationError):
@@ -127,7 +141,7 @@ def _run_design(
     export_formats = formats or settings.default_export_formats
     exporters = resolve_exporters(export_formats)
 
-    text = input_path.read_text(encoding="utf-8")
+    text = load_document(input_path)
     _echo(f"Reading {input_path} ({len(text)} characters)")
     _echo(f"Provider: {settings.provider} | formats: {', '.join(export_formats)}")
 

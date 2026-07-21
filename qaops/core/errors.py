@@ -32,3 +32,26 @@ class InputTooLargeError(QAOpsError):
 
 class ExportError(QAOpsError):
     """An exporter failed to write its output."""
+
+
+class DocumentLoadError(QAOpsError):
+    """A document could not be read or its text could not be extracted."""
+
+
+class UnsupportedDocumentFormatError(QAOpsError):
+    """No loader is registered for the document's file extension.
+
+    Carries the offending extension and the list of supported ones so the
+    CLI can render an actionable message (which formats work, and which
+    extra to install for more).
+    """
+
+    def __init__(self, extension: str, supported: list[str], install_hint: str = "") -> None:
+        self.extension = extension
+        self.supported = supported
+        self.install_hint = install_hint
+        supported_str = ", ".join(supported) if supported else "(none)"
+        message = f"Unsupported input format {extension!r}. Supported: {supported_str}."
+        if install_hint:
+            message += f" {install_hint}"
+        super().__init__(message)

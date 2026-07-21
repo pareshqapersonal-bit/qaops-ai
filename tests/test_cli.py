@@ -139,6 +139,26 @@ class TestDesignCommand:
         assert result.exit_code != 0
         assert "design" in result.output.lower()
 
+    def test_pdf_input_runs_end_to_end(self, mock_client: None, tmp_path: Path) -> None:
+        from tests.test_ingestion import _make_pdf
+
+        pdf = tmp_path / "spec.pdf"
+        _make_pdf(pdf, "User Login\nAccept valid credentials\nLock after five attempts")
+        result = runner.invoke(
+            appmod.app, ["design", str(pdf), "-o", str(tmp_path / "out"), "-f", "json"]
+        )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "out" / "spec.json").exists()
+
+    def test_unsupported_input_format_is_friendly(self, mock_client: None, tmp_path: Path) -> None:
+        bad = tmp_path / "spec.xlsx"
+        bad.write_text("x", encoding="utf-8")
+        result = runner.invoke(appmod.app, ["design", str(bad), "-o", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "Unsupported input format" in result.output
+        assert ".pdf" in result.output  # lists supported formats
+        assert "Traceback" not in result.output
+
 
 class TestFriendlyErrors:
     def test_missing_input_file(self, mock_client: None, tmp_path: Path) -> None:
