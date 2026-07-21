@@ -1,0 +1,7 @@
+provider: gemini
+
+gemini_model: gemini-2.5-flash
+
+default_export_formats:
+  - markdown
+  - json

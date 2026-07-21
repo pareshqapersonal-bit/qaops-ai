@@ -33,6 +33,10 @@ class QAOpsSettings(BaseSettings):
         default="gemini-2.5-flash",
         description="Model identifier used when provider is 'gemini'.",
     )
+    openrouter_model: str = Field(
+        default="openai/gpt-oss-20b:free",
+        description="Model identifier used when provider is 'openrouter'.",
+    )
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
     max_output_tokens: int = Field(default=8000, ge=256)
     llm_retries: int = Field(
@@ -60,7 +64,7 @@ class QAOpsSettings(BaseSettings):
     @field_validator("provider")
     @classmethod
     def _known_provider(cls, value: str) -> str:
-        known = {"anthropic", "gemini", "mock"}
+        known = {"anthropic", "gemini", "openrouter", "mock"}
         if value not in known:
             msg = f"Unknown provider {value!r}. Known providers: {sorted(known)}"
             raise ValueError(msg)

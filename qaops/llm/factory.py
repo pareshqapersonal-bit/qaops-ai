@@ -33,6 +33,10 @@ def create_client(settings: QAOpsSettings) -> LLMClient:
             )
             raise ConfigurationError(msg) from exc
         return GeminiClient(model=settings.gemini_model)
+    if settings.provider == "openrouter":
+        from qaops.llm.openrouter_client import OpenRouterClient
+
+        return OpenRouterClient(model=settings.openrouter_model)
     if settings.provider == "mock":
         msg = (
             "Provider 'mock' cannot be created by the factory; construct "
