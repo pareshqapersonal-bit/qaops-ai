@@ -28,6 +28,7 @@ from qaops.core.errors import (
     StageError,
     UnsupportedDocumentFormatError,
 )
+from qaops.exporters import CsvBundleExporter
 from qaops.ingestion import load_document
 from qaops.llm import PromptLoader, create_client
 from qaops.models import RequirementInput, TestDesignResult
@@ -79,7 +80,10 @@ def design(
         typer.Option(
             "--format",
             "-f",
-            help=f"Export format(s). Repeatable. Choices: {', '.join(sorted(EXPORTERS))}.",
+            help=(
+                "Export format(s). Repeatable. Choices: "
+                f"{', '.join(sorted(EXPORTERS))}, {CsvBundleExporter.format_name}."
+            ),
         ),
     ] = None,
     config_path: Annotated[
@@ -139,7 +143,11 @@ def _run_design(
     if output_dir is not None:
         settings = settings.model_copy(update={"output_dir": output_dir})
     export_formats = formats or settings.default_export_formats
-    exporters = resolve_exporters(export_formats)
+    # csv-bundle is a directory-writing package, not a single-file Exporter, so
+    # it is dispatched separately from the protocol-shaped file exporters.
+    want_bundle = CsvBundleExporter.format_name in export_formats
+    file_formats = [f for f in export_formats if f != CsvBundleExporter.format_name]
+    exporters = resolve_exporters(file_formats)
 
     text = load_document(input_path)
     _echo(f"Reading {input_path} ({len(text)} characters)")
@@ -152,7 +160,7 @@ def _run_design(
     assert isinstance(result, TestDesignResult)
 
     _print_summary(result)
-    _write_reports(result, exporters, settings, input_path)
+    _write_reports(result, exporters, settings, input_path, write_bundle=want_bundle)
 
 
 def _print_summary(result: TestDesignResult) -> None:
@@ -179,6 +187,8 @@ def _write_reports(
     exporters: list[ExporterInstance],
     settings: QAOpsSettings,
     input_path: Path,
+    *,
+    write_bundle: bool = False,
 ) -> None:
     out_dir = settings.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -188,7 +198,11 @@ def _write_reports(
     for exporter in exporters:
         target = out_dir / f"{stem}{exporter.file_extension}"
         written = exporter.export(result, str(target))
-        _echo(f"  {exporter.format_name:9s} -> {written}")
+        _echo(f"  {exporter.format_name:11s} -> {written}")
+    if write_bundle:
+        bundle_paths = CsvBundleExporter().export_bundle(result, out_dir)
+        for path in bundle_paths:
+            _echo(f"  {'csv-bundle':11s} -> {path}")
     _echo("")
     _echo("Done.")
 

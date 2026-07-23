@@ -23,4 +23,16 @@ prompt_version: v1
 
 # Where reports are written, and which formats by default
 output_dir: output
+# Formats: markdown, json, csv (single test-case table), xlsx,
+# csv-bundle (six CSVs: Requirements/BusinessRules/Scenarios/TestCases/GapAnalysis/Coverage)
 default_export_formats: [markdown, json]
+
+# TEMPORARY evaluation mode (ADR-019). Off by default.
+# Large documents can generate more structured JSON than a model can return in
+# one response. When enabled, the analyzer asks the model for at most
+# max_requirements requirements and enforces that cap in code, so the whole
+# pipeline completes on a real PRD. This analyzes only part of a large
+# document - it is a demonstration aid, not a scaling solution. It will be
+# removed when document chunking lands.
+# evaluation_mode: true
+# max_requirements: 10

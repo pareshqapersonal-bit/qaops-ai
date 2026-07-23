@@ -1,7 +1,11 @@
-provider: gemini
+provider: openrouter
+openrouter_model: deepseek/deepseek-chat
 
-gemini_model: gemini-2.5-flash
+evaluation_mode: true
+max_requirements: 3
+max_output_tokens: 32000
 
 default_export_formats:
   - markdown
   - json
+  - csv-bundle

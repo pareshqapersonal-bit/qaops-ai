@@ -7,7 +7,7 @@ Rules:
 - Lists (actors, inputs, outputs, validations, dependencies, constraints, assumptions) may be empty if the text says nothing about them. Record only stated assumptions, not your own.
 - Do not report ambiguities or missing details here; that is a separate analysis.
 
-Requirement document:
+${evaluation_note}Requirement document:
 ---
 $requirement_text
 ---

@@ -80,6 +80,37 @@ def generate_structured[T: BaseModel](
         response = client.complete(current)
         raw_responses.append(response.text)
         payload = extract_json_payload(response.text)
+        # An empty response is a materially different failure from malformed
+        # JSON - it usually means provider capacity, rate limiting, or a model
+        # that declined to answer - so log it as such instead of surfacing a
+        # generic JSONDecodeError that sends users hunting through dump files.
+        if not response.text.strip():
+            logger.warning(
+                "structured_output.empty_response schema=%s attempt=%d/%d "
+                "provider=%s model=%s (no content returned; check model "
+                "availability, rate limits, or free-tier capacity)",
+                schema.__name__,
+                attempt,
+                attempts,
+                client.provider_name,
+                response.model,
+            )
+        # A truncated response is a materially different failure again: the
+        # model produced good output that was cut off by the token cap. The
+        # provider reports this in stop_reason, so name it rather than letting
+        # it surface as a generic JSONDecodeError.
+        truncated = response.stop_reason in {"length", "max_tokens", "MAX_TOKENS"}
+        if truncated:
+            logger.warning(
+                "structured_output.truncated schema=%s attempt=%d/%d "
+                "stop_reason=%s chars=%d (output hit the token cap; raise "
+                "max_output_tokens in qaops.yaml)",
+                schema.__name__,
+                attempt,
+                attempts,
+                response.stop_reason,
+                len(response.text),
+            )
         try:
             parsed = json.loads(payload)
             result = schema.model_validate(parsed)
@@ -93,7 +124,9 @@ def generate_structured[T: BaseModel](
             )
             if attempt == attempts:
                 _persist_failures(failure_dir, schema.__name__, raw_responses)
-                raise LLMResponseFormatError(schema.__name__, attempts, raw_responses) from exc
+                raise LLMResponseFormatError(
+                    schema.__name__, attempts, raw_responses, truncated=truncated
+                ) from exc
             current = current.with_feedback(response.text, str(exc))
             continue
         logger.info(
@@ -111,6 +144,12 @@ def _persist_failures(failure_dir: Path | None, schema_name: str, raws: list[str
         failure_dir.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         for i, raw in enumerate(raws, start=1):
-            (failure_dir / f"{schema_name}_{stamp}_attempt{i}.txt").write_text(raw)
-    except OSError:  # debugging aid must never mask the real error
+            # Explicit UTF-8: the platform default is cp1252 on Windows, which
+            # cannot encode characters such as U+2265 that routinely appear in
+            # model output, and would crash here instead of surfacing the real
+            # schema failure.
+            (failure_dir / f"{schema_name}_{stamp}_attempt{i}.txt").write_text(
+                raw, encoding="utf-8"
+            )
+    except Exception:  # debugging aid must never mask the real error
         logger.exception("structured_output.persist_failed dir=%s", failure_dir)

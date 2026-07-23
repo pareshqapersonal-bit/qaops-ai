@@ -8,7 +8,58 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 ## [Unreleased]
 
-Remaining toward v1.0: broader real-world evaluation and documentation polish.
+### Added
+
+- **`csv-bundle` export format.** A new format (alongside the existing single
+  file `csv`, plus `markdown`/`json`/`xlsx`) that writes six separate CSV files
+  to the output directory - `Requirements.csv`, `BusinessRules.csv`,
+  `Scenarios.csv`, `TestCases.csv`, `GapAnalysis.csv`, `Coverage.csv` - one
+  record per row for import into a tracker. Implemented as `CsvBundleExporter`,
+  a directory writer that intentionally does not implement the single-file
+  `Exporter` protocol (it writes many files, not one) and derives every row
+  from the same canonical dict as the other exporters, so no business logic is
+  duplicated. The existing single-file `csv` exporter is unchanged. Selected
+  with `-f csv-bundle`; composes with other formats in one run.
+- **Temporary evaluation mode** (`evaluation_mode`, `max_requirements`; both
+  off/unused by default). A real PRD generates more structured JSON than a
+  single model response can return; runs truncated at `stop_reason=length`.
+  When enabled, the analyzer prompt instructs the model to extract at most N
+  requirements — reducing generation at the source, since capping after
+  parsing cannot help — and the cap is re-enforced deterministically in code.
+  Fewer requirements shrink every downstream stage, so the full pipeline
+  (rules → gaps → scenarios → test cases → coverage → exports) completes on a
+  real document. When disabled, the rendered prompt and all behavior are
+  byte-identical to before. **This is a demonstration aid, not a scaling
+  solution, and is expected to be removed when document chunking lands**
+  (ADR-019).
+- **Truncation diagnostics:** responses cut off by the output token limit are
+  now detected via the provider's `stop_reason` and reported as such
+  (`structured_output.truncated`), with the final error naming the cause and
+  pointing at `max_output_tokens` — instead of a generic `JSONDecodeError`.
+- **Empty-response diagnostics:** a provider returning no content is logged
+  and reported distinctly from malformed JSON, with guidance about capacity
+  limits, rate limiting, and free-tier models.
+- **Tests:** 12 new (234 total) covering evaluation mode on/off, prompt
+  injection, code-side cap enforcement when the model ignores the
+  instruction, ID sequencing after capping, qaops.yaml acceptance of the new
+  keys, and the truncation/empty-response error messages.
+- **ADR-019:** temporary evaluation mode, pending document chunking.
+
+### Fixed
+
+- **Windows crash on non-Latin-1 model output.** LLM failure dumps were written
+  without an explicit encoding, so the platform default (cp1252 on Windows)
+  raised `UnicodeEncodeError` on characters such as `≥` — crashing the run
+  inside the debug-logging path and masking the real schema failure. Now
+  written as UTF-8, with the guard broadened so a diagnostic aid can never
+  again mask the underlying error.
+- **`openrouter_model` rejected by the CLI config loader.** The loader keeps
+  its own allow-list of permitted `qaops.yaml` keys, which was not updated when
+  the setting was added; `evaluation_mode` and `max_requirements` are included
+  now too.
+
+Remaining toward v1.0: document chunking for large inputs, broader real-world
+evaluation, and documentation polish.
 
 Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, persistence, web UI, semantic deduplication. (DOCX and HTML

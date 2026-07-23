@@ -82,11 +82,17 @@ class OpenRouterClient:
 
         choice = response.choices[0] if response.choices else None
         text = (choice.message.content or "") if choice else ""
-        finish_reason = choice.finish_reason if choice else ""
+        # The SDK types model and finish_reason as non-optional, but OpenRouter
+        # proxies many upstream providers and can return null for either. These
+        # values cross a network boundary, so defend against the runtime reality
+        # rather than trusting the stub: falling back to the requested model
+        # keeps LLMResponse valid instead of failing Pydantic validation.
+        finish_reason = (choice.finish_reason or "") if choice else ""  # type: ignore[unreachable]
+        model_name = response.model or self._model
         usage = response.usage
         return LLMResponse(
             text=text,
-            model=response.model,
+            model=model_name,
             usage=LLMUsage(
                 input_tokens=(usage.prompt_tokens or 0) if usage else 0,
                 output_tokens=(usage.completion_tokens or 0) if usage else 0,

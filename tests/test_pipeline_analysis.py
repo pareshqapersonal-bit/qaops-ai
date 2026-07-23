@@ -274,3 +274,72 @@ class TestComposedPipeline:
         fields = set(RequirementAnalysisResult.model_fields)
         assert "scenarios" not in fields
         assert "test_cases" not in fields
+
+
+class TestEvaluationMode:
+    """TEMPORARY evaluation feature (ADR-019).
+
+    Reduces generation at the source so a large PRD fits in one model
+    response, with a deterministic code-side cap as a safety check.
+    Superseded by document chunking in a future release.
+    """
+
+    def _extraction(self, count: int) -> str:
+        return json.dumps(
+            {"requirements": [{"title": f"R{i}", "description": "d"} for i in range(count)]}
+        )
+
+    def test_disabled_by_default(self) -> None:
+        assert QAOpsSettings().evaluation_mode is False
+
+    def test_default_prompt_has_no_evaluation_instruction(self) -> None:
+        settings = QAOpsSettings(evaluation_mode=False)
+        client = MockLLMClient([self._extraction(3)])
+        RequirementAnalyzer(client, PromptLoader(), settings).run(
+            RequirementInput(text="doc", source_name="x")
+        )
+        sent = client.requests[0].messages[0].content
+        assert "IMPORTANT" not in sent
+        assert "at most" not in sent
+        assert "\n\n\n" not in sent  # no stray blank line from the placeholder
+
+    def test_evaluation_mode_injects_limit_into_prompt(self) -> None:
+        settings = QAOpsSettings(evaluation_mode=True, max_requirements=7)
+        client = MockLLMClient([self._extraction(3)])
+        RequirementAnalyzer(client, PromptLoader(), settings).run(
+            RequirementInput(text="doc", source_name="x")
+        )
+        sent = client.requests[0].messages[0].content
+        assert "at most 7 requirements" in sent
+
+    def test_code_cap_enforced_when_model_ignores_instruction(self) -> None:
+        settings = QAOpsSettings(evaluation_mode=True, max_requirements=10)
+        client = MockLLMClient([self._extraction(25)])
+        result = RequirementAnalyzer(client, PromptLoader(), settings).run(
+            RequirementInput(text="doc", source_name="x")
+        )
+        assert len(result.requirements) == 10
+
+    def test_no_cap_when_disabled(self) -> None:
+        settings = QAOpsSettings(evaluation_mode=False, max_requirements=10)
+        client = MockLLMClient([self._extraction(25)])
+        result = RequirementAnalyzer(client, PromptLoader(), settings).run(
+            RequirementInput(text="doc", source_name="x")
+        )
+        assert len(result.requirements) == 25
+
+    def test_fewer_than_cap_is_unaffected(self) -> None:
+        settings = QAOpsSettings(evaluation_mode=True, max_requirements=10)
+        client = MockLLMClient([self._extraction(4)])
+        result = RequirementAnalyzer(client, PromptLoader(), settings).run(
+            RequirementInput(text="doc", source_name="x")
+        )
+        assert len(result.requirements) == 4
+
+    def test_ids_remain_sequential_after_capping(self) -> None:
+        settings = QAOpsSettings(evaluation_mode=True, max_requirements=3)
+        client = MockLLMClient([self._extraction(25)])
+        result = RequirementAnalyzer(client, PromptLoader(), settings).run(
+            RequirementInput(text="doc", source_name="x")
+        )
+        assert [r.id for r in result.requirements] == ["REQ-001", "REQ-002", "REQ-003"]

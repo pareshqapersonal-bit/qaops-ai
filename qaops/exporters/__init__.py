@@ -10,12 +10,14 @@ dependencies. ExcelExporter needs the optional 'excel' extra
 (pip install qaops-ai[excel]).
 """
 
+from qaops.exporters.csv_bundle_exporter import CsvBundleExporter
 from qaops.exporters.csv_exporter import CsvExporter
 from qaops.exporters.excel_exporter import ExcelExporter
 from qaops.exporters.json_exporter import JsonExporter
 from qaops.exporters.markdown_exporter import MarkdownExporter
 
 __all__ = [
+    "CsvBundleExporter",
     "CsvExporter",
     "ExcelExporter",
     "JsonExporter",

@@ -249,3 +249,60 @@ class TestConfigLoader:
         cfg.write_text("provider: openai\n")  # not in whitelist
         with pytest.raises(ConfigurationError, match="Invalid configuration"):
             load_settings(cfg)
+
+
+class TestEvaluationModeConfig:
+    """qaops.yaml must accept the temporary evaluation-mode keys."""
+
+    def test_evaluation_keys_accepted(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "qaops.yaml"
+        cfg.write_text("evaluation_mode: true\nmax_requirements: 10\n")
+        settings = load_settings(cfg)
+        assert settings.evaluation_mode is True
+        assert settings.max_requirements == 10
+
+    def test_defaults_when_absent(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "qaops.yaml"
+        cfg.write_text("provider: anthropic\n")
+        settings = load_settings(cfg)
+        assert settings.evaluation_mode is False
+
+
+class TestCsvBundleFormat:
+    """The csv-bundle format writes six CSVs to the output directory."""
+
+    def test_bundle_writes_six_files(self, mock_client: None, tmp_path: Path) -> None:
+        out = tmp_path / "reports"
+        result = runner.invoke(
+            appmod.app,
+            ["design", str(EXAMPLES_DIR / "login.md"), "-o", str(out), "-f", "csv-bundle"],
+        )
+        assert result.exit_code == 0, result.output
+        produced = {p.name for p in out.glob("*.csv")}
+        assert produced == {
+            "Requirements.csv",
+            "BusinessRules.csv",
+            "Scenarios.csv",
+            "TestCases.csv",
+            "GapAnalysis.csv",
+            "Coverage.csv",
+        }
+
+    def test_bundle_coexists_with_file_formats(self, mock_client: None, tmp_path: Path) -> None:
+        out = tmp_path / "reports"
+        result = runner.invoke(
+            appmod.app,
+            [
+                "design",
+                str(EXAMPLES_DIR / "login.md"),
+                "-o",
+                str(out),
+                "-f",
+                "json",
+                "-f",
+                "csv-bundle",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert (out / "login.json").exists()  # single-file exporter unaffected
+        assert (out / "Requirements.csv").exists()  # bundle also written

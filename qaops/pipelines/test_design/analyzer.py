@@ -42,6 +42,19 @@ class RequirementAnalyzer:
             )
             raise InputTooLargeError(msg)
 
+        # TEMPORARY evaluation feature (ADR-019). When enabled, the model is
+        # told to emit at most N requirements so a large document fits inside a
+        # single response, and the cap is re-enforced in code below. When
+        # disabled the note is empty, so the rendered prompt is byte-identical
+        # to the default and behavior is unchanged.
+        evaluation_note = ""
+        if self._settings.evaluation_mode:
+            evaluation_note = (
+                f"IMPORTANT: Extract at most {self._settings.max_requirements} "
+                "requirements. Select the most significant ones. Do not exceed "
+                "this limit.\n\n"
+            )
+
         extraction = run_structured_stage(
             client=self._client,
             prompts=self._prompts,
@@ -49,6 +62,7 @@ class RequirementAnalyzer:
             prompt_name=PROMPT_NAME,
             schema=RequirementExtraction,
             requirement_text=data.text,
+            evaluation_note=evaluation_note,
         )
         if not extraction.requirements:
             raise StageError(
@@ -57,9 +71,16 @@ class RequirementAnalyzer:
                 "The input may not contain requirements, or the prompt needs review.",
             )
 
+        wire_requirements = extraction.requirements
+        if self._settings.evaluation_mode:
+            # Safety check: enforce the cap deterministically even if the model
+            # ignored the instruction (ADR-001 - code validates what the LLM
+            # generates).
+            wire_requirements = wire_requirements[: self._settings.max_requirements]
+
         ids = requirement_ids()
         requirements = [
-            Requirement(id=ids.next(), **wire.model_dump()) for wire in extraction.requirements
+            Requirement(id=ids.next(), **wire.model_dump()) for wire in wire_requirements
         ]
         return RequirementAnalysisResult(
             source_name=data.source_name,

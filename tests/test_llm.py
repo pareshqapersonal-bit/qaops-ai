@@ -208,3 +208,85 @@ class TestPromptLoader:
     def test_invalid_version_rejected(self, prompt_dir: Path) -> None:
         with pytest.raises(ConfigurationError, match="Invalid prompt version"):
             PromptLoader(prompt_dir, version="../../etc")
+
+
+class TestFailurePersistenceEncoding:
+    """Regression: the debug-dump path must never crash on non-Latin-1 text.
+
+    On Windows the platform default codec is cp1252, which cannot encode
+    characters such as U+2265 that routinely appear in model output. An
+    unencoded write there crashed the run and masked the real schema failure.
+    """
+
+    def test_persists_non_latin1_characters(self, tmp_path: Path) -> None:
+        from qaops.llm.structured import _persist_failures
+
+        raw = "threshold >= 5 means \u2265 5 \u2014 see \u2192 spec"
+        _persist_failures(tmp_path, "RuleExtraction", [raw])
+        written = list(tmp_path.glob("RuleExtraction_*_attempt1.txt"))
+        assert len(written) == 1
+        assert written[0].read_text(encoding="utf-8") == raw
+
+    def test_never_raises_even_if_directory_unusable(self, tmp_path: Path) -> None:
+        from qaops.llm.structured import _persist_failures
+
+        # A file where a directory is expected: must be swallowed, not raised.
+        blocker = tmp_path / "blocked"
+        blocker.write_text("not a directory", encoding="utf-8")
+        _persist_failures(blocker, "RuleExtraction", ["\u2265"])  # must not raise
+
+
+class TestEmptyResponseDiagnostics:
+    """An empty provider response is a distinct failure from malformed JSON.
+
+    Five of six responses came back empty in a real OpenRouter free-tier run,
+    but the error said only "failed validation", sending the user to dig
+    through dump files. The message now names the actual cause.
+    """
+
+    def test_error_names_empty_responses(self) -> None:
+        from qaops.llm.errors import LLMResponseFormatError
+
+        exc = LLMResponseFormatError("RequirementExtraction", 3, ["", "", "{bad"])
+        message = str(exc)
+        assert "2 of 3" in message
+        assert "empty" in message
+        assert "more capable model" in message
+
+    def test_error_unchanged_when_no_empty_responses(self) -> None:
+        from qaops.llm.errors import LLMResponseFormatError
+
+        exc = LLMResponseFormatError("RequirementExtraction", 3, ["{bad", "{bad", "{bad"])
+        assert "empty" not in str(exc)
+
+
+class TestTruncationDiagnostics:
+    """Truncation is a config problem, not a model or parser problem.
+
+    A real OpenRouter run produced excellent JSON across three attempts, all
+    cut off by max_output_tokens. The generic JSONDecodeError sent the user
+    hunting through dump files; the message now names the cause and the fix.
+    """
+
+    def test_error_names_truncation(self) -> None:
+        from qaops.llm.errors import LLMResponseFormatError
+
+        exc = LLMResponseFormatError("RequirementExtraction", 3, ["{cut"], truncated=True)
+        message = str(exc)
+        assert "cut off by the output token limit" in message
+        assert "max_output_tokens" in message
+
+    def test_truncation_takes_precedence_over_empty(self) -> None:
+        from qaops.llm.errors import LLMResponseFormatError
+
+        exc = LLMResponseFormatError("X", 2, ["", "{cut"], truncated=True)
+        assert "token limit" in str(exc)
+        assert "were empty" not in str(exc)
+
+    def test_plain_failure_mentions_neither(self) -> None:
+        from qaops.llm.errors import LLMResponseFormatError
+
+        exc = LLMResponseFormatError("X", 2, ["{bad", "{bad"])
+        message = str(exc)
+        assert "token limit" not in message
+        assert "were empty" not in message

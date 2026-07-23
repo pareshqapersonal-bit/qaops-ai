@@ -39,6 +39,20 @@ class QAOpsSettings(BaseSettings):
     )
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
     max_output_tokens: int = Field(default=8000, ge=256)
+    evaluation_mode: bool = Field(
+        default=False,
+        description=(
+            "TEMPORARY evaluation feature. When true, the analyzer instructs the "
+            "model to extract at most max_requirements requirements and enforces "
+            "that cap in code, so a large document fits within a single model "
+            "response. Superseded by document chunking in a future release."
+        ),
+    )
+    max_requirements: int = Field(
+        default=10,
+        ge=1,
+        description="Requirement cap applied only when evaluation_mode is true.",
+    )
     llm_retries: int = Field(
         default=2,
         ge=0,
@@ -73,7 +87,7 @@ class QAOpsSettings(BaseSettings):
     @field_validator("default_export_formats")
     @classmethod
     def _known_formats(cls, values: list[str]) -> list[str]:
-        known = {"markdown", "csv", "xlsx", "json"}
+        known = {"markdown", "csv", "csv-bundle", "xlsx", "json"}
         unknown = [v for v in values if v not in known]
         if unknown:
             msg = f"Unknown export formats {unknown}. Known formats: {sorted(known)}"
