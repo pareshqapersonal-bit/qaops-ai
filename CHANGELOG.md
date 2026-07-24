@@ -66,6 +66,85 @@ test execution, persistence, web UI, semantic deduplication. (DOCX and HTML
 ingestion are registered stubs, implementable behind the existing
 DocumentLoader interface without further architecture.)
 
+## [0.14.0-alpha] - 2026-07-23
+
+Phase 13: human-authored scenario documents. QA teams can feed their existing
+scenario artifacts straight into the pipeline (ADR-024).
+
+### Added
+
+- **XLSX scenario input** (`.xlsx`, `.xlsm`): first worksheet, first non-empty
+  row as the header, blank rows skipped, requirement references split on any
+  common separator.
+- **Markdown table scenario input**: the first pipe table containing a title
+  column.
+- **Markdown and TXT list input**: bulleted or numbered items, with `REQ-001`
+  style tokens read as requirement references and a parenthesised known
+  category lifted out of the title.
+- **Header aliasing** across all formats: names match case-insensitively and
+  ignore spaces and underscores, so `Scenario Name`, `Type`, and
+  `Requirement IDs` work as written in real spreadsheets.
+- **Tests:** 21 new (384 total) - XLSX rows and edge cases, markdown tables,
+  bulleted and numbered lists, header aliases, deterministic re-reads, clear
+  failure on unstructured prose and unsupported extensions, and CLI runs from
+  both XLSX and markdown.
+- **ADR-024:** structured readers; prose stays with the analyzer.
+
+### Changed
+
+- `parse_scenarios` now accepts `.json`, `.csv`, `.xlsx`, `.xlsm`, `.md`,
+  `.markdown`, and `.txt`. No pipeline stage, prompt, exporter, or
+  PipelineBuilder change.
+- Package version 0.13.1 → 0.14.0.
+
+### Note
+
+Prose requirement documents (PDF, DOCX, free-form markdown) are handled by the
+existing `document` entry point, where the requirement analyzer extracts
+requirements with a model. Structured readers stay deterministic and reject
+prose with guidance rather than guessing.
+
+## [0.13.1-alpha] - 2026-07-23
+
+Phase 12.1: workflow safety and CLI hardening. No pipeline, prompt, parser,
+exporter, or chunking change (ADR-023).
+
+### Fixed
+
+- **Reports can no longer overwrite their own input.** Running from a file
+  inside the output directory - e.g. `design output/Requirements.csv --from
+  requirements -o output` - would write a fresh `Requirements.csv` over the
+  source. The CLI now computes every path it is about to write (single-file
+  exports plus the csv-bundle filenames), compares against the resolved input,
+  and aborts before writing anything, suggesting a different `--output-dir`.
+  A rejected run leaves the directory untouched, with no partial bundle.
+- **Filesystem failures no longer produce tracebacks.** `OSError` during
+  export becomes a friendly message naming the file;`PermissionError`
+  specifically suggests the file may be open in another application, which on
+  Windows is usually Excel holding a CSV.
+
+### Added
+
+- **Provider error diagnosis.** Insufficient credit, rate limiting,
+  authentication failure, context-length overflow, and unavailable-model
+  errors are recognised from the provider's own text and rendered as a reason
+  plus concrete next steps, with the original message always preserved.
+  Provider failures wrapped inside a `StageError` are diagnosed too, so raw
+  HTTP bodies no longer leak through stage messages. Unrecognised errors fall
+  back to the previous raw-text behavior.
+- **`CsvBundleExporter.BUNDLE_FILENAMES`** - the exact files the bundle
+  writes, exposed so callers reason about them without duplicating the list.
+- **Tests:** 20 new (363 total) - collision detection for both bundle and
+  single-file exports, input bytes unchanged after an aborted run, no partial
+  bundle written, permitted cases (different output directory, non-clashing
+  name), provider-error classification including the wrapped-in-stage path,
+  and filesystem error translation.
+- **ADR-023:** fail safely.
+
+### Changed
+
+- Package version 0.13.0 → 0.13.1.
+
 ## [0.13.0-alpha] - 2026-07-23
 
 Phase 12: multi-entry pipeline. QAOps is no longer a PRD processor - runs can

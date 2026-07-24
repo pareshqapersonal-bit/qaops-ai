@@ -16,6 +16,7 @@ from typing import Annotated
 import typer
 
 from qaops.cli.config_loader import load_settings
+from qaops.cli.diagnostics import diagnose_provider_error
 from qaops.cli.registry import EXPORTERS, ExporterInstance, resolve_exporters
 from qaops.config import QAOpsSettings
 from qaops.core.errors import (
@@ -142,8 +143,16 @@ def _message_for(exc: Exception) -> str:
     if isinstance(exc, ConfigurationError):
         return f"Configuration problem. {exc}"
     if isinstance(exc, LLMError):
+        diagnosis = diagnose_provider_error(str(exc))
+        if diagnosis is not None:
+            return "The AI provider call failed.\n\n" + diagnosis.render(str(exc))
         return f"The AI provider call failed. {exc}"
     if isinstance(exc, StageError):
+        # A provider failure inside a stage arrives wrapped, so the raw HTTP
+        # body would otherwise leak through the stage message.
+        diagnosis = diagnose_provider_error(str(exc))
+        if diagnosis is not None:
+            return "The AI provider call failed.\n\n" + diagnosis.render(str(exc))
         return f"A pipeline stage failed. {exc}"
     if isinstance(exc, ExportError):
         return f"Export failed. {exc}"
@@ -231,6 +240,68 @@ def _print_summary(result: TestDesignResult) -> None:
         _echo(f"  Suspected duplicate test cases: {len(result.coverage.duplicate_pairs)}")
 
 
+def _resolved(path: Path) -> Path:
+    """Absolute, symlink-free path for reliable comparison."""
+    try:
+        return path.resolve()
+    except OSError:  # pragma: no cover - resolve is total on supported platforms
+        return path.absolute()
+
+
+def _check_output_collisions(
+    exporters: list[ExporterInstance],
+    out_dir: Path,
+    input_path: Path,
+    *,
+    write_bundle: bool,
+) -> None:
+    """Refuse to overwrite the input file with a report.
+
+    Reports are named after the input stem, and csv-bundle uses fixed
+    filenames, so running with an input that lives in the output directory can
+    silently destroy that input - e.g. reading `output/Requirements.csv` and
+    then writing a fresh `output/Requirements.csv` over it. The read happens
+    first, so this "works" until a mid-run failure loses the file. Checking
+    before any write means nothing is clobbered either way.
+    """
+    source = _resolved(input_path)
+    planned: list[Path] = [out_dir / f"{input_path.stem}{e.file_extension}" for e in exporters]
+    if write_bundle:
+        planned += [out_dir / name for name in CsvBundleExporter.BUNDLE_FILENAMES]
+
+    clashes = sorted({p.name for p in planned if _resolved(p) == source})
+    if clashes:
+        msg = (
+            "Cannot write reports. The selected output directory contains the "
+            f"input file: {input_path}\n\n"
+            f"These export(s) would overwrite it: {', '.join(clashes)}\n\n"
+            "Choose another output directory, for example:\n"
+            f"  --output-dir {out_dir / 'run2'}"
+        )
+        raise ExportError(msg)
+
+
+def _friendly_write_error(target: Path, exc: OSError) -> ExportError:
+    """Turn a filesystem failure into an actionable message.
+
+    The common case on Windows is a CSV still open in Excel, which surfaces as
+    PermissionError. A traceback tells the user nothing useful; naming the file
+    and the likely cause does.
+    """
+    if isinstance(exc, PermissionError):
+        msg = (
+            f"Unable to write {target}. The file appears to be open in another "
+            "application (for example Excel), or you lack permission to write "
+            "there. Close the file and retry, or choose a different output "
+            "directory with --output-dir."
+        )
+    elif isinstance(exc, IsADirectoryError):
+        msg = f"Unable to write {target}: a directory already exists at that path."
+    else:
+        msg = f"Unable to write {target}: {exc}"
+    return ExportError(msg)
+
+
 def _write_reports(
     result: TestDesignResult,
     exporters: list[ExporterInstance],
@@ -240,16 +311,26 @@ def _write_reports(
     write_bundle: bool = False,
 ) -> None:
     out_dir = settings.output_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise _friendly_write_error(out_dir, exc) from exc
+    _check_output_collisions(exporters, out_dir, input_path, write_bundle=write_bundle)
     stem = input_path.stem
     _echo("")
     _echo(f"Writing reports to {out_dir}/")
     for exporter in exporters:
         target = out_dir / f"{stem}{exporter.file_extension}"
-        written = exporter.export(result, str(target))
+        try:
+            written = exporter.export(result, str(target))
+        except OSError as exc:
+            raise _friendly_write_error(target, exc) from exc
         _echo(f"  {exporter.format_name:11s} -> {written}")
     if write_bundle:
-        bundle_paths = CsvBundleExporter().export_bundle(result, out_dir)
+        try:
+            bundle_paths = CsvBundleExporter().export_bundle(result, out_dir)
+        except OSError as exc:
+            raise _friendly_write_error(out_dir, exc) from exc
         for path in bundle_paths:
             _echo(f"  {'csv-bundle':11s} -> {path}")
     _echo("")

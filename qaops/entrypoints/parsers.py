@@ -22,6 +22,7 @@ from typing import Any
 
 from qaops.core.errors import DocumentLoadError
 from qaops.core.ids import requirement_ids, scenario_ids
+from qaops.entrypoints.structured_readers import read_markdown_scenarios, read_xlsx_scenarios
 from qaops.exporters._base import LIST_SEPARATOR
 from qaops.models import (
     Requirement,
@@ -179,8 +180,12 @@ def parse_scenarios(path: Path) -> ScenarioDesignResult:
             }
             for row in rows
         ]
+    elif suffix in {".xlsx", ".xlsm"}:
+        records = read_xlsx_scenarios(path)
+    elif suffix in {".md", ".markdown", ".txt"}:
+        records = read_markdown_scenarios(path, _read_text(path))
     else:
-        msg = f"Scenarios input must be .json or .csv, got {suffix!r}."
+        msg = f"Scenarios input must be .json, .csv, .xlsx, .md, or .txt, got {suffix!r}."
         raise DocumentLoadError(msg)
 
     if not records:

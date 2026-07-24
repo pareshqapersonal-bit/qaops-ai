@@ -24,5 +24,7 @@
 | [020](020-document-chunking.md) | Chunking is internal to requirement analysis, invisible downstream | Accepted |
 | [021](021-adaptive-chunking.md) | Chunk sizing is adaptive, decided by strategy not configuration | Accepted |
 | [022](022-multi-entry-pipeline.md) | Multiple entry points by composing existing stages | Accepted |
+| [023](023-workflow-safety.md) | Fail safely: never destroy input, never surface raw provider errors | Accepted |
+| [024](024-structured-scenario-readers.md) | Structured readers for human-authored scenarios; prose stays with the analyzer | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

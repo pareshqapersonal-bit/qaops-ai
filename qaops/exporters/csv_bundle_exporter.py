@@ -64,6 +64,18 @@ class CsvBundleExporter:
 
     format_name = "csv-bundle"
 
+    # The exact files this exporter writes. Exposed so callers (e.g. the CLI's
+    # input-collision check) can reason about what will be written without
+    # duplicating the list.
+    BUNDLE_FILENAMES = (
+        "Requirements.csv",
+        "BusinessRules.csv",
+        "Scenarios.csv",
+        "TestCases.csv",
+        "GapAnalysis.csv",
+        "Coverage.csv",
+    )
+
     def export_bundle(self, result: TestDesignResult, output_dir: Path) -> list[str]:
         """Write all six CSV files into output_dir; return the paths written."""
         data = to_canonical_dict(result)

@@ -1,5 +1,5 @@
 provider: openrouter
 openrouter_model: deepseek/deepseek-chat
 chunking_strategy: adaptive     # default; can omit
-max_output_tokens: 32000
+max_output_tokens: 8000
 default_export_formats: [markdown, json, csv-bundle]
