@@ -31,6 +31,40 @@ qaops/
 ├── exporters/   # JSON (canonical), Markdown, CSV, Excel — all derive from JSON
 └── cli/         # qaops design <input> --format xlsx                    (Phase 7)
 ```
+               
+                          QAOps AI
+
+                  ┌──────────────────┐
+                  │   PRD / PDF       │
+                  └────────┬─────────┘
+                           │
+                  Requirement Analysis
+                           │
+                  Business Rule Extraction
+                           │
+                  Scenario Generation
+                           │
+                  Test Case Generation
+                           │
+                  Coverage Validation
+
+────────────────────────────────────────────────────
+
+Requirements ───────────────► Business Rules
+                                   │
+                                   ▼
+                              Scenarios
+                                   │
+                                   ▼
+                             Test Cases
+
+────────────────────────────────────────────────────
+
+Scenarios ─────────────────────────► Test Cases
+                                         │
+                                         ▼
+                                   Coverage
+
 
 ## Pipeline
 
