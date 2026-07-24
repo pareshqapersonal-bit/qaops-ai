@@ -21,5 +21,8 @@
 | [017](017-cli-composition-root.md) | The CLI is a thin composition root over existing components | Accepted |
 | [018](018-document-ingestion.md) | A DocumentLoader ingestion layer, not per-format branching | Accepted |
 | [019](019-evaluation-mode.md) | A temporary evaluation mode, pending document chunking | Accepted (temporary) |
+| [020](020-document-chunking.md) | Chunking is internal to requirement analysis, invisible downstream | Accepted |
+| [021](021-adaptive-chunking.md) | Chunk sizing is adaptive, decided by strategy not configuration | Accepted |
+| [022](022-multi-entry-pipeline.md) | Multiple entry points by composing existing stages | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

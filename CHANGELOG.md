@@ -66,6 +66,120 @@ test execution, persistence, web UI, semantic deduplication. (DOCX and HTML
 ingestion are registered stubs, implementable behind the existing
 DocumentLoader interface without further architecture.)
 
+## [0.13.0-alpha] - 2026-07-23
+
+Phase 12: multi-entry pipeline. QAOps is no longer a PRD processor - runs can
+start from requirements or scenarios, composing the same stages (ADR-022).
+
+### Added
+
+- **Three entry points** via `--from`: `document` (default, unchanged),
+  `requirements` (skips analysis), and `scenarios` (test-case generation and
+  coverage only - a single LLM call versus five).
+- **`PipelineBuilder`** (`build_pipeline_for`) returns the minimal stage
+  sequence for a route by slicing the existing stage list. No stage is
+  modified, subclassed, or duplicated, and no stage learns which route ran.
+- **Input parsers** for JSON and CSV producing canonical domain models - the
+  mirror image of exporters, with no generation logic and no LLM calls. The
+  CSV columns match the csv-bundle export, so an exported bundle can be edited
+  and fed back in. IDs are always reassigned by code (ADR-001).
+- **Scenario entry synthesizes requirements** when the input does not supply
+  them, because `TestCaseGenerator` validates requirement references
+  (ADR-014). A bare scenario CSV therefore works.
+- **Tests:** 27 new (343 total) - parser formats and validation failures, ID
+  reassignment, builder stage selection per entry point, all three routes end
+  to end, exporters from a non-document entry, and CLI routing including a
+  friendly error for an unknown entry point.
+- **ADR-022:** multi-entry pipeline composition.
+
+### Changed
+
+- Package version 0.12.0 → 0.13.0. No pipeline stage, prompt, domain model, or
+  exporter changed; the existing suite passes untouched.
+
+## [0.12.0-alpha] - 2026-07-23
+
+Phase 11.1: adaptive chunking. Chunk sizing is now decided automatically from
+provider and model capacity, so users rarely configure it (ADR-021).
+
+### Added
+
+- **`ChunkStrategy`** - decides whether to chunk, at what size, and with what
+  overlap. `ChunkPlanner` no longer owns sizing policy and remains a pure
+  deterministic text splitter.
+- **Provider capability registry** (`capabilities.py`) - output capacity keyed
+  by provider and model, with model overrides, provider defaults, and a
+  conservative global fallback. Adding a provider means adding a row; the
+  `LLMClient` protocol is untouched.
+- **Automatic bypass** - a document within estimated capacity skips chunking
+  entirely and the analyzer runs exactly as it would with no chunking.
+- **Settings:** `chunking_strategy` ('adaptive' default, or 'fixed') and
+  `chunk_safety_margin` (default 0.8). `chunk_size`/`chunk_overlap` are now
+  used only under the fixed strategy.
+- **Tests:** 28 new (316 total) - capability resolution and fallbacks, bypass
+  for small documents, chunking for large ones, weak-model behavior,
+  provider-specific capacity, safety-margin effects, determinism, fixed
+  override, and analyzer integration.
+- **ADR-021:** adaptive chunk sizing.
+
+### Changed
+
+- Sizing is derived from *output* capacity rather than input context, matching
+  the observed failure mode (`stop_reason=length` during generation).
+- Package version 0.11.0 → 0.12.0.
+
+### Known limitation
+
+`merge_requirements` still deduplicates on exact normalized title. Adaptive
+sizing avoids chunking documents that fit, but a genuinely large document that
+must be chunked can still yield near-duplicate requirements whose differing
+titles survive the merge and produce duplicate scenarios. Chunking remains
+unproven on documents that actually require it; a smarter merge is next.
+
+## [0.11.0-alpha] - 2026-07-23
+
+Phase 11: large-document chunking. Replaces evaluation mode as the answer to
+document size. Chunking is an internal capability of requirement analysis and
+is invisible to every downstream stage (ADR-020).
+
+### Added
+
+- **`ChunkedRequirementAnalyzer`** — a drop-in replacement for
+  `RequirementAnalyzer` at pipeline position 0, with the same signature *and
+  the same stage name*, so error messages and pipeline introspection are
+  unchanged. It plans chunks, runs the existing analyzer (unmodified prompts,
+  no variants) on each, and merges the results. Documents shorter than
+  `chunk_size` delegate straight through, so small-document behavior and call
+  counts are identical to before.
+- **`ChunkPlanner`** — deterministic text splitting with no QA-specific logic.
+  Prefers markdown headings, then paragraph breaks, then line breaks, then a
+  hard cut, so a requirement is not sliced mid-sentence. Configurable size and
+  overlap; guaranteed forward progress; full document coverage with no gaps.
+- **`merge_requirements`** — deduplicates requirements across overlapping
+  chunks by normalized title, keeps the richer of two duplicates so detail is
+  not lost, preserves first-appearance order, and assigns one fresh gap-free
+  `REQ-001..` sequence. Returns the full document as `source_text`, not a
+  chunk.
+- **Settings:** `chunk_size` (default 6000) and `chunk_overlap` (default 500),
+  with cross-field validation that overlap must be smaller than size. Both
+  accepted in `qaops.yaml`.
+- **Tests:** 28 new (288 total) — planner determinism, overlap, boundary
+  preference, hard-cut fallback, and validation; merge deduplication, ID
+  reassignment, richer-duplicate retention and ordering; analyzer delegation
+  for small documents, per-chunk calls, tolerance of empty chunks, failure
+  when every chunk is empty; and a full-pipeline test proving downstream
+  stages receive the same model types.
+- **ADR-020:** chunking is internal to requirement analysis.
+
+### Changed
+
+- All four pipeline builders now compose `ChunkedRequirementAnalyzer`.
+  Business rules, gaps, scenarios, test cases, coverage, and exporters are
+  **unchanged** — the existing suite passes untouched.
+- Evaluation mode (ADR-019) remains available but is no longer required for
+  large documents.
+- Package version 0.10.0 → 0.11.0.
+
 ## [0.9.0-alpha] - 2026-07-20
 
 Phase 8: document ingestion framework. Fixes the first real-world defect —

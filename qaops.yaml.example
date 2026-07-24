@@ -27,7 +27,17 @@ output_dir: output
 # csv-bundle (six CSVs: Requirements/BusinessRules/Scenarios/TestCases/GapAnalysis/Coverage)
 default_export_formats: [markdown, json]
 
-# TEMPORARY evaluation mode (ADR-019). Off by default.
+# Chunking (ADR-020, ADR-021). 'adaptive' (default) sizes chunks from the
+# provider/model's practical output capacity and skips chunking entirely
+# for documents that fit - no tuning needed. Use 'fixed' only to override.
+chunking_strategy: adaptive
+chunk_safety_margin: 0.8
+# Used ONLY when chunking_strategy is 'fixed':
+# chunk_size: 8000
+# chunk_overlap: 500
+
+# TEMPORARY evaluation mode (ADR-019). Off by default. No longer required
+# for large documents now that chunking exists.
 # Large documents can generate more structured JSON than a model can return in
 # one response. When enabled, the analyzer asks the model for at most
 # max_requirements requirements and enforces that cap in code, so the whole

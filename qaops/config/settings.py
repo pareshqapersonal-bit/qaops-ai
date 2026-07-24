@@ -9,7 +9,7 @@ no global settings singleton.
 
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +39,42 @@ class QAOpsSettings(BaseSettings):
     )
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
     max_output_tokens: int = Field(default=8000, ge=256)
+    chunking_strategy: str = Field(
+        default="adaptive",
+        description=(
+            "How chunk size is decided: 'adaptive' (default) derives it from "
+            "the provider/model's practical output capacity, so no manual "
+            "tuning is needed; 'fixed' uses chunk_size verbatim as an "
+            "advanced override."
+        ),
+    )
+    chunk_safety_margin: float = Field(
+        default=0.8,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Fraction of estimated model capacity to actually use when "
+            "chunking adaptively. Lower values produce smaller, safer chunks."
+        ),
+    )
+    chunk_size: int = Field(
+        default=6000,
+        ge=500,
+        description=(
+            "Chunk size in characters. Used only when chunking_strategy is "
+            "'fixed'; ignored under the adaptive default."
+        ),
+    )
+    chunk_overlap: int = Field(
+        default=500,
+        ge=0,
+        description=(
+            "Characters of context repeated between consecutive chunks, so a "
+            "requirement spanning a boundary is still seen whole. Used only "
+            "when chunking_strategy is 'fixed'; the adaptive strategy scales "
+            "overlap with chunk size."
+        ),
+    )
     evaluation_mode: bool = Field(
         default=False,
         description=(
@@ -93,3 +129,22 @@ class QAOpsSettings(BaseSettings):
             msg = f"Unknown export formats {unknown}. Known formats: {sorted(known)}"
             raise ValueError(msg)
         return values
+
+    @model_validator(mode="after")
+    def _overlap_smaller_than_chunk(self) -> "QAOpsSettings":
+        if self.chunk_overlap >= self.chunk_size:
+            msg = (
+                f"chunk_overlap ({self.chunk_overlap}) must be smaller than "
+                f"chunk_size ({self.chunk_size})."
+            )
+            raise ValueError(msg)
+        return self
+
+    @field_validator("chunking_strategy")
+    @classmethod
+    def _known_chunking_strategy(cls, value: str) -> str:
+        known = {"adaptive", "fixed"}
+        if value not in known:
+            msg = f"Unknown chunking strategy {value!r}. Known strategies: {sorted(known)}"
+            raise ValueError(msg)
+        return value

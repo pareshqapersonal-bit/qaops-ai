@@ -60,6 +60,8 @@ Options:
 ```bash
 qaops design spec.md -f json -f markdown -f csv -f xlsx   # choose formats
 qaops design spec.md -f csv-bundle                       # 6 CSVs: Requirements, BusinessRules, Scenarios, TestCases, GapAnalysis, Coverage
+qaops design requirements.json --from requirements       # start from requirements (skips analysis)
+qaops design scenarios.csv --from scenarios              # start from scenarios (test cases only)
 qaops design spec.md -o reports/                          # output directory
 qaops design spec.md -c path/to/qaops.yaml               # explicit config
 qaops design spec.md --debug                             # full tracebacks

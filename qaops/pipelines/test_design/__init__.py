@@ -8,6 +8,7 @@ Phase 5.
 from qaops.config import QAOpsSettings
 from qaops.core.pipeline import Pipeline
 from qaops.llm import LLMClient, PromptLoader
+from qaops.pipelines.chunking import ChunkedRequirementAnalyzer
 from qaops.pipelines.test_design.analyzer import RequirementAnalyzer
 from qaops.pipelines.test_design.coverage import CoverageValidator
 from qaops.pipelines.test_design.gaps import GapAnalyzer
@@ -17,6 +18,7 @@ from qaops.pipelines.test_design.test_cases import TestCaseGenerator
 
 __all__ = [
     "BusinessRuleExtractor",
+    "ChunkedRequirementAnalyzer",
     "CoverageValidator",
     "GapAnalyzer",
     "RequirementAnalyzer",
@@ -37,7 +39,7 @@ def build_analysis_pipeline(
     """
     return Pipeline(
         [
-            RequirementAnalyzer(client, prompts, settings),
+            ChunkedRequirementAnalyzer(client, prompts, settings),
             BusinessRuleExtractor(client, prompts, settings),
             GapAnalyzer(client, prompts, settings),
         ]
@@ -52,7 +54,7 @@ def build_scenario_pipeline(
     """
     return Pipeline(
         [
-            RequirementAnalyzer(client, prompts, settings),
+            ChunkedRequirementAnalyzer(client, prompts, settings),
             BusinessRuleExtractor(client, prompts, settings),
             GapAnalyzer(client, prompts, settings),
             ScenarioGenerator(client, prompts, settings),
@@ -68,7 +70,7 @@ def build_test_design_pipeline(
     """
     return Pipeline(
         [
-            RequirementAnalyzer(client, prompts, settings),
+            ChunkedRequirementAnalyzer(client, prompts, settings),
             BusinessRuleExtractor(client, prompts, settings),
             GapAnalyzer(client, prompts, settings),
             ScenarioGenerator(client, prompts, settings),
@@ -89,7 +91,7 @@ def build_full_pipeline(
     """
     return Pipeline(
         [
-            RequirementAnalyzer(client, prompts, settings),
+            ChunkedRequirementAnalyzer(client, prompts, settings),
             BusinessRuleExtractor(client, prompts, settings),
             GapAnalyzer(client, prompts, settings),
             ScenarioGenerator(client, prompts, settings),

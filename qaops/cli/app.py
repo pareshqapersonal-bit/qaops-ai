@@ -28,11 +28,22 @@ from qaops.core.errors import (
     StageError,
     UnsupportedDocumentFormatError,
 )
+from qaops.entrypoints import (
+    EntryPoint,
+    build_pipeline_for,
+    parse_requirements,
+    parse_scenarios,
+    stage_names_for,
+)
 from qaops.exporters import CsvBundleExporter
 from qaops.ingestion import load_document
 from qaops.llm import PromptLoader, create_client
-from qaops.models import RequirementInput, TestDesignResult
-from qaops.pipelines.test_design import build_full_pipeline
+from qaops.models import (
+    RequirementAnalysisResult,
+    RequirementInput,
+    ScenarioDesignResult,
+    TestDesignResult,
+)
 
 app = typer.Typer(
     name="qaops",
@@ -67,10 +78,23 @@ def design(
     input_path: Annotated[
         Path,
         typer.Argument(
-            help="Path to the requirement document (.md, .txt, or .pdf).",
+            help=(
+                "Input file. A requirement document (.md, .txt, .pdf) by default, "
+                "or a requirements/scenarios file (.json, .csv) with --from."
+            ),
             show_default=False,
         ),
     ],
+    from_: Annotated[
+        str,
+        typer.Option(
+            "--from",
+            help=(
+                "Where to enter the pipeline: 'document' (default, full pipeline), "
+                "'requirements' (skip analysis), or 'scenarios' (test cases only)."
+            ),
+        ),
+    ] = EntryPoint.DOCUMENT.value,
     output_dir: Annotated[
         Path | None,
         typer.Option("--output-dir", "-o", help="Directory for reports. Overrides config."),
@@ -97,7 +121,7 @@ def design(
 ) -> None:
     """Process a requirement document into test design reports."""
     try:
-        _run_design(input_path, output_dir, formats, config_path)
+        _run_design(input_path, output_dir, formats, config_path, from_)
     except (QAOpsError, KeyError) as exc:
         if debug:
             raise
@@ -134,10 +158,18 @@ def _run_design(
     output_dir: Path | None,
     formats: list[str] | None,
     config_path: Path | None,
+    from_: str = EntryPoint.DOCUMENT.value,
 ) -> None:
     if not input_path.exists():
         msg = f"Input file not found: {input_path}"
         raise ConfigurationError(msg)
+
+    try:
+        entry_point = EntryPoint(from_.strip().casefold())
+    except ValueError as exc:
+        valid = ", ".join(e.value for e in EntryPoint)
+        msg = f"Unknown entry point {from_!r}. Valid options: {valid}."
+        raise ConfigurationError(msg) from exc
 
     settings = load_settings(config_path)
     if output_dir is not None:
@@ -149,14 +181,31 @@ def _run_design(
     file_formats = [f for f in export_formats if f != CsvBundleExporter.format_name]
     exporters = resolve_exporters(file_formats)
 
-    text = load_document(input_path)
-    _echo(f"Reading {input_path} ({len(text)} characters)")
+    # Each entry point produces the domain model its first stage expects; the
+    # stages themselves never learn which route was taken (ADR-022).
+    pipeline_input: RequirementInput | RequirementAnalysisResult | ScenarioDesignResult
+    if entry_point is EntryPoint.REQUIREMENTS:
+        analysis = parse_requirements(input_path)
+        pipeline_input = analysis
+        _echo(f"Reading {input_path} ({len(analysis.requirements)} requirements)")
+    elif entry_point is EntryPoint.SCENARIOS:
+        design = parse_scenarios(input_path)
+        pipeline_input = design
+        _echo(f"Reading {input_path} ({len(design.scenarios)} scenarios)")
+    else:
+        text = load_document(input_path)
+        pipeline_input = RequirementInput(text=text, source_name=input_path.name)
+        _echo(f"Reading {input_path} ({len(text)} characters)")
+
     _echo(f"Provider: {settings.provider} | formats: {', '.join(export_formats)}")
 
     client = create_client(settings)
-    pipeline = build_full_pipeline(client, PromptLoader(version=settings.prompt_version), settings)
-    _echo("Running pipeline: analyze -> rules -> gaps -> scenarios -> test cases -> coverage")
-    result = pipeline.run(RequirementInput(text=text, source_name=input_path.name))
+    pipeline = build_pipeline_for(
+        entry_point, client, PromptLoader(version=settings.prompt_version), settings
+    )
+    stages = " -> ".join(stage_names_for(entry_point))
+    _echo(f"Running pipeline ({entry_point.value}): {stages}")
+    result = pipeline.run(pipeline_input)
     assert isinstance(result, TestDesignResult)
 
     _print_summary(result)
