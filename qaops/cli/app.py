@@ -30,10 +30,14 @@ from qaops.core.errors import (
     UnsupportedDocumentFormatError,
 )
 from qaops.entrypoints import (
+    Classification,
     EntryPoint,
     build_pipeline_for,
+    classify_input,
+    format_issues,
     parse_requirements,
     parse_scenarios,
+    preflight,
     stage_names_for,
 )
 from qaops.exporters import CsvBundleExporter
@@ -80,22 +84,24 @@ def design(
         Path,
         typer.Argument(
             help=(
-                "Input file. A requirement document (.md, .txt, .pdf) by default, "
-                "or a requirements/scenarios file (.json, .csv) with --from."
+                "Input file: a requirement document (.pdf, .docx, .md, .txt), or a "
+                "requirements/scenarios file (.csv, .json, .xlsx). The workflow is "
+                "detected automatically."
             ),
             show_default=False,
         ),
     ],
     from_: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--from",
             help=(
-                "Where to enter the pipeline: 'document' (default, full pipeline), "
-                "'requirements' (skip analysis), or 'scenarios' (test cases only)."
+                "Override the detected entry point: 'document' (full pipeline), "
+                "'requirements' (skip analysis), or 'scenarios' (test cases only). "
+                "Detected automatically when omitted."
             ),
         ),
-    ] = EntryPoint.DOCUMENT.value,
+    ] = None,
     output_dir: Annotated[
         Path | None,
         typer.Option("--output-dir", "-o", help="Directory for reports. Overrides config."),
@@ -167,22 +173,34 @@ def _run_design(
     output_dir: Path | None,
     formats: list[str] | None,
     config_path: Path | None,
-    from_: str = EntryPoint.DOCUMENT.value,
+    from_: str | None = None,
 ) -> None:
     if not input_path.exists():
         msg = f"Input file not found: {input_path}"
         raise ConfigurationError(msg)
 
-    try:
-        entry_point = EntryPoint(from_.strip().casefold())
-    except ValueError as exc:
-        valid = ", ".join(e.value for e in EntryPoint)
-        msg = f"Unknown entry point {from_!r}. Valid options: {valid}."
-        raise ConfigurationError(msg) from exc
+    # Detect the workflow unless the user overrode it (ADR-025).
+    detection: Classification | None = None
+    if from_ is None:
+        detection = classify_input(input_path)
+        entry_point = detection.entry_point
+    else:
+        try:
+            entry_point = EntryPoint(from_.strip().casefold())
+        except ValueError as exc:
+            valid = ", ".join(e.value for e in EntryPoint)
+            msg = f"Unknown entry point {from_!r}. Valid options: {valid}."
+            raise ConfigurationError(msg) from exc
 
     settings = load_settings(config_path)
     if output_dir is not None:
         settings = settings.model_copy(update={"output_dir": output_dir})
+
+    # Catch predictable failures before spending any LLM calls.
+    issues = preflight(input_path, settings, entry_point)
+    if issues:
+        raise ConfigurationError(format_issues(issues))
+
     export_formats = formats or settings.default_export_formats
     # csv-bundle is a directory-writing package, not a single-file Exporter, so
     # it is dispatched separately from the protocol-shaped file exporters.
@@ -196,16 +214,19 @@ def _run_design(
     if entry_point is EntryPoint.REQUIREMENTS:
         analysis = parse_requirements(input_path)
         pipeline_input = analysis
-        _echo(f"Reading {input_path} ({len(analysis.requirements)} requirements)")
+        detail = f"{len(analysis.requirements)} requirements"
     elif entry_point is EntryPoint.SCENARIOS:
         design = parse_scenarios(input_path)
         pipeline_input = design
-        _echo(f"Reading {input_path} ({len(design.scenarios)} scenarios)")
+        detail = f"{len(design.scenarios)} scenarios"
     else:
         text = load_document(input_path)
         pipeline_input = RequirementInput(text=text, source_name=input_path.name)
-        _echo(f"Reading {input_path} ({len(text)} characters)")
+        detail = f"{len(text)} characters"
 
+    if detection is not None:
+        _echo(f"Detected: {detection.description} ({detection.reason})")
+    _echo(f"Reading {input_path} ({detail})")
     _echo(f"Provider: {settings.provider} | formats: {', '.join(export_formats)}")
 
     client = create_client(settings)

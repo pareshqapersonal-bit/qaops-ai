@@ -126,7 +126,8 @@ def parse_requirements(path: Path) -> RequirementAnalysisResult:
         if not str(payload.get("title", "")).strip():
             msg = f"A requirement in {path} has an empty title."
             raise DocumentLoadError(msg)
-        payload.setdefault("description", payload["title"])
+        if not str(payload.get("description", "") or "").strip():
+            payload["description"] = payload["title"]
         try:
             requirements.append(Requirement(id=ids.next(), **payload))
         except (TypeError, ValueError) as exc:
@@ -204,7 +205,8 @@ def parse_scenarios(path: Path) -> ScenarioDesignResult:
         canonical = req_ids.next()
         if original:
             original_to_canonical[original] = canonical
-        payload.setdefault("description", payload.get("title", "Imported requirement"))
+        if not str(payload.get("description", "") or "").strip():
+            payload["description"] = payload.get("title", "Imported requirement")
         try:
             requirements.append(Requirement(id=canonical, **payload))
         except (TypeError, ValueError) as exc:

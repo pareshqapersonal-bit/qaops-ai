@@ -97,8 +97,14 @@ def read_xlsx_scenarios(path: Path) -> list[dict[str, Any]]:
 
     try:
         workbook = load_workbook(path, read_only=True, data_only=True)
-    except (OSError, ValueError, KeyError) as exc:
-        msg = f"Could not read spreadsheet {path}: {exc}"
+    except Exception as exc:
+        # openpyxl raises BadZipFile (a subclass of Exception, not OSError) for
+        # a file that is not a real spreadsheet, plus assorted parse errors.
+        # All of them mean the same thing to the user.
+        msg = (
+            f"Could not read {path} as a spreadsheet: {exc}. "
+            "Check the file is a valid .xlsx workbook."
+        )
         raise DocumentLoadError(msg) from exc
 
     try:

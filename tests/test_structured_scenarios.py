@@ -37,6 +37,12 @@ TEST_CASES = json.dumps(
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Preflight checks for a provider key before the (mocked) client is built."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+
 def make_xlsx(path: Path, rows: list[list[str]]) -> None:
     workbook = Workbook()
     sheet = workbook.active

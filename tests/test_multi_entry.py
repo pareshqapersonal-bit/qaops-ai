@@ -66,6 +66,12 @@ TEST_CASES = json.dumps(
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Preflight checks for a provider key before the (mocked) client is built."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> QAOpsSettings:
     return QAOpsSettings(output_dir=tmp_path / "out")

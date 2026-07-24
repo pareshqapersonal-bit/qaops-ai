@@ -38,6 +38,12 @@ SCENARIO_CSV = "title,description,category,requirement_ids\r\nvalid login,d,posi
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Preflight checks for a provider key before the (mocked) client is built."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+
 @pytest.fixture
 def mock_client(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(appmod, "create_client", lambda settings: MockLLMClient([TEST_CASES]))

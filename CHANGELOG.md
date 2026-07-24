@@ -66,6 +66,50 @@ test execution, persistence, web UI, semantic deduplication. (DOCX and HTML
 ingestion are registered stubs, implementable behind the existing
 DocumentLoader interface without further architecture.)
 
+## [0.15.0-alpha] - 2026-07-24
+
+Phase 14: automatic workflow selection. `--from` is now optional - QAOps
+detects the entry point from the input and reports what it found (ADR-025).
+
+### Added
+
+- **Deterministic input classification.** Extensions resolve unambiguous cases;
+  CSV and JSON are classified by headers and keys, markdown and text by whether
+  they contain a scenario table or an explicitly marked scenario list. No LLM
+  call is made to classify.
+- **Pre-flight validation** before any pipeline work: file exists and is a
+  file, the optional dependency for its format is installed, and the provider's
+  API key is present. Failures are reported as one actionable message rather
+  than surfacing several stages in.
+- **Detection feedback**: the CLI prints what it detected and why, e.g.
+  `Detected: scenario spreadsheet (.xlsx is a spreadsheet of scenarios)`.
+- **Tests:** 34 new (418 total) - classification across every supported format,
+  pre-flight checks, automatic routing in the CLI, explicit `--from` override,
+  PipelineBuilder delegation, and regressions for prose-with-lists.
+- **ADR-025:** deterministic workflow detection.
+
+### Fixed
+
+- **A prose PRD with numbered acceptance criteria is no longer mistaken for a
+  scenario list.** The first classifier treated any bulleted or numbered list
+  as scenarios, which routed `examples/login.md` down the scenario path where
+  it failed. List items now count only when marked with a requirement
+  reference or category tag, and a majority must be marked.
+- **A corrupt or non-spreadsheet `.xlsx` now fails gracefully.** openpyxl
+  raises `BadZipFile`, which is not an `OSError` and previously escaped as an
+  unhandled exception.
+- **An empty description cell no longer rejects a requirements row**; it falls
+  back to the title, which hand-maintained sheets rely on.
+
+### Changed
+
+- `--from` is optional. When omitted the entry point is detected; when supplied
+  it wins and detection is skipped.
+- Pre-flight runs before the provider client is constructed, so a missing API
+  key is caught before any work. Existing CLI tests now set a key.
+- Package version 0.14.0 → 0.15.0. No pipeline stage, prompt, exporter, or
+  PipelineBuilder change.
+
 ## [0.14.0-alpha] - 2026-07-23
 
 Phase 13: human-authored scenario documents. QA teams can feed their existing

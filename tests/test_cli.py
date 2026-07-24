@@ -91,6 +91,12 @@ FULL_SCRIPT = [ANALYZER, RULES, GAPS, SCEN, TCS]
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Preflight checks for a provider key before the (mocked) client is built."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+
 @pytest.fixture
 def mock_client(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the real provider client with a scripted mock for the full run."""
@@ -151,7 +157,7 @@ class TestDesignCommand:
         assert (tmp_path / "out" / "spec.json").exists()
 
     def test_unsupported_input_format_is_friendly(self, mock_client: None, tmp_path: Path) -> None:
-        bad = tmp_path / "spec.xlsx"
+        bad = tmp_path / "spec.rtf"
         bad.write_text("x", encoding="utf-8")
         result = runner.invoke(appmod.app, ["design", str(bad), "-o", str(tmp_path)])
         assert result.exit_code == 1

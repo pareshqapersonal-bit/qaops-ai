@@ -8,13 +8,20 @@ exporter changes - stages never learn which route was taken.
 """
 
 from qaops.entrypoints.builder import build_pipeline_for, stage_names_for
+from qaops.entrypoints.classifier import Classification, classify_input
 from qaops.entrypoints.entry_point import EntryPoint
 from qaops.entrypoints.parsers import parse_requirements, parse_scenarios
+from qaops.entrypoints.preflight import PreflightIssue, format_issues, preflight
 
 __all__ = [
+    "Classification",
     "EntryPoint",
+    "PreflightIssue",
     "build_pipeline_for",
+    "classify_input",
+    "format_issues",
     "parse_requirements",
     "parse_scenarios",
+    "preflight",
     "stage_names_for",
 ]
