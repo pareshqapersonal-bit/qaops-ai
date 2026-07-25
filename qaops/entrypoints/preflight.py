@@ -15,13 +15,7 @@ from pathlib import Path
 
 from qaops.config import QAOpsSettings
 from qaops.entrypoints.entry_point import EntryPoint
-
-# Provider -> the environment variable holding its key.
-_PROVIDER_KEY_VARS: dict[str, tuple[str, ...]] = {
-    "anthropic": ("ANTHROPIC_API_KEY",),
-    "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
-    "openrouter": ("OPENROUTER_API_KEY",),
-}
+from qaops.execution.registry import key_variables_for
 
 # Extensions that need an optional dependency, and the extra that provides it.
 _EXTENSION_REQUIREMENTS: dict[str, tuple[str, str]] = {
@@ -61,8 +55,8 @@ def _missing_api_key(settings: QAOpsSettings) -> PreflightIssue | None:
 
     if settings.provider == "mock":
         return None
-    variables = _PROVIDER_KEY_VARS.get(settings.provider)
-    if variables is None:
+    variables = key_variables_for(settings.provider)
+    if not variables:
         return None
     if any(os.environ.get(name, "").strip() for name in variables):
         return None

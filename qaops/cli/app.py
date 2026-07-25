@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import BaseModel
 
 from qaops.cli.config_loader import load_settings
 from qaops.cli.diagnostics import diagnose_provider_error
@@ -29,6 +30,7 @@ from qaops.core.errors import (
     StageError,
     UnsupportedDocumentFormatError,
 )
+from qaops.core.protocols import PipelineStage
 from qaops.entrypoints import (
     Classification,
     EntryPoint,
@@ -39,6 +41,13 @@ from qaops.entrypoints import (
     parse_scenarios,
     preflight,
     stage_names_for,
+)
+from qaops.execution import (
+    AdaptiveExecutor,
+    ModelRegistry,
+    ProviderInfo,
+    available_providers,
+    get_provider,
 )
 from qaops.exporters import CsvBundleExporter
 from qaops.ingestion import load_document
@@ -76,6 +85,54 @@ def _fail(message: str, code: int = 1) -> None:
     """Print a friendly error to stderr and exit with a nonzero code."""
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(code)
+
+
+@app.command()
+def models(
+    refresh: Annotated[
+        bool,
+        typer.Option("--refresh", help="Force rediscovery instead of using cached results."),
+    ] = False,
+    no_discovery: Annotated[
+        bool,
+        typer.Option("--static", help="Show only the curated model table, skipping discovery."),
+    ] = False,
+) -> None:
+    """List the models each available provider can serve.
+
+    Discovers models via provider APIs where available, falling back to a
+    curated table when a provider is unreachable. A standalone way to verify
+    discovery without running a pipeline.
+    """
+    registry = ModelRegistry(discovery_enabled=not no_discovery)
+    if refresh:
+        registry.refresh()
+
+    providers = available_providers()
+    if not providers:
+        _echo("No providers available. Set an API key (e.g. OPENROUTER_API_KEY) and retry.")
+        return
+
+    for info in providers:
+        discovered = registry.models_for(info.name)
+        _echo("")
+        _echo(f"Provider: {info.name}")
+        if not discovered:
+            _echo("  (no models found)")
+            continue
+        _echo(f"  {len(discovered)} model(s):")
+        for model in discovered:
+            flags = []
+            if model.free:
+                flags.append("free")
+            if model.local:
+                flags.append("local")
+            suffix = f" [{', '.join(flags)}]" if flags else ""
+            _echo(
+                f"    - {model.name}"
+                f" (context {model.max_context_tokens:,}, out {model.max_output_tokens:,})"
+                f"{suffix}"
+            )
 
 
 @app.command()
@@ -168,6 +225,23 @@ def _message_for(exc: Exception) -> str:
     return str(exc)
 
 
+def _fallback_providers(settings: QAOpsSettings) -> list[ProviderInfo]:
+    """The provider chain for this run: configured provider first, then others.
+
+    Configuration wins - the provider the user chose leads - and automatic
+    discovery supplies the rest, so failover works without any extra setup
+    while an explicit choice is still honoured (ADR-026).
+    """
+    configured = get_provider(settings.provider)
+    chain: list[ProviderInfo] = []
+    if configured is not None:
+        chain.append(configured)
+    for info in available_providers():
+        if all(info.name != existing.name for existing in chain):
+            chain.append(info)
+    return chain
+
+
 def _run_design(
     input_path: Path,
     output_dir: Path | None,
@@ -235,7 +309,33 @@ def _run_design(
     )
     stages = " -> ".join(stage_names_for(entry_point))
     _echo(f"Running pipeline ({entry_point.value}): {stages}")
-    result = pipeline.run(pipeline_input)
+
+    # Adaptive execution: when other providers have credentials available, run
+    # through the executor so a provider failure mid-pipeline switches rather
+    # than aborting. Completed stages are never recomputed (ADR-026).
+    candidates = _fallback_providers(settings)
+    if len(candidates) > 1:
+        names = ", ".join(info.name for info in candidates)
+        _echo(f"Provider failover enabled: {names}")
+
+        def build_stages(
+            stage_settings: QAOpsSettings,
+        ) -> list[PipelineStage[BaseModel, BaseModel]]:
+            stage_client = create_client(stage_settings)
+            built = build_pipeline_for(
+                entry_point,
+                stage_client,
+                PromptLoader(version=stage_settings.prompt_version),
+                stage_settings,
+            )
+            return list(built.stages)
+
+        executor = AdaptiveExecutor(
+            candidates, settings, build_stages, registry=ModelRegistry(), reporter=_echo
+        )
+        result = executor.run(pipeline_input)
+    else:
+        result = pipeline.run(pipeline_input)
     assert isinstance(result, TestDesignResult)
 
     _print_summary(result)

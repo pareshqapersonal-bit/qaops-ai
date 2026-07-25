@@ -66,6 +66,98 @@ test execution, persistence, web UI, semantic deduplication. (DOCX and HTML
 ingestion are registered stubs, implementable behind the existing
 DocumentLoader interface without further architecture.)
 
+## [0.17.0-alpha] - 2026-07-25
+
+Phase 15 revision: model-then-provider failover with runtime model discovery
+(ADR-027). Building on the provider failover from 0.16.0.
+
+### Added
+
+- **Model-level failover.** When a model fails, the executor tries the next
+  compatible model on the *same* provider before switching providers. A
+  provider is abandoned only once every compatible model has failed, so a
+  working credential is not discarded over one model's exhausted credit.
+- **Runtime model discovery.** `discover_openrouter_models` parses OpenRouter's
+  public models endpoint; `discover_ollama_models` reads a local daemon's tags.
+  Both degrade to a curated static table on any failure. `ModelRegistry`
+  discovers, caches per run, refreshes on request, and exposes capability
+  metadata (context and output limits, structured output, locality).
+- **Model-aware retry policy.** Credit exhaustion tries the next model; model
+  unavailable drops it; context overflow asks for a larger-context model;
+  authentication disables the provider; rate limits back off; timeouts and
+  invalid output retry the same model.
+- **`qaops models` command** lists what each available provider discovers, with
+  `--refresh` and `--static`, so discovery is verifiable on its own.
+- **Tests:** 55 new/rewritten — model and provider failover, capability
+  filtering, discovery parsing and graceful degradation, caching and refresh,
+  the models command, and a regression for a single-provider retry loop.
+- **ADR-027.**
+
+### Fixed
+
+- **A single-provider retry loop.** Model-first recovery could cycle forever
+  when one provider's every model gave the same retryable failure (e.g.
+  timeout): retries exhausted, a sibling was tried, attempts reset, repeat. The
+  executor now tracks models already tried for the current stage and excludes
+  them, so exhaustion raises a clear error instead of hanging.
+
+### Changed
+
+- `StageCheckpoint` and `ExecutionReport` now record the model per stage, and
+  the report exposes `model_switches` and `models_used`.
+- Package version 0.16.0 → 0.17.0. No pipeline stage, prompt, exporter,
+  chunking, or PipelineBuilder change.
+
+### Note
+
+Model discovery is tested against mocked HTTP responses only; the build
+environment has no network access to provider APIs. If a live response shape
+differs, discovery degrades to the static table and execution still works. The
+`qaops models` command exists to verify discovery against a real key.
+
+## [0.16.0-alpha] - 2026-07-24
+
+Phase 15: adaptive execution. A run now survives a provider failing mid-
+pipeline, without recomputing completed stages (ADR-026).
+
+### Added
+
+- **`AdaptiveExecutor`** - runs stages one at a time, checkpointing each
+  success. On failure it classifies the error, applies policy, and where a
+  switch is warranted rebuilds the *remaining* stages against the next healthy
+  provider and resumes from the failed stage. Completed stages are never
+  recomputed, and no stage learns which provider serves it.
+- **Failure classification and retry policy**: exhausted credit and rejected
+  credentials disable the provider; rate limits retry with backoff; timeouts
+  and schema-validation failures retry the same provider; context overflow
+  switches without disabling.
+- **Provider registry** describing each provider's key variables, locality,
+  priority, and structured-output support. Adding a provider means adding a
+  row. Preflight now reads key metadata from here rather than a second copy.
+- **Automatic failover chain**: the configured provider leads, and every other
+  provider with credentials present follows in priority order, so failover
+  needs no configuration while an explicit choice still wins.
+- **Per-stage progress output** showing which provider ran each stage and why
+  any switch occurred.
+- **Tests:** 38 new (456 total) - classification for every failure kind, each
+  policy branch, mid-pipeline switching, checkpoint preservation, health
+  tracking and provider skipping, retry and backoff behaviour, exhaustion, and
+  registry availability rules.
+- **ADR-026:** adaptive execution.
+
+### Changed
+
+- `Pipeline` exposes a read-only `stages` property so an executor can run
+  stages individually. Its behaviour is unchanged.
+- Package version 0.15.0 → 0.16.0. No pipeline stage, prompt, exporter,
+  chunking, or PipelineBuilder change.
+
+### Note
+
+Checkpoints live in memory for the duration of a run, which covers the failure
+this phase addresses. Persisting them across process restarts raises staleness
+questions and is deliberately out of scope.
+
 ## [0.15.0-alpha] - 2026-07-24
 
 Phase 14: automatic workflow selection. `--from` is now optional - QAOps

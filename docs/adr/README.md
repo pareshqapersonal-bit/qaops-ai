@@ -27,5 +27,7 @@
 | [023](023-workflow-safety.md) | Fail safely: never destroy input, never surface raw provider errors | Accepted |
 | [024](024-structured-scenario-readers.md) | Structured readers for human-authored scenarios; prose stays with the analyzer | Accepted |
 | [025](025-workflow-detection.md) | Workflow detection is deterministic, and biased toward the document route | Accepted |
+| [026](026-adaptive-execution.md) | Provider failover by rebuilding remaining stages, not by mutating them | Accepted |
+| [027](027-model-discovery.md) | Exhaust models within a provider before switching, and discover them at runtime | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

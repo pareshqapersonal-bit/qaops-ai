@@ -37,6 +37,11 @@ class Pipeline:
     def stage_names(self) -> list[str]:
         return [stage.name for stage in self._stages]
 
+    @property
+    def stages(self) -> list[PipelineStage[Any, Any]]:
+        """The composed stages, for executors that run them individually."""
+        return list(self._stages)
+
     def run(self, data: BaseModel) -> BaseModel:
         """Execute all stages in order and return the final output."""
         current: BaseModel = data
