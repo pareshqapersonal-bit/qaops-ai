@@ -29,5 +29,8 @@
 | [025](025-workflow-detection.md) | Workflow detection is deterministic, and biased toward the document route | Accepted |
 | [026](026-adaptive-execution.md) | Provider failover by rebuilding remaining stages, not by mutating them | Accepted |
 | [027](027-model-discovery.md) | Exhaust models within a provider before switching, and discover them at runtime | Accepted |
+| [028](028-fastapi-backend.md) | A FastAPI interface over a shared DesignService, not a second pipeline | Accepted |
+| [029](029-bounded-execution.md) | Bounded, ranked candidate selection and structured execution progress | Accepted |
+| [030](030-request-timeout.md) | A per-request deadline with QAOps-owned retries, and unambiguous progress | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

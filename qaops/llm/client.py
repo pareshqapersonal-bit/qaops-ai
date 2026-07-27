@@ -19,6 +19,11 @@ class LLMClient(Protocol):
         """Short provider identifier, e.g. 'anthropic' or 'mock'."""
         ...
 
+    @property
+    def model(self) -> str:
+        """The model identifier this client will call."""
+        ...
+
     def complete(self, request: LLMRequest) -> LLMResponse:
         """Execute one completion.
 

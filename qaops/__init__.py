@@ -5,4 +5,4 @@ detection, scenario design, test case generation, deterministic
 coverage validation, and multi-format export.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.18.0-dev"

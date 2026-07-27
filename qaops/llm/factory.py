@@ -21,8 +21,9 @@ from qaops.llm.client import LLMClient
 
 def create_client(settings: QAOpsSettings) -> LLMClient:
     """Build the LLMClient selected by settings.provider."""
+    timeout = settings.request_timeout_seconds
     if settings.provider == "anthropic":
-        return AnthropicClient(model=settings.model)
+        return AnthropicClient(model=settings.model, timeout_seconds=timeout)
     if settings.provider == "gemini":
         try:
             from qaops.llm.gemini_client import GeminiClient
@@ -32,11 +33,11 @@ def create_client(settings: QAOpsSettings) -> LLMClient:
                 "installed. Install the optional extra: pip install 'qaops-ai[gemini]'"
             )
             raise ConfigurationError(msg) from exc
-        return GeminiClient(model=settings.gemini_model)
+        return GeminiClient(model=settings.gemini_model, timeout_seconds=timeout)
     if settings.provider == "openrouter":
         from qaops.llm.openrouter_client import OpenRouterClient
 
-        return OpenRouterClient(model=settings.openrouter_model)
+        return OpenRouterClient(model=settings.openrouter_model, timeout_seconds=timeout)
     if settings.provider == "mock":
         msg = (
             "Provider 'mock' cannot be created by the factory; construct "

@@ -21,6 +21,7 @@ from google.genai import types as genai_types
 from qaops.core.errors import ConfigurationError
 from qaops.llm.errors import LLMProviderError
 from qaops.llm.models import LLMRequest, LLMResponse, LLMUsage
+from qaops.llm.timeouts import normalize_timeout_message
 
 _KEY_ENV_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
 
@@ -44,7 +45,7 @@ class GeminiClient:
         self,
         model: str,
         *,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float = 60.0,
         sdk_client: genai.Client | None = None,
     ) -> None:
         self._model = model
@@ -85,7 +86,7 @@ class GeminiClient:
                 model=self._model, contents=contents, config=config
             )
         except genai_errors.APIError as exc:
-            raise LLMProviderError("gemini", str(exc)) from exc
+            raise LLMProviderError("gemini", normalize_timeout_message("gemini", exc)) from exc
 
         usage = response.usage_metadata
         candidates = response.candidates or []

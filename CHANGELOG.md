@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Pre-1.0, minor versions may contain breaking changes; each is called out explicitly.
 
-## [Unreleased]
+## [0.10.0-alpha] - 2026-07-21
 
 ### Added
 
@@ -65,6 +65,209 @@ Deferred beyond v1.0 (see README non-goals): automation code generation,
 test execution, persistence, web UI, semantic deduplication. (DOCX and HTML
 ingestion are registered stubs, implementable behind the existing
 DocumentLoader interface without further architecture.)
+
+## [0.18.0-dev] - unreleased
+
+Phase 16.2 acceptance fix: nested structured-output retries are now counted and
+bounded. The real PDF acceptance run showed that schema-repair could make
+several real provider calls inside one executor attempt, invisible to progress
+and budget. Fixed so one actual provider call equals one counted request
+(ADR-030 addendum).
+
+### Added
+
+- **`RequestObserver` seam** (`qaops/llm/request_budget.py`): the executor binds
+  an observer around each stage run; `generate_structured` announces every real
+  provider call to it. Each call is counted, made visible as REQUEST_STARTED /
+  REQUEST_COMPLETED events, and can be vetoed when the budget is spent.
+- **`max_provider_calls_per_stage` setting** (default 20): a hard ceiling on
+  actual provider calls per stage, including structured-output repair calls.
+  Distinct from `max_stage_recovery_attempts` (which counts switches), so
+  recovery semantics are unchanged.
+- **`FailureKind.EMPTY_OUTPUT`** and **`LLMEmptyResponseError`**: an empty
+  provider response is now a distinct, accurately-diagnosed failure that moves
+  to the next model without a repair re-roll.
+- **`provider_call_number`** on execution events and API progress: the honest
+  running total of real provider calls for the stage.
+- **REQUEST_COMPLETED / REQUEST_FAILED** events, one pair per real call.
+- **Tests:** 24 new (592 total), including the exact live gap_analyzer fixture
+  (cohere empty/length responses), an instrumented proof that actual fake
+  provider calls equal the accounting, and coverage of empty/invalid/truncation
+  handling and the provider-call budget.
+
+### Changed
+
+- **`invalid_output` now recovers with NEXT_MODEL, not RETRY_SAME.** A model
+  reaching the executor with invalid output has already exhausted its in-request
+  repair attempts; another full nested cycle on the same model is waste.
+- **Empty responses stop the repair loop immediately** - re-prompting a model
+  that returned nothing cannot help.
+- **Truncation diagnostic corrected**: `stop_reason=length` with zero content is
+  no longer diagnosed as token truncation and no longer recommends raising
+  `max_output_tokens`. That advice is emitted only for genuinely cut-off,
+  non-empty output.
+- The `LLMClient` protocol now declares `model` (all concrete clients already
+  had it), used by the request-observer path.
+- Version stays `0.18.0-dev`; no bump for this acceptance fix.
+
+### Guarantees preserved
+
+All Phase 16.2 guarantees hold: `request_timeout_seconds` default 60 and the
+`QAOPS_REQUEST_TIMEOUT_SECONDS` override, disabled SDK retries, Gemini timeout
+config, timeout normalization, same-model timeout retry policy, the 5-model and
+12-recovery bounds, provider failover, checkpointed completed stages, single-
+and multi-provider progress, and CLI compatibility.
+
+---
+
+## [0.18.0-dev] - Phase 16.2 (superseded above)
+
+Phase 16.2: request timeout guard and accurate runtime progress. A single
+provider request can no longer hold a stage indefinitely, and progress is
+observable and unambiguous for every run (ADR-030). Builds on Phase 16.1.
+
+### Added
+
+- **`request_timeout_seconds` setting** (default 60, validated, backward-
+  compatible). Passed by the factory to every provider client and applied at the
+  SDK/HTTP boundary. Bounds a single generation request — not a stage, the
+  pipeline, or all retries combined.
+- **QAOps-owned retries.** SDK internal retries are disabled (`max_retries=0` on
+  the Anthropic and OpenAI/OpenRouter SDKs), so one QAOps attempt is exactly one
+  network request with one deadline. This was the real cause of the observed
+  12-minute stall: the OpenAI SDK's default 2 retries silently multiplied one
+  attempt into three ~120s requests.
+- **Timeout normalization** (`qaops/llm/timeouts.py`): SDK timeout exceptions
+  are detected at the provider boundary and rewritten so the existing policy
+  classifies them as `timeout`. Conservative — a plain connection error is not
+  treated as a timeout.
+- **Request lifecycle events**: `request_started` (before each call, making an
+  in-flight request visible), `request_timed_out`, `request_retry`.
+- **Unambiguous progress counters**: `model_attempt_number` (which distinct
+  model for the stage) and `request_attempt` (which network request for the
+  current model). The prior `models_attempted` is retained for compatibility.
+- **Single-provider progress**: all execution now routes through the adaptive
+  executor, so single-provider runs emit the same events as failover runs
+  (Phase 16.1 gap closed). Providers without model metadata get a synthetic
+  candidate so they stay executable.
+- **Tests:** 45 new (567 total), including the live-failure regression (four
+  OpenRouter models fail, the fifth times out, bounded recovery to Gemini),
+  timeout propagation to all three providers, disabled SDK retries, timeout
+  normalization without misclassifying network errors, the request lifecycle
+  events and counter semantics, API in-flight progress (captured mid-request on
+  a real thread), and no-secret checks.
+- **ADR-030.**
+
+### Changed
+
+- Default per-request timeout lowered from a hardcoded 120s to a configurable
+  60s.
+- CLI adaptive output and API progress now reflect request-level state.
+- Version stays `0.18.0-dev`; no bump for this phase (unreleased development
+  work).
+
+### Interaction of the execution bounds
+
+`request_timeout_seconds` caps one request's duration; `max_attempts_per_model`
+caps same-model retries; `max_models_per_provider_per_stage` (5) caps distinct
+models per provider; `max_stage_recovery_attempts` (12) caps total switches.
+Same-model retries do not consume the recovery budget.
+
+---
+
+## [0.18.0-dev] - Phase 16.1 (superseded above)
+
+Phase 16.1: adaptive execution hardening and API progress. Bounds recovery so
+live model discovery cannot cause hundreds of attempts, and exposes structured
+run progress over HTTP (ADR-029). Builds on Phase 16.
+
+### Added
+
+- **Bounded candidate selection** (`qaops/execution/selector.py`): filters
+  incompatible models, ranks the rest deterministically (configured model first,
+  then structured-output support, priority, and context/output headroom), and
+  returns a small pool. The executor no longer iterates the full discovered
+  catalogue.
+- **Two execution bounds** in settings, both configurable and validated, both
+  backward-compatible with existing `qaops.yaml` files:
+  `max_models_per_provider_per_stage` (default 5, counts distinct models, not
+  same-model retries) and `max_stage_recovery_attempts` (default 12, total
+  recovery actions per stage).
+- **Structured execution events** (`qaops/execution/events.py`): the executor
+  emits typed events at stage and failure boundaries. The CLI renders them as
+  text; the API converts them to run progress. The executor stays HTTP-unaware.
+- **API run progress**: `GET /api/v1/runs/{id}` now returns a `progress` object
+  (current stage, position, provider, model, models attempted, recovery
+  attempts, safe message), preserved after completion. Failed runs expose
+  `failed_stage` and `recovery_attempts`. No secrets, no raw provider payloads.
+- **Tests:** 19 new (522 total), including a stress test proving a 300-model
+  credit-exhausted catalogue yields at most 5 attempts per provider before
+  failover, plus selector ranking/filtering, both budgets, no-infinite-loop,
+  completed-stage preservation, and API progress without secrets.
+- **ADR-029.**
+
+### Changed
+
+- `insufficient_credit` remains bound-only: the "can only afford N" figure is
+  not used to infer account vs model exhaustion (it is not a reliable signal);
+  the per-provider model cap is the protection.
+- Version `0.17.0` → `0.18.0-dev`. See the version note below.
+- CLI adaptive output now shows the model per stage (e.g.
+  `test_case_generator: anthropic/claude-sonnet-4-6 ok`).
+
+### Version note
+
+The working tree read `0.17.0` (no `-alpha`) because the Phase 15 model-discovery
+work bumped `pyproject.toml` to `0.17.0` as a working version; the health
+endpoint reads that via `importlib.metadata`, which is why a never-released tree
+reported `0.17.0`. No git tag was ever created. The current unreleased work
+(Phase 16 + 16.1) now carries `0.18.0-dev` to distinguish it from a real release.
+`qaops/__init__.py` was also corrected from a stale `0.1.0`.
+
+## [0.17.0-alpha - superseded by 0.18.0-dev] - Phase 16: FastAPI backend
+
+Phase 16: FastAPI backend foundation. QAOps is now reachable over HTTP as well
+as the CLI, both running the same orchestration (ADR-028).
+
+### Added
+
+- **`DesignService`** — the design orchestration (classify, preflight, parse,
+  build, adaptive-execute, write reports) extracted from the CLI so the CLI and
+  API share it. Progress is emitted through a caller-supplied callback. ADR-023
+  output-collision safety and friendly filesystem errors moved with it.
+- **FastAPI application** (`qaops.api.app:app`, optional `[api]` extra) with:
+  `GET /health`, `GET /api/v1/models`, `POST /api/v1/design` (multipart upload,
+  auto-detected workflow, returns 202), `GET /api/v1/runs/{id}`,
+  `GET /api/v1/runs/{id}/artifacts`, and
+  `GET /api/v1/runs/{id}/artifacts/{name}`.
+- **Asynchronous runs**: an in-memory, thread-safe `RunStore` behind a small
+  interface, with a per-run workspace (`input/` + `output/`) so runs cannot
+  overwrite each other. Background execution transitions a run through
+  queued → running → completed | failed.
+- **Safety**: secret redaction on run errors, no tracebacks in responses,
+  path-traversal-proof artifact download, explicit configurable CORS (never
+  `*` with credentials), sanitized upload filenames.
+- **OpenAPI docs** at `/docs`.
+- **Tests:** 30 new (503 total) — startup, health, models and secret
+  non-exposure, upload lifecycle (completed and failed), unknown run, artifact
+  listing/download, path-traversal rejection (three encodings), workspace
+  isolation, adaptive-path reuse, and the DesignService in isolation.
+- **ADR-028.**
+
+### Changed
+
+- The CLI's `_run_design` now delegates to `DesignService`; behaviour is
+  unchanged. The now-duplicated CLI helpers (`_write_reports`,
+  `_check_output_collisions`, `_friendly_write_error`, `_fallback_providers`)
+  were removed.
+- `/health` reports the version from package metadata, not the stale
+  `qaops/__init__.py` constant.
+
+### Known limitations
+
+- Run state is in memory: a process restart loses all run status. Workspaces on
+  disk survive; the registry indexing them does not. Acceptable for local,
+  single-process use; a persistent store is the seam for later.
 
 ## [0.17.0-alpha] - 2026-07-25
 

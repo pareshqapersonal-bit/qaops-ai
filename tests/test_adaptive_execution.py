@@ -172,8 +172,14 @@ class TestRetryPolicy:
     def test_timeout_retries_the_same_model(self) -> None:
         assert recovery_for(TIMEOUT_ERROR).action is Action.RETRY_SAME
 
-    def test_invalid_output_retries_the_same_model(self) -> None:
-        assert recovery_for("Model output failed validation against X").action is Action.RETRY_SAME
+    def test_invalid_output_moves_to_next_model(self) -> None:
+        # ADR-030: a model reaching the executor with invalid_output has already
+        # exhausted its in-request repair attempts, so move on rather than
+        # granting another full nested repair cycle.
+        assert recovery_for("Model output failed validation against X").action is Action.NEXT_MODEL
+
+    def test_empty_output_moves_to_next_model(self) -> None:
+        assert recovery_for("the provider returned no content").action is Action.NEXT_MODEL
 
     def test_context_limit_asks_for_a_larger_model(self) -> None:
         recovery = recovery_for("context length exceeded")

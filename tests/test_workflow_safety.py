@@ -16,6 +16,7 @@ from qaops.cli.diagnostics import diagnose_provider_error
 from qaops.core.errors import ExportError, LLMError, StageError
 from qaops.exporters import CsvBundleExporter
 from qaops.llm import MockLLMClient
+from qaops.services.design_service import _friendly_write_error
 
 TEST_CASES = json.dumps(
     {
@@ -46,7 +47,9 @@ def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def mock_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(appmod, "create_client", lambda settings: MockLLMClient([TEST_CASES]))
+    monkeypatch.setattr(
+        "qaops.services.design_service.create_client", lambda settings: MockLLMClient([TEST_CASES])
+    )
 
 
 class TestBundleFilenameConstant:
@@ -217,7 +220,7 @@ class TestFriendlyErrorMessages:
 
 class TestFilesystemErrors:
     def test_permission_error_is_friendly(self) -> None:
-        error = appmod._friendly_write_error(
+        error = _friendly_write_error(
             Path("output/TestCases.csv"), PermissionError(13, "Permission denied")
         )
         assert isinstance(error, ExportError)
@@ -225,13 +228,13 @@ class TestFilesystemErrors:
         assert "TestCases.csv" in str(error)
 
     def test_is_a_directory_error_is_specific(self) -> None:
-        error = appmod._friendly_write_error(
+        error = _friendly_write_error(
             Path("output/report.json"), IsADirectoryError(21, "Is a directory")
         )
         assert "a directory already exists" in str(error)
 
     def test_other_os_errors_include_the_cause(self) -> None:
-        error = appmod._friendly_write_error(
+        error = _friendly_write_error(
             Path("output/report.json"), OSError(28, "No space left on device")
         )
         assert "No space left" in str(error)
@@ -239,7 +242,9 @@ class TestFilesystemErrors:
     def test_locked_file_during_export_is_friendly(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setattr(appmod, "create_client", lambda s: MockLLMClient([TEST_CASES]))
+        monkeypatch.setattr(
+            "qaops.services.design_service.create_client", lambda s: MockLLMClient([TEST_CASES])
+        )
         source = tmp_path / "scen.csv"
         source.write_text(SCENARIO_CSV, newline="")
 

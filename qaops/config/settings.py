@@ -96,6 +96,48 @@ class QAOpsSettings(BaseSettings):
         description="Retries after a schema-invalid LLM response before failing loudly.",
     )
 
+    # Adaptive-execution bounds (ADR-029). Live model discovery can surface
+    # hundreds of models per provider; these keep recovery bounded so a
+    # credit-exhausted account cannot cause hundreds of attempts.
+    max_models_per_provider_per_stage: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Distinct discovered models to try for one stage on one "
+        "provider before moving to the next provider. Counts model candidates, "
+        "not same-model schema retries.",
+    )
+    max_stage_recovery_attempts: int = Field(
+        default=12,
+        ge=1,
+        le=100,
+        description="Total recovery actions (model switches and provider "
+        "switches) allowed for a single stage before it fails cleanly. A "
+        "second bound across providers, so a chain of providers cannot compound "
+        "into a long run.",
+    )
+    request_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        le=1800,
+        description="Deadline for a single provider generation request. Bounds "
+        "request DURATION, complementing the count-based bounds above. QAOps "
+        "owns retries (provider SDK retries are disabled), so this is the wall "
+        "time of one network attempt, not a multiple of it. Default 60s targets "
+        "hanging free-tier models without cutting off legitimately slow ones.",
+    )
+    max_provider_calls_per_stage: int = Field(
+        default=20,
+        ge=1,
+        le=200,
+        description="Hard ceiling on ACTUAL provider generation calls for one "
+        "stage, including structured-output repair calls that happen inside a "
+        "single stage.run() (ADR-030). This is the backstop that prevents a "
+        "hidden multiplier: 5 models x 3 schema-repair attempts = 15 in the "
+        "worst case, so 20 leaves headroom while still being finite. When the "
+        "budget is spent the stage fails cleanly instead of making more calls.",
+    )
+
     # Input guardrails (chunking is a future milestone; V1 fails fast)
     max_input_chars: int = Field(
         default=60_000,

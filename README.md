@@ -31,40 +31,6 @@ qaops/
 ├── exporters/   # JSON (canonical), Markdown, CSV, Excel — all derive from JSON
 └── cli/         # qaops design <input> --format xlsx                    (Phase 7)
 ```
-               
-                          QAOps AI
-
-                  ┌──────────────────┐
-                  │   PRD / PDF       │
-                  └────────┬─────────┘
-                           │
-                  Requirement Analysis
-                           │
-                  Business Rule Extraction
-                           │
-                  Scenario Generation
-                           │
-                  Test Case Generation
-                           │
-                  Coverage Validation
-
-────────────────────────────────────────────────────
-
-Requirements ───────────────► Business Rules
-                                   │
-                                   ▼
-                              Scenarios
-                                   │
-                                   ▼
-                             Test Cases
-
-────────────────────────────────────────────────────
-
-Scenarios ─────────────────────────► Test Cases
-                                         │
-                                         ▼
-                                   Coverage
-
 
 ## Pipeline
 
@@ -116,6 +82,77 @@ Errors are reported as plain messages with a nonzero exit code, never a Python
 traceback (use `--debug` to see one). Excel export needs the optional extra:
 `pip install "qaops-ai[excel]"`.
 
+## HTTP API (local)
+
+QAOps also runs as a local HTTP service, exposing the same pipeline over a REST
+API so a web UI can be built on top of it. It is a second interface to the same
+orchestration, not a separate implementation.
+
+Install the API extra and start the server:
+
+```bash
+pip install "qaops-ai[api]"
+uvicorn qaops.api.app:app --reload
+```
+
+Interactive docs are at `http://127.0.0.1:8000/docs`.
+
+### Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | Liveness and version. No LLM call. |
+| GET | `/api/v1/models` | Providers and discovered models (Phase 15). |
+| POST | `/api/v1/design` | Upload a file; returns `202` with a run id. |
+| GET | `/api/v1/runs/{id}` | Run status and, once done, a summary. |
+| GET | `/api/v1/runs/{id}/artifacts` | Report metadata for a run. |
+| GET | `/api/v1/runs/{id}/artifacts/{name}` | Download one report. |
+
+### Asynchronous run lifecycle
+
+A design can take minutes, so submission does not block. `POST /api/v1/design`
+validates the upload, creates a run, schedules background execution, and
+returns immediately:
+
+```bash
+curl -F "file=@examples/login.md" http://127.0.0.1:8000/api/v1/design
+# {"run_id": "run_abc123...", "status": "queued"}
+```
+
+Poll the run until it completes:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/runs/run_abc123...
+# {"run_id": "...", "status": "completed", "entry_point": "document",
+#  "summary": {"requirements": 6, "scenarios": 12, "test_cases": 14, ...}}
+```
+
+A run moves through `queued → running → completed | failed`. The workflow
+(document / requirements / scenarios) is detected from the file — no `--from`
+needed. A failure after submission sets `status: failed` with a safe error
+message rather than turning the original request into an error.
+
+List and download reports:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/runs/run_abc123.../artifacts
+curl -OJ http://127.0.0.1:8000/api/v1/runs/run_abc123.../artifacts/login.json
+```
+
+### Local runtime storage
+
+Each run gets an isolated workspace under `~/.qaops/runs/<run_id>/` (override
+with `QAOPS_RUNTIME_DIR`), split into `input/` and `output/`. Uploads are never
+written into the repository or `examples/`.
+
+**Run state is in memory.** A process restart loses all run status — the
+on-disk workspaces remain, but the registry that indexes them does not. This is
+intentional for local, single-process use; a persistent store is a later phase.
+
+CORS origins default to common localhost frontend ports and are configurable
+via `QAOPS_CORS_ORIGINS` (comma-separated). The CLI is unaffected by any of
+this and continues to work without starting the API.
+
 ## Golden examples
 
 `examples/` contains four permanent regression fixtures (`login.md`,
@@ -143,6 +180,30 @@ Configuration is environment-driven — see `.env.example`; every setting has a
 | Provider | `QAOPS_PROVIDER` | `anthropic` |
 | Anthropic model | `QAOPS_MODEL` | `claude-sonnet-4-6` |
 | Gemini model | `QAOPS_GEMINI_MODEL` | `gemini-2.5-flash` |
+
+### Adaptive-execution bounds
+
+When more than one provider has credentials, QAOps runs stages through an
+adaptive executor that recovers from model and provider failures. Live model
+discovery can surface hundreds of models per provider, so recovery is bounded
+by two settings (both work in existing `qaops.yaml` files without change):
+
+| Setting | Env var | Default | Meaning |
+|---|---|---|---|
+| Models per provider per stage | `QAOPS_MAX_MODELS_PER_PROVIDER_PER_STAGE` | `5` | Distinct models tried on one provider for one stage before moving to the next provider. Counts model candidates, not same-model schema retries. |
+| Stage recovery attempts | `QAOPS_MAX_STAGE_RECOVERY_ATTEMPTS` | `12` | Total recovery actions (model + provider switches) for one stage before it fails cleanly. |
+| Request timeout (seconds) | `QAOPS_REQUEST_TIMEOUT_SECONDS` | `60` | Deadline for one provider request. Bounds request duration; QAOps owns retries, so SDK retries are disabled and this is one attempt's wall time. |
+| Provider calls per stage | `QAOPS_MAX_PROVIDER_CALLS_PER_STAGE` | `20` | Ceiling on ACTUAL provider generation calls for one stage, including structured-output repair calls. Prevents a hidden multiplier (5 models x 3 repairs = 15, under 20). |
+
+Raising these widens the search when a model fails; lowering them fails faster.
+Same-model transient retries (rate limit, timeout) are bounded separately by
+`max_attempts_per_model` and do not consume the stage recovery budget. A request
+that exceeds `request_timeout_seconds` is classified as a timeout and enters this
+same hierarchy: retry the model, then the next model, then the next provider. A
+fifth bound, `max_provider_calls_per_stage`, caps the total *actual* provider
+calls per stage - including the structured-output repair calls that happen
+inside one stage step - so nested retries cannot multiply the work (ADR-029,
+ADR-030).
 
 API keys come from the environment only, never config files:
 `ANTHROPIC_API_KEY` for Anthropic; `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) for

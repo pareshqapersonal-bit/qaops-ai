@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from qaops.config import QAOpsSettings
 from qaops.llm import LLMClient, LLMMessage, LLMRequest, PromptLoader, generate_structured
+from qaops.llm.request_budget import current_observer
 
 SYSTEM_PROMPT = (
     "You are a senior QA engineer with deep experience in requirement "
@@ -42,6 +43,7 @@ def run_structured_stage[T: BaseModel](
         schema,
         retries=settings.llm_retries,
         failure_dir=settings.output_dir / "llm_failures",
+        observer=current_observer(),
     )
 
 

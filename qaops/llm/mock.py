@@ -26,6 +26,10 @@ class MockLLMClient:
         return "mock"
 
     @property
+    def model(self) -> str:
+        return self._model
+
+    @property
     def call_count(self) -> int:
         return len(self.requests)
 

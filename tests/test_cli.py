@@ -104,7 +104,7 @@ def mock_client(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_create_client(settings: Any) -> MockLLMClient:
         return MockLLMClient(list(FULL_SCRIPT))
 
-    monkeypatch.setattr(appmod, "create_client", fake_create_client)
+    monkeypatch.setattr("qaops.services.design_service.create_client", fake_create_client)
 
 
 class TestDesignCommand:
@@ -187,7 +187,10 @@ class TestFriendlyErrors:
     def test_oversized_input_is_friendly(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setattr(appmod, "create_client", lambda s: MockLLMClient(list(FULL_SCRIPT)))
+        monkeypatch.setattr(
+            "qaops.services.design_service.create_client",
+            lambda s: MockLLMClient(list(FULL_SCRIPT)),
+        )
         big = tmp_path / "big.md"
         big.write_text("x" * 1500)
         cfg = tmp_path / "qaops.yaml"

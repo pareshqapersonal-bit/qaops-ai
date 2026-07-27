@@ -4,8 +4,8 @@ A thin wrapper: translates LLMRequest to the Anthropic Messages API,
 extracts text blocks, and wraps every SDK failure in LLMProviderError.
 No prompt logic, no parsing, no retry-on-invalid-schema here - schema
 retries belong to the structured-output helper, which is provider-
-agnostic. The SDK's own transport retries (rate limits, transient
-errors) are configured via max_retries.
+agnostic. QAOps owns retries (ADR-030), so the SDK's own transport retries
+are disabled by default (max_transport_retries=0).
 
 The API key is resolved by the SDK from ANTHROPIC_API_KEY (ADR-009);
 it is never accepted through QAOps config files. An explicit sdk_client
@@ -16,6 +16,7 @@ import anthropic
 
 from qaops.llm.errors import LLMProviderError
 from qaops.llm.models import LLMRequest, LLMResponse, LLMUsage
+from qaops.llm.timeouts import normalize_timeout_message
 
 
 class AnthropicClient:
@@ -25,8 +26,8 @@ class AnthropicClient:
         self,
         model: str,
         *,
-        timeout_seconds: float = 120.0,
-        max_transport_retries: int = 2,
+        timeout_seconds: float = 60.0,
+        max_transport_retries: int = 0,
         sdk_client: anthropic.Anthropic | None = None,
     ) -> None:
         self._model = model
@@ -53,7 +54,9 @@ class AnthropicClient:
                 max_tokens=request.max_output_tokens,
             )
         except anthropic.APIError as exc:
-            raise LLMProviderError("anthropic", str(exc)) from exc
+            raise LLMProviderError(
+                "anthropic", normalize_timeout_message("anthropic", exc)
+            ) from exc
 
         text = "".join(
             block.text for block in message.content if isinstance(block, anthropic.types.TextBlock)

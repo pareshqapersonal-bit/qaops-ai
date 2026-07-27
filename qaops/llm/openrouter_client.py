@@ -13,11 +13,13 @@ config files). An explicit sdk_client can be injected for testing.
 
 import os
 
-from openai import OpenAI, OpenAIError
+from openai import AsyncOpenAI, OpenAI, OpenAIError
 
 from qaops.core.errors import ConfigurationError
+from qaops.llm.deadline import HardDeadlineExceeded, run_with_deadline
 from qaops.llm.errors import LLMProviderError
 from qaops.llm.models import LLMRequest, LLMResponse, LLMUsage
+from qaops.llm.timeouts import normalize_timeout_message
 
 _KEY_ENV_VAR = "OPENROUTER_API_KEY"
 _BASE_URL = "https://openrouter.ai/api/v1"
@@ -41,17 +43,32 @@ class OpenRouterClient:
         self,
         model: str,
         *,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float = 60.0,
         sdk_client: OpenAI | None = None,
+        async_sdk_client: AsyncOpenAI | None = None,
     ) -> None:
         self._model = model
-        if sdk_client is not None:
-            self._sdk = sdk_client
+        self._deadline_seconds = timeout_seconds
+        # The per-operation httpx timeout stays as transport safety (connect /
+        # read / write / pool). The TOTAL wall-clock deadline is enforced
+        # separately via run_with_deadline, because httpx has no total-deadline
+        # concept and a trickle response defeats the per-read timeout (ADR-031).
+        self._sync_sdk = sdk_client  # retained for injection/back-compat in tests
+        self._async_sdk: AsyncOpenAI | None
+        if async_sdk_client is not None:
+            self._async_sdk = async_sdk_client
+        elif sdk_client is not None:
+            # A test injected a sync stub; wrap nothing, we will call it directly.
+            self._async_sdk = None
         else:
-            self._sdk = OpenAI(
+            self._async_sdk = AsyncOpenAI(
                 api_key=_resolve_api_key(),
                 base_url=_BASE_URL,
                 timeout=timeout_seconds,
+                # QAOps owns retries (ADR-030): SDK default is 2, which
+                # multiplied one attempt into three. Disable so one QAOps call is
+                # one network request with one deadline.
+                max_retries=0,
             )
 
     @property
@@ -70,26 +87,55 @@ class OpenRouterClient:
             messages.append({"role": "system", "content": request.system})
         messages.extend({"role": m.role, "content": m.content} for m in request.messages)
 
-        try:
-            response = self._sdk.chat.completions.create(
+        # A sync stub injected by a test: call it directly, no event loop.
+        if self._async_sdk is None and self._sync_sdk is not None:
+            try:
+                response = self._sync_sdk.chat.completions.create(
+                    model=self._model,
+                    messages=messages,  # type: ignore[arg-type]
+                    temperature=request.temperature,
+                    max_tokens=request.max_output_tokens,
+                )
+            except OpenAIError as exc:
+                raise LLMProviderError(
+                    "openrouter", normalize_timeout_message("openrouter", exc)
+                ) from exc
+            return self._to_response(response)
+
+        # Normal path: run the async request under a hard total deadline. The
+        # coroutine is built inside the loop so the async client's request lives
+        # and is cancelled in the same loop (ADR-031).
+        async def _call() -> LLMResponse:
+            assert self._async_sdk is not None
+            response = await self._async_sdk.chat.completions.create(
                 model=self._model,
-                messages=messages,  # type: ignore[arg-type]  # plain dicts accepted by the SDK
+                messages=messages,  # type: ignore[arg-type]
                 temperature=request.temperature,
                 max_tokens=request.max_output_tokens,
             )
-        except OpenAIError as exc:
-            raise LLMProviderError("openrouter", str(exc)) from exc
+            return self._to_response(response)
 
-        choice = response.choices[0] if response.choices else None
+        try:
+            return run_with_deadline(
+                _call, provider="openrouter", deadline_seconds=self._deadline_seconds
+            )
+        except HardDeadlineExceeded as exc:
+            # Already carries "timed out" text; classified as TIMEOUT by policy.
+            raise LLMProviderError("openrouter", str(exc)) from exc
+        except OpenAIError as exc:
+            raise LLMProviderError(
+                "openrouter", normalize_timeout_message("openrouter", exc)
+            ) from exc
+
+    def _to_response(self, response: object) -> LLMResponse:
+        choice = response.choices[0] if response.choices else None  # type: ignore[attr-defined]
         text = (choice.message.content or "") if choice else ""
         # The SDK types model and finish_reason as non-optional, but OpenRouter
-        # proxies many upstream providers and can return null for either. These
-        # values cross a network boundary, so defend against the runtime reality
-        # rather than trusting the stub: falling back to the requested model
-        # keeps LLMResponse valid instead of failing Pydantic validation.
-        finish_reason = (choice.finish_reason or "") if choice else ""  # type: ignore[unreachable]
-        model_name = response.model or self._model
-        usage = response.usage
+        # proxies many upstream providers and can return null for either. Defend
+        # against the runtime reality rather than trusting the stub.
+        finish_reason = (choice.finish_reason or "") if choice else ""
+        model_name = response.model or self._model  # type: ignore[attr-defined]
+        usage = response.usage  # type: ignore[attr-defined]
         return LLMResponse(
             text=text,
             model=model_name,

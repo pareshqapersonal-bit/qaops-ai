@@ -24,6 +24,7 @@ class FailureKind(StrEnum):
     CONTEXT_LIMIT = "context_limit"
     MODEL_UNAVAILABLE = "model_unavailable"
     INVALID_OUTPUT = "invalid_output"
+    EMPTY_OUTPUT = "empty_output"
     UNKNOWN = "unknown"
 
 
@@ -98,6 +99,10 @@ _PATTERNS: tuple[tuple[FailureKind, tuple[str, ...]], ...] = (
         ("model is unavailable", "unknown model", "no endpoints found", "404", "model not found"),
     ),
     (
+        FailureKind.EMPTY_OUTPUT,
+        ("returned no content", "empty response", "empty output", "zero-content"),
+    ),
+    (
         FailureKind.INVALID_OUTPUT,
         ("failed validation against", "jsondecodeerror", "validationerror", "invalid json"),
     ),
@@ -135,9 +140,20 @@ _POLICY: dict[FailureKind, Recovery] = {
         explanation="request timed out; retrying the same model",
     ),
     FailureKind.INVALID_OUTPUT: Recovery(
-        action=Action.RETRY_SAME,
+        # A model reaching the executor with invalid_output has ALREADY
+        # exhausted its bounded in-request repair attempts (ADR-030). Handing it
+        # another full repair cycle wastes provider calls, so move to the next
+        # model rather than retrying the same one.
+        action=Action.NEXT_MODEL,
         kind=FailureKind.INVALID_OUTPUT,
-        explanation="model output failed schema validation; retrying the same model",
+        explanation="model could not produce schema-valid output; trying another model",
+    ),
+    FailureKind.EMPTY_OUTPUT: Recovery(
+        # A model returning zero content will not be fixed by a repair prompt -
+        # there is nothing to repair. Abandon it for this stage immediately.
+        action=Action.NEXT_MODEL,
+        kind=FailureKind.EMPTY_OUTPUT,
+        explanation="model returned no content; trying another model",
     ),
     FailureKind.CONTEXT_LIMIT: Recovery(
         action=Action.LARGER_CONTEXT_MODEL,

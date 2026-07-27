@@ -1,0 +1,265 @@
+"""FastAPI application exposing QAOps over HTTP (ADR-028).
+
+Another interface to QAOps, not a second implementation. Every endpoint calls
+existing services: model discovery goes to ModelRegistry, design runs go to
+DesignService, classification and parsing reuse Phase 14. The API layer only
+translates HTTP to those calls and back.
+
+Run locally:  uvicorn qaops.api.app:app --reload
+"""
+
+import logging
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+from typing import Annotated
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
+from fastapi import File as FileParam
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
+from qaops.api.config import APIConfig
+from qaops.api.runner import execute_run
+from qaops.api.runs import RunStore
+from qaops.api.schemas import (
+    ArtifactSchema,
+    ArtifactsResponse,
+    HealthResponse,
+    ModelSchema,
+    ModelsResponse,
+    ProgressSchema,
+    ProviderModelsSchema,
+    RunCreatedResponse,
+    RunStatusResponse,
+    SummarySchema,
+)
+from qaops.cli.config_loader import load_settings
+from qaops.execution import ModelRegistry, available_providers
+from qaops.services import DesignService
+
+logger = logging.getLogger(__name__)
+
+# Input extensions QAOps accepts, across the document and structured routes.
+_ALLOWED_SUFFIXES = {".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".json", ".xlsx", ".xlsm"}
+
+
+def _package_version() -> str:
+    try:
+        return version("qaops-ai")
+    except PackageNotFoundError:  # pragma: no cover - installed in all environments here
+        return "unknown"
+
+
+def _sanitize_filename(name: str) -> str:
+    """Reduce an uploaded filename to a safe basename.
+
+    Trusting the upload's name for a path invites traversal. We keep only the
+    final component and strip anything that is not a safe character, so a run's
+    input file lands predictably inside its own workspace.
+    """
+    base = Path(name).name  # drops any directory components
+    cleaned = "".join(c for c in base if c.isalnum() or c in "._- ").strip()
+    return cleaned or "upload"
+
+
+def create_app(config: APIConfig | None = None) -> FastAPI:
+    """Build the application. A factory so tests can inject a config."""
+    cfg = config or APIConfig()
+    store = RunStore(cfg.runtime_dir)
+    registry = ModelRegistry()
+    service = DesignService(registry=registry)
+
+    app = FastAPI(
+        title="QAOps AI API",
+        version=_package_version(),
+        description=(
+            "HTTP interface to QAOps AI. Upload a requirement document or a "
+            "requirements/scenarios artifact and QAOps designs test cases, "
+            "detecting the workflow automatically. Runs execute asynchronously."
+        ),
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
+
+    # Stash shared objects for tests and handlers.
+    app.state.store = store
+    app.state.registry = registry
+    app.state.service = service
+    app.state.config = cfg
+
+    @app.get("/health", response_model=HealthResponse, tags=["meta"])
+    def health() -> HealthResponse:
+        """Liveness check. Makes no LLM call and reads no secrets."""
+        return HealthResponse(status="ok", service="qaops-ai", version=_package_version())
+
+    @app.get("/api/v1/models", response_model=ModelsResponse, tags=["discovery"])
+    def list_models(refresh: bool = False) -> ModelsResponse:
+        """List models each available provider can serve.
+
+        Delegates to ModelRegistry (Phase 15). Availability is decided by the
+        presence of a provider's credential; the credential itself is never
+        read into the response.
+        """
+        if refresh:
+            registry.refresh()
+        providers: list[ProviderModelsSchema] = []
+        for info in available_providers():
+            discovered = registry.models_for(info.name)
+            source = "static"
+            discovered_at = registry.discovered_at(info.name)
+            if discovered_at is not None:
+                source = "cache"
+            providers.append(
+                ProviderModelsSchema(
+                    provider=info.name,
+                    source=source,
+                    models=[
+                        ModelSchema(
+                            id=m.name,
+                            max_context_tokens=m.max_context_tokens,
+                            max_output_tokens=m.max_output_tokens,
+                            structured_output=m.structured_output,
+                            local=m.local,
+                            free=m.free,
+                        )
+                        for m in discovered
+                    ],
+                )
+            )
+        return ModelsResponse(providers=providers)
+
+    @app.post(
+        "/api/v1/design",
+        response_model=RunCreatedResponse,
+        status_code=202,
+        tags=["design"],
+    )
+    async def submit_design(
+        background: BackgroundTasks,
+        file: Annotated[UploadFile, FileParam(description="Requirement or scenario file")],
+    ) -> RunCreatedResponse:
+        """Accept an upload, create a run, schedule execution, return at once.
+
+        The workflow (document / requirements / scenarios) is detected from the
+        file; the caller does not specify it.
+        """
+        raw_name = file.filename or "upload"
+        suffix = Path(raw_name).suffix.lower()
+        if suffix not in _ALLOWED_SUFFIXES:
+            allowed = ", ".join(sorted(_ALLOWED_SUFFIXES))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported input type {suffix or '(none)'}. Supported: {allowed}.",
+            )
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        run = store.create(input_name=raw_name)
+        safe_name = _sanitize_filename(raw_name)
+        # Preserve the extension even if sanitizing altered the stem.
+        if not safe_name.lower().endswith(suffix):
+            safe_name = f"{Path(safe_name).stem}{suffix}"
+        (run.input_dir / safe_name).write_bytes(contents)
+
+        settings = load_settings(None)
+        background.add_task(execute_run, store, run.id, settings, service)
+        return RunCreatedResponse(run_id=run.id, status=run.status.value)
+
+    @app.get("/api/v1/runs/{run_id}", response_model=RunStatusResponse, tags=["design"])
+    def run_status(run_id: str) -> RunStatusResponse:
+        """Current state of a run, with a summary once completed."""
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+        summary = None
+        if run.summary is not None:
+            s = run.summary
+            summary = SummarySchema(
+                requirements=int(s["requirements"]),
+                business_rules=int(s["business_rules"]),
+                scenarios=int(s["scenarios"]),
+                test_cases=int(s["test_cases"]),
+                gaps=int(s["gaps"]),
+                coverage_percent=float(s["coverage_percent"]),
+            )
+        # Progress is meaningful while running and preserved after, so a
+        # completed/failed run still shows the final stage state (section 13).
+        exec_state = run.execution
+        progress = None
+        if exec_state.current_stage is not None:
+            progress = ProgressSchema(
+                current_stage=exec_state.current_stage,
+                stage_index=exec_state.stage_index,
+                stage_count=exec_state.stage_count,
+                provider=exec_state.provider,
+                model=exec_state.model,
+                model_attempt_number=exec_state.model_attempt_number,
+                request_attempt=exec_state.request_attempt,
+                provider_call_number=exec_state.provider_call_number,
+                models_attempted=exec_state.models_attempted,
+                recovery_attempts=exec_state.recovery_attempts,
+                message=exec_state.message,
+            )
+        return RunStatusResponse(
+            run_id=run.id,
+            status=run.status.value,
+            entry_point=run.entry_point,
+            detection=run.detection,
+            summary=summary,
+            progress=progress,
+            error=run.error,
+            failed_stage=run.failed_stage,
+            recovery_attempts=run.recovery_attempts or None,
+        )
+
+    @app.get("/api/v1/runs/{run_id}/artifacts", response_model=ArtifactsResponse, tags=["design"])
+    def run_artifacts(run_id: str) -> ArtifactsResponse:
+        """Metadata for the reports a completed run produced."""
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+        return ArtifactsResponse(
+            run_id=run.id,
+            artifacts=[ArtifactSchema(name=a.name, format=a.format) for a in run.artifacts],
+        )
+
+    @app.get("/api/v1/runs/{run_id}/artifacts/{artifact_name}", tags=["design"])
+    def download_artifact(run_id: str, artifact_name: str) -> FileResponse:
+        """Download one report file, resolved strictly within the run's output.
+
+        The filename is matched against the run's known artifacts and the
+        resolved path is confirmed to sit inside the output directory, so a
+        crafted name like `../../etc/passwd` cannot escape the workspace.
+        """
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+
+        known = {a.name: a for a in run.artifacts}
+        artifact = known.get(artifact_name)
+        if artifact is None:
+            raise HTTPException(status_code=404, detail=f"No artifact {artifact_name!r} in run.")
+
+        output_root = run.output_dir.resolve()
+        try:
+            resolved = artifact.path.resolve()
+        except OSError as exc:  # pragma: no cover - defensive
+            raise HTTPException(status_code=404, detail="Artifact is not accessible.") from exc
+        if output_root not in resolved.parents or not resolved.is_file():
+            # Should never happen for a registered artifact, but the check is
+            # the barrier against traversal regardless of how the name arrived.
+            raise HTTPException(status_code=404, detail="Artifact is not accessible.")
+
+        return FileResponse(path=resolved, filename=artifact.name)
+
+    return app
+
+
+app = create_app()

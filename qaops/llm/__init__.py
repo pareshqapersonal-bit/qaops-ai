@@ -11,11 +11,20 @@ Public API:
 
 from qaops.llm.anthropic_client import AnthropicClient
 from qaops.llm.client import LLMClient
-from qaops.llm.errors import LLMProviderError, LLMResponseFormatError
+from qaops.llm.errors import (
+    LLMEmptyResponseError,
+    LLMProviderError,
+    LLMResponseFormatError,
+)
 from qaops.llm.factory import create_client
 from qaops.llm.mock import MockLLMClient
 from qaops.llm.models import LLMMessage, LLMRequest, LLMResponse, LLMUsage
 from qaops.llm.prompt_loader import PromptLoader
+from qaops.llm.request_budget import (
+    NullRequestObserver,
+    RequestBudgetExhausted,
+    RequestObserver,
+)
 from qaops.llm.structured import extract_json_payload, generate_structured
 
 __all__ = [
@@ -25,7 +34,11 @@ __all__ = [
     "LLMProviderError",
     "LLMRequest",
     "LLMResponse",
+    "LLMEmptyResponseError",
     "LLMResponseFormatError",
+    "NullRequestObserver",
+    "RequestBudgetExhausted",
+    "RequestObserver",
     "LLMUsage",
     "MockLLMClient",
     "PromptLoader",

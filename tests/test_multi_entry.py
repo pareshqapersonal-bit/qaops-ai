@@ -319,7 +319,7 @@ class TestExportersAcrossEntryPoints:
 class TestCliRouting:
     def _client(self, monkeypatch: pytest.MonkeyPatch, responses: list[str]) -> MockLLMClient:
         client = MockLLMClient(list(responses))
-        monkeypatch.setattr(appmod, "create_client", lambda settings: client)
+        monkeypatch.setattr("qaops.services.design_service.create_client", lambda settings: client)
         return client
 
     def test_from_requirements(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

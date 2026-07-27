@@ -14,12 +14,10 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from pydantic import BaseModel
 
 from qaops.cli.config_loader import load_settings
 from qaops.cli.diagnostics import diagnose_provider_error
-from qaops.cli.registry import EXPORTERS, ExporterInstance, resolve_exporters
-from qaops.config import QAOpsSettings
+from qaops.cli.registry import EXPORTERS
 from qaops.core.errors import (
     ConfigurationError,
     DocumentLoadError,
@@ -30,34 +28,15 @@ from qaops.core.errors import (
     StageError,
     UnsupportedDocumentFormatError,
 )
-from qaops.core.protocols import PipelineStage
-from qaops.entrypoints import (
-    Classification,
-    EntryPoint,
-    build_pipeline_for,
-    classify_input,
-    format_issues,
-    parse_requirements,
-    parse_scenarios,
-    preflight,
-    stage_names_for,
-)
 from qaops.execution import (
-    AdaptiveExecutor,
     ModelRegistry,
-    ProviderInfo,
     available_providers,
-    get_provider,
 )
 from qaops.exporters import CsvBundleExporter
-from qaops.ingestion import load_document
-from qaops.llm import PromptLoader, create_client
 from qaops.models import (
-    RequirementAnalysisResult,
-    RequirementInput,
-    ScenarioDesignResult,
     TestDesignResult,
 )
+from qaops.services import DesignService
 
 app = typer.Typer(
     name="qaops",
@@ -225,23 +204,6 @@ def _message_for(exc: Exception) -> str:
     return str(exc)
 
 
-def _fallback_providers(settings: QAOpsSettings) -> list[ProviderInfo]:
-    """The provider chain for this run: configured provider first, then others.
-
-    Configuration wins - the provider the user chose leads - and automatic
-    discovery supplies the rest, so failover works without any extra setup
-    while an explicit choice is still honoured (ADR-026).
-    """
-    configured = get_provider(settings.provider)
-    chain: list[ProviderInfo] = []
-    if configured is not None:
-        chain.append(configured)
-    for info in available_providers():
-        if all(info.name != existing.name for existing in chain):
-            chain.append(info)
-    return chain
-
-
 def _run_design(
     input_path: Path,
     output_dir: Path | None,
@@ -249,97 +211,22 @@ def _run_design(
     config_path: Path | None,
     from_: str | None = None,
 ) -> None:
-    if not input_path.exists():
-        msg = f"Input file not found: {input_path}"
-        raise ConfigurationError(msg)
-
-    # Detect the workflow unless the user overrode it (ADR-025).
-    detection: Classification | None = None
-    if from_ is None:
-        detection = classify_input(input_path)
-        entry_point = detection.entry_point
-    else:
-        try:
-            entry_point = EntryPoint(from_.strip().casefold())
-        except ValueError as exc:
-            valid = ", ".join(e.value for e in EntryPoint)
-            msg = f"Unknown entry point {from_!r}. Valid options: {valid}."
-            raise ConfigurationError(msg) from exc
-
     settings = load_settings(config_path)
     if output_dir is not None:
         settings = settings.model_copy(update={"output_dir": output_dir})
 
-    # Catch predictable failures before spending any LLM calls.
-    issues = preflight(input_path, settings, entry_point)
-    if issues:
-        raise ConfigurationError(format_issues(issues))
-
-    export_formats = formats or settings.default_export_formats
-    # csv-bundle is a directory-writing package, not a single-file Exporter, so
-    # it is dispatched separately from the protocol-shaped file exporters.
-    want_bundle = CsvBundleExporter.format_name in export_formats
-    file_formats = [f for f in export_formats if f != CsvBundleExporter.format_name]
-    exporters = resolve_exporters(file_formats)
-
-    # Each entry point produces the domain model its first stage expects; the
-    # stages themselves never learn which route was taken (ADR-022).
-    pipeline_input: RequirementInput | RequirementAnalysisResult | ScenarioDesignResult
-    if entry_point is EntryPoint.REQUIREMENTS:
-        analysis = parse_requirements(input_path)
-        pipeline_input = analysis
-        detail = f"{len(analysis.requirements)} requirements"
-    elif entry_point is EntryPoint.SCENARIOS:
-        design = parse_scenarios(input_path)
-        pipeline_input = design
-        detail = f"{len(design.scenarios)} scenarios"
-    else:
-        text = load_document(input_path)
-        pipeline_input = RequirementInput(text=text, source_name=input_path.name)
-        detail = f"{len(text)} characters"
-
-    if detection is not None:
-        _echo(f"Detected: {detection.description} ({detection.reason})")
-    _echo(f"Reading {input_path} ({detail})")
-    _echo(f"Provider: {settings.provider} | formats: {', '.join(export_formats)}")
-
-    client = create_client(settings)
-    pipeline = build_pipeline_for(
-        entry_point, client, PromptLoader(version=settings.prompt_version), settings
+    # The orchestration lives in DesignService, shared with the API (ADR-028).
+    # The CLI supplies terminal output as the progress reporter and keeps its
+    # own summary rendering.
+    service = DesignService()
+    outcome = service.run(
+        input_path,
+        settings,
+        from_=from_,
+        formats=formats,
+        report=_echo,
     )
-    stages = " -> ".join(stage_names_for(entry_point))
-    _echo(f"Running pipeline ({entry_point.value}): {stages}")
-
-    # Adaptive execution: when other providers have credentials available, run
-    # through the executor so a provider failure mid-pipeline switches rather
-    # than aborting. Completed stages are never recomputed (ADR-026).
-    candidates = _fallback_providers(settings)
-    if len(candidates) > 1:
-        names = ", ".join(info.name for info in candidates)
-        _echo(f"Provider failover enabled: {names}")
-
-        def build_stages(
-            stage_settings: QAOpsSettings,
-        ) -> list[PipelineStage[BaseModel, BaseModel]]:
-            stage_client = create_client(stage_settings)
-            built = build_pipeline_for(
-                entry_point,
-                stage_client,
-                PromptLoader(version=stage_settings.prompt_version),
-                stage_settings,
-            )
-            return list(built.stages)
-
-        executor = AdaptiveExecutor(
-            candidates, settings, build_stages, registry=ModelRegistry(), reporter=_echo
-        )
-        result = executor.run(pipeline_input)
-    else:
-        result = pipeline.run(pipeline_input)
-    assert isinstance(result, TestDesignResult)
-
-    _print_summary(result)
-    _write_reports(result, exporters, settings, input_path, write_bundle=want_bundle)
+    _print_summary(outcome.result)
 
 
 def _print_summary(result: TestDesignResult) -> None:
@@ -359,103 +246,6 @@ def _print_summary(result: TestDesignResult) -> None:
         _echo(f"  Uncovered reqs: {', '.join(uncovered)}")
     if result.coverage.duplicate_pairs:
         _echo(f"  Suspected duplicate test cases: {len(result.coverage.duplicate_pairs)}")
-
-
-def _resolved(path: Path) -> Path:
-    """Absolute, symlink-free path for reliable comparison."""
-    try:
-        return path.resolve()
-    except OSError:  # pragma: no cover - resolve is total on supported platforms
-        return path.absolute()
-
-
-def _check_output_collisions(
-    exporters: list[ExporterInstance],
-    out_dir: Path,
-    input_path: Path,
-    *,
-    write_bundle: bool,
-) -> None:
-    """Refuse to overwrite the input file with a report.
-
-    Reports are named after the input stem, and csv-bundle uses fixed
-    filenames, so running with an input that lives in the output directory can
-    silently destroy that input - e.g. reading `output/Requirements.csv` and
-    then writing a fresh `output/Requirements.csv` over it. The read happens
-    first, so this "works" until a mid-run failure loses the file. Checking
-    before any write means nothing is clobbered either way.
-    """
-    source = _resolved(input_path)
-    planned: list[Path] = [out_dir / f"{input_path.stem}{e.file_extension}" for e in exporters]
-    if write_bundle:
-        planned += [out_dir / name for name in CsvBundleExporter.BUNDLE_FILENAMES]
-
-    clashes = sorted({p.name for p in planned if _resolved(p) == source})
-    if clashes:
-        msg = (
-            "Cannot write reports. The selected output directory contains the "
-            f"input file: {input_path}\n\n"
-            f"These export(s) would overwrite it: {', '.join(clashes)}\n\n"
-            "Choose another output directory, for example:\n"
-            f"  --output-dir {out_dir / 'run2'}"
-        )
-        raise ExportError(msg)
-
-
-def _friendly_write_error(target: Path, exc: OSError) -> ExportError:
-    """Turn a filesystem failure into an actionable message.
-
-    The common case on Windows is a CSV still open in Excel, which surfaces as
-    PermissionError. A traceback tells the user nothing useful; naming the file
-    and the likely cause does.
-    """
-    if isinstance(exc, PermissionError):
-        msg = (
-            f"Unable to write {target}. The file appears to be open in another "
-            "application (for example Excel), or you lack permission to write "
-            "there. Close the file and retry, or choose a different output "
-            "directory with --output-dir."
-        )
-    elif isinstance(exc, IsADirectoryError):
-        msg = f"Unable to write {target}: a directory already exists at that path."
-    else:
-        msg = f"Unable to write {target}: {exc}"
-    return ExportError(msg)
-
-
-def _write_reports(
-    result: TestDesignResult,
-    exporters: list[ExporterInstance],
-    settings: QAOpsSettings,
-    input_path: Path,
-    *,
-    write_bundle: bool = False,
-) -> None:
-    out_dir = settings.output_dir
-    try:
-        out_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise _friendly_write_error(out_dir, exc) from exc
-    _check_output_collisions(exporters, out_dir, input_path, write_bundle=write_bundle)
-    stem = input_path.stem
-    _echo("")
-    _echo(f"Writing reports to {out_dir}/")
-    for exporter in exporters:
-        target = out_dir / f"{stem}{exporter.file_extension}"
-        try:
-            written = exporter.export(result, str(target))
-        except OSError as exc:
-            raise _friendly_write_error(target, exc) from exc
-        _echo(f"  {exporter.format_name:11s} -> {written}")
-    if write_bundle:
-        try:
-            bundle_paths = CsvBundleExporter().export_bundle(result, out_dir)
-        except OSError as exc:
-            raise _friendly_write_error(out_dir, exc) from exc
-        for path in bundle_paths:
-            _echo(f"  {'csv-bundle':11s} -> {path}")
-    _echo("")
-    _echo("Done.")
 
 
 def main() -> None:

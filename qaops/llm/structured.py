@@ -20,8 +20,9 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 
 from qaops.llm.client import LLMClient
-from qaops.llm.errors import LLMResponseFormatError
+from qaops.llm.errors import LLMEmptyResponseError, LLMResponseFormatError
 from qaops.llm.models import LLMRequest
+from qaops.llm.request_budget import NullRequestObserver, RequestObserver
 
 logger = logging.getLogger(__name__)
 
@@ -55,51 +56,85 @@ def generate_structured[T: BaseModel](
     *,
     retries: int = 2,
     failure_dir: Path | None = None,
+    observer: RequestObserver | None = None,
 ) -> T:
     """Run a completion and validate the output against a Pydantic schema.
 
+    The retry here is a deterministic *repair* loop: when a response is
+    substantial but malformed, the next attempt appends the failed response and
+    the validation error so the model can correct itself. It is NOT a blind
+    resend, and it stops early when a repair cannot help (an empty response has
+    nothing to repair).
+
+    Every real provider call is announced to `observer` before it happens, so
+    the execution layer can count it and, when its budget is spent, veto further
+    calls by raising RequestBudgetExhausted (ADR-030). This is the seam that
+    keeps one actual provider call equal to one counted request.
+
     Args:
         client: any LLMClient implementation.
-        request: the initial request. Never mutated; retries build on a
-            copy with feedback appended.
+        request: the initial request. Never mutated; repairs build on a copy
+            with feedback appended.
         schema: the strict Pydantic model the output must satisfy.
-        retries: additional attempts after the first failure (ADR-002
-            default: 2, i.e. at most 3 total calls).
-        failure_dir: if set, raw responses of a final failure are written
-            here as ``<schema>_attempt<N>.txt`` before raising.
+        retries: additional repair attempts after the first failure (ADR-002
+            default: 2, i.e. at most 3 total calls) - an upper bound; an empty
+            response ends the loop sooner.
+        failure_dir: if set, raw responses of a final failure are written here.
+        observer: notified around each provider call; may veto further calls.
 
     Raises:
         LLMResponseFormatError: if no attempt yields schema-valid output.
+        LLMEmptyResponseError: if the provider returned no content.
         LLMProviderError: propagated unchanged from the client.
+        RequestBudgetExhausted: propagated from the observer.
     """
+    obs = observer or NullRequestObserver()
     attempts = retries + 1
     raw_responses: list[str] = []
     current = request
 
     for attempt in range(1, attempts + 1):
+        # Announce the call first; the observer may forbid it (budget spent).
+        obs.before_request(provider=client.provider_name, model=client.model, attempt=attempt)
         response = client.complete(current)
         raw_responses.append(response.text)
-        payload = extract_json_payload(response.text)
-        # An empty response is a materially different failure from malformed
-        # JSON - it usually means provider capacity, rate limiting, or a model
-        # that declined to answer - so log it as such instead of surfacing a
-        # generic JSONDecodeError that sends users hunting through dump files.
-        if not response.text.strip():
+        chars = len(response.text.strip())
+        is_empty = chars == 0
+        obs.after_request(
+            provider=client.provider_name,
+            model=client.model,
+            attempt=attempt,
+            empty=is_empty,
+            chars=chars,
+        )
+
+        # An empty response is a distinct failure (ADR-030). A repair prompt
+        # cannot fix "nothing" - re-rolling the same empty-returning model just
+        # burns provider calls - so we stop the loop and fail with a dedicated
+        # error the executor classifies as EMPTY_OUTPUT (-> next model).
+        if is_empty:
             logger.warning(
                 "structured_output.empty_response schema=%s attempt=%d/%d "
-                "provider=%s model=%s (no content returned; check model "
-                "availability, rate limits, or free-tier capacity)",
+                "provider=%s model=%s stop_reason=%s (no content returned; not "
+                "a token-cap truncation - check model availability, rate "
+                "limits, or free-tier capacity)",
                 schema.__name__,
                 attempt,
                 attempts,
                 client.provider_name,
                 response.model,
+                response.stop_reason,
             )
-        # A truncated response is a materially different failure again: the
-        # model produced good output that was cut off by the token cap. The
-        # provider reports this in stop_reason, so name it rather than letting
-        # it surface as a generic JSONDecodeError.
-        truncated = response.stop_reason in {"length", "max_tokens", "MAX_TOKENS"}
+            _persist_failures(failure_dir, schema.__name__, raw_responses)
+            raise LLMEmptyResponseError(
+                schema.__name__, attempt, client.provider_name, response.model
+            )
+
+        # Truncation is only meaningful when there IS content that was cut off.
+        # stop_reason=length with zero characters is NOT evidence that the
+        # output token cap truncated useful output (handled above as empty); it
+        # is a provider/model failure. Only flag truncation for non-empty output.
+        truncated = not is_empty and response.stop_reason in {"length", "max_tokens", "MAX_TOKENS"}
         if truncated:
             logger.warning(
                 "structured_output.truncated schema=%s attempt=%d/%d "
@@ -109,8 +144,10 @@ def generate_structured[T: BaseModel](
                 attempt,
                 attempts,
                 response.stop_reason,
-                len(response.text),
+                chars,
             )
+
+        payload = extract_json_payload(response.text)
         try:
             parsed = json.loads(payload)
             result = schema.model_validate(parsed)

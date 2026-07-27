@@ -222,7 +222,9 @@ class TestCliIntegration:
     def test_xlsx_scenarios_run_end_to_end(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setattr(appmod, "create_client", lambda s: MockLLMClient([TEST_CASES]))
+        monkeypatch.setattr(
+            "qaops.services.design_service.create_client", lambda s: MockLLMClient([TEST_CASES])
+        )
         path = tmp_path / "team.xlsx"
         make_xlsx(
             path, [["Scenario", "Type", "Requirement IDs"], ["Valid login", "positive", "REQ-001"]]
@@ -237,7 +239,9 @@ class TestCliIntegration:
     def test_markdown_scenarios_run_end_to_end(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setattr(appmod, "create_client", lambda s: MockLLMClient([TEST_CASES]))
+        monkeypatch.setattr(
+            "qaops.services.design_service.create_client", lambda s: MockLLMClient([TEST_CASES])
+        )
         path = tmp_path / "team.md"
         path.write_text(
             "| title | category | requirement_ids |\n"
@@ -253,7 +257,9 @@ class TestCliIntegration:
     def test_prose_failure_is_friendly_in_the_cli(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        monkeypatch.setattr(appmod, "create_client", lambda s: MockLLMClient([TEST_CASES]))
+        monkeypatch.setattr(
+            "qaops.services.design_service.create_client", lambda s: MockLLMClient([TEST_CASES])
+        )
         path = tmp_path / "prose.md"
         path.write_text("Just some prose about the system.")
         result = runner.invoke(

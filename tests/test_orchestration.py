@@ -217,7 +217,8 @@ class TestPreflight:
 class TestCliAutoDetection:
     def _client(self, monkeypatch: pytest.MonkeyPatch, responses: list[str]) -> None:
         monkeypatch.setattr(
-            appmod, "create_client", lambda settings: MockLLMClient(list(responses))
+            "qaops.services.design_service.create_client",
+            lambda settings: MockLLMClient(list(responses)),
         )
 
     def test_requirements_csv_without_from(
@@ -308,7 +309,7 @@ class TestCliAutoDetection:
         def explode(settings: object) -> None:
             raise AssertionError("create_client must not be reached in preflight failure")
 
-        monkeypatch.setattr(appmod, "create_client", explode)
+        monkeypatch.setattr("qaops.services.design_service.create_client", explode)
         path = tmp_path / "r.csv"
         path.write_text("title\r\nLogin\r\n", newline="")
         result = runner.invoke(
@@ -333,8 +334,10 @@ class TestPipelineBuilderReuse:
             seen.append(entry_point)
             return original(entry_point, *args, **kwargs)  # type: ignore[arg-type]
 
-        monkeypatch.setattr(appmod, "build_pipeline_for", spy)
-        monkeypatch.setattr(appmod, "create_client", lambda s: MockLLMClient([TEST_CASES]))
+        monkeypatch.setattr("qaops.services.design_service.build_pipeline_for", spy)
+        monkeypatch.setattr(
+            "qaops.services.design_service.create_client", lambda s: MockLLMClient([TEST_CASES])
+        )
         path = tmp_path / "Scenarios.xlsx"
         make_xlsx(path, [["title", "category"], ["Valid login", "positive"]])
         runner.invoke(appmod.app, ["design", str(path), "-o", str(tmp_path / "o"), "-f", "json"])
