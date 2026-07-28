@@ -92,4 +92,5 @@ testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = [
     "llm: tests that call a real LLM provider (excluded from CI)",
+    "uses_cwd_config: test manages its own working directory for qaops.yaml discovery",
 ]

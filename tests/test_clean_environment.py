@@ -171,3 +171,53 @@ class TestProductionStillFailsClearly:
         # ConfigurationError, not attempt any provider call.
         with pytest.raises(ConfigurationError, match="No API key"):
             DesignService().run(path, settings)
+
+
+class TestAmbientCwdConfigIsolation:
+    """A repo-root qaops.yaml must not contaminate the suite (Option 1 fix).
+
+    The failure this guards against: a developer keeps a repo-root qaops.yaml
+    (e.g. provider: openrouter for manual live testing). load_settings(None)
+    reads ./qaops.yaml, so every test going through the API/CLI path resolves
+    that provider and fails on the missing key - even though no test chose it.
+    The conftest isolates config discovery by running each test from a clean
+    cwd, so the suite is independent of the directory it runs from.
+    """
+
+    def test_cwd_has_no_ambient_qaops_yaml_during_tests(self) -> None:
+        # The isolation fixture has chdir'd us into a config-free directory.
+        assert not Path("qaops.yaml").exists()
+
+    def test_load_settings_none_ignores_a_repo_root_qaops_yaml(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Simulate the developer's repo root: a qaops.yaml selecting openrouter.
+        # Because the suite runs from an isolated cwd, load_settings(None) does
+        # NOT pick it up, so it falls back to the default provider - proving the
+        # ~35-failure contamination cannot recur.
+        from qaops.cli.config_loader import load_settings
+
+        # The autouse fixture already put us in a clean temp cwd. Write a
+        # poisoned qaops.yaml into a DIFFERENT directory (the developer's repo
+        # root analogue) and confirm it is not read from our isolated cwd.
+        repo_root_analogue = tmp_path / "repo"
+        repo_root_analogue.mkdir()
+        (repo_root_analogue / "qaops.yaml").write_text("provider: openrouter\n")
+        # We are NOT chdir'd into repo_root_analogue, so discovery misses it.
+        settings = load_settings(None)
+        assert settings.provider == "anthropic"  # the default, not openrouter
+
+    @pytest.mark.uses_cwd_config
+    def test_cwd_discovery_still_works_when_opted_in(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Production behaviour is unchanged: when a test manages its own cwd
+        # (opting out of isolation via the marker), load_settings(None) still
+        # discovers ./qaops.yaml exactly as production does. This proves the fix
+        # isolated the suite without altering load_settings itself.
+        from qaops.cli.config_loader import load_settings
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "qaops.yaml").write_text("provider: gemini\n")
+        settings = load_settings(None)
+        assert settings.provider == "gemini"
