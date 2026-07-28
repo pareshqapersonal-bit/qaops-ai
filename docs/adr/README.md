@@ -32,5 +32,6 @@
 | [028](028-fastapi-backend.md) | A FastAPI interface over a shared DesignService, not a second pipeline | Accepted |
 | [029](029-bounded-execution.md) | Bounded, ranked candidate selection and structured execution progress | Accepted |
 | [030](030-request-timeout.md) | A per-request deadline with QAOps-owned retries, and unambiguous progress | Accepted |
+| [032](032-frontend-architecture.md) | A thin React frontend over the existing API, typed from the real contract | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

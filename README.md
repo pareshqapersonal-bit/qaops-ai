@@ -153,6 +153,61 @@ CORS origins default to common localhost frontend ports and are configurable
 via `QAOPS_CORS_ORIGINS` (comma-separated). The CLI is unaffected by any of
 this and continues to work without starting the API.
 
+## Web UI (local)
+
+A React + TypeScript single-page app in `frontend/` provides a browser
+interface over the HTTP API: upload a requirement document, watch the run
+progress, review the generated QA results, and download artifacts — no CLI or
+Swagger needed. The frontend is a thin presentation layer; all pipeline
+behavior stays in the backend (ADR-032).
+
+### Prerequisites
+
+- Node.js 20+ and npm 10+ (built and tested on Node 22 / npm 10).
+- A running QAOps backend (see the HTTP API section above).
+
+### Run it locally
+
+Start the backend in one terminal:
+
+```bash
+python -m uvicorn qaops.api.app:app --reload
+```
+
+Start the frontend in another:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open the URL Vite prints (default `http://localhost:5173`). The backend
+runs on `http://127.0.0.1:8000` by default.
+
+### Configuration
+
+The backend base URL is configurable via `VITE_API_BASE_URL` (default
+`http://127.0.0.1:8000`). To point the UI at a different backend, create
+`frontend/.env.local`:
+
+```
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+### CORS
+
+The backend already allows the Vite dev origins (`http://localhost:5173` and
+`http://127.0.0.1:5173`) out of the box, so no extra configuration is needed for
+local development. Additional origins can be set via `QAOPS_CORS_ORIGINS`
+(comma-separated) on the backend.
+
+### Frontend developer commands
+
+From `frontend/`: `npm run dev` (dev server), `npm run build` (production
+build), `npm run test` (Vitest), `npm run typecheck` (tsc), `npm run lint`
+(ESLint).
+
 ## Golden examples
 
 `examples/` contains four permanent regression fixtures (`login.md`,

@@ -1,0 +1,101 @@
+{
+  "source_name": "login.md",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Login",
+      "description": "Users authenticate",
+      "source_excerpt": "",
+      "actors": [
+        "User"
+      ],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    }
+  ],
+  "business_rules": [
+    {
+      "id": "BR-001",
+      "requirement_id": "REQ-001",
+      "rule": "Password validated",
+      "source_excerpt": "authenticate"
+    }
+  ],
+  "gap_report": {
+    "gaps": [
+      {
+        "description": "No lockout policy",
+        "severity": "blocker",
+        "requirement_id": "REQ-001",
+        "suggested_question": "What lockout threshold?"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "SC-001",
+      "title": "Valid login",
+      "description": "User logs in",
+      "category": "positive",
+      "requirement_ids": [
+        "REQ-001"
+      ]
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "TC-001",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "module": "Auth",
+      "feature": "Login",
+      "title": "Login valid",
+      "objective": "Verify login",
+      "preconditions": [
+        "User exists"
+      ],
+      "test_data": {
+        "email": "a@b.com"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Enter email",
+          "expected": "accepted"
+        }
+      ],
+      "expected_result": "Dashboard shown",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "smoke"
+      ]
+    }
+  ],
+  "coverage": {
+    "per_requirement": [],
+    "per_business_rule": [],
+    "per_scenario": [],
+    "traceability": {
+      "entries": {}
+    },
+    "metrics": {
+      "total_requirements": 1,
+      "covered_requirements": 1,
+      "total_business_rules": 1,
+      "covered_business_rules": 1,
+      "total_scenarios": 1,
+      "covered_scenarios": 1,
+      "total_test_cases": 1
+    },
+    "duplicate_pairs": [],
+    "invalid_references": [],
+    "suspected_duplicates": []
+  }
+}

@@ -68,6 +68,36 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 17: Web UI MVP
+
+A React + TypeScript + Vite single-page app in `frontend/` over the existing
+FastAPI backend (ADR-032). Users can upload a requirement document, watch run
+progress, review generated QA results, and download artifacts without the CLI
+or Swagger.
+
+- **Added** `frontend/`: a typed API client (`src/api/client.ts`) that is the
+  sole `fetch` boundary, with `ApiError`/`NetworkError` and request
+  cancellation; TypeScript types (`src/api/types.ts`) derived from the real
+  OpenAPI schema and JSON artifact — including the true `blocker|major|minor`
+  gap severities, not invented values.
+- **Added** an upload page (drag-drop + file picker, extension/empty
+  validation against the backend's accepted formats, double-submit guard), a
+  run page (2s polling that stops on terminal status, a six-stage stepper,
+  structured progress showing provider/model/`provider_call_number`/recovery
+  count, and a concise failure view), and a tabbed results dashboard
+  (requirements, business rules, scenarios, test cases, gaps, coverage) sourced
+  from the run's JSON artifact.
+- **Backend unchanged**: no endpoints added, no pipeline changes; CORS already
+  allowed the Vite dev origins from Phase 16.
+- **Tests**: 48 frontend tests (Vitest + Testing Library) across the API
+  client, upload page, polling hook, run page, results views, and app shell —
+  all with mocked API responses, zero LLM cost. Backend remains at 592 tests.
+- **Gates**: TypeScript typecheck, ESLint (0 warnings), and production build
+  all pass.
+- **ADR-032**. Version stays `0.18.0-dev`; no bump or tag for this phase.
+
+### Phase 16.2 acceptance fix
+
 Phase 16.2 acceptance fix: nested structured-output retries are now counted and
 bounded. The real PDF acceptance run showed that schema-repair could make
 several real provider calls inside one executor attempt, invisible to progress
