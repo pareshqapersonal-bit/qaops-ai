@@ -76,12 +76,17 @@ _STATIC_MODELS: dict[str, tuple[ModelInfo, ...]] = {
             notes="Cheaper fallback",
         ),
     ),
+    # Gemini exposes BOTH free and paid candidates (ADR-034): the 2.5-flash
+    # tier has a genuine no-cost API free tier, while 2.5-pro moved behind
+    # billing. Marking flash free (and pro not) is why Gemini must not be
+    # classified wholesale as paid - eligibility is per-model.
     "gemini": (
         ModelInfo(
             name="gemini-2.5-flash",
             provider="gemini",
             max_context_tokens=1_000_000,
             max_output_tokens=8_192,
+            free=True,
             priority=10,
         ),
         ModelInfo(
@@ -89,6 +94,7 @@ _STATIC_MODELS: dict[str, tuple[ModelInfo, ...]] = {
             provider="gemini",
             max_context_tokens=1_000_000,
             max_output_tokens=16_384,
+            free=False,
             priority=20,
         ),
     ),
@@ -132,6 +138,40 @@ _STATIC_MODELS: dict[str, tuple[ModelInfo, ...]] = {
             local=True,
             free=True,
             priority=10,
+        ),
+    ),
+    # Groq free tier (ADR-034). Model IDs verified from Groq's official
+    # rate-limits documentation. All are free-tier eligible, so free=True. The
+    # llama-3.1-8b safety net has the highest daily request ceiling (14.4K RPD)
+    # and so ranks last by quality but is the most resilient to per-model RPD
+    # exhaustion. Context/output token limits are conservative documented values.
+    "groq": (
+        ModelInfo(
+            name="llama-3.3-70b-versatile",
+            provider="groq",
+            max_context_tokens=128_000,
+            max_output_tokens=32_768,
+            free=True,
+            priority=10,
+            notes="Best free Groq quality; 1K RPD / 12K TPM",
+        ),
+        ModelInfo(
+            name="openai/gpt-oss-120b",
+            provider="groq",
+            max_context_tokens=128_000,
+            max_output_tokens=32_768,
+            free=True,
+            priority=20,
+            notes="Strong free alternative; 1K RPD / 8K TPM",
+        ),
+        ModelInfo(
+            name="llama-3.1-8b-instant",
+            provider="groq",
+            max_context_tokens=128_000,
+            max_output_tokens=8_192,
+            free=True,
+            priority=30,
+            notes="High daily ceiling safety net; 14.4K RPD",
         ),
     ),
 }

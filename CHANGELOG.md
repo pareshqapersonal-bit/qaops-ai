@@ -68,6 +68,35 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 19: Free-capacity expansion (Groq, free-execution strategy, OpenRouter quota)
+
+Adds independent free inference capacity and a way to run only on free capacity,
+without changing the AdaptiveExecutor architecture (ADR-034).
+
+- **Added** `GroqClient` (`qaops/llm/groq_client.py`) behind the existing
+  `LLMClient` abstraction, reusing the OpenAI-compatible client (no new SDK).
+  Verified free model IDs `llama-3.3-70b-versatile`, `openai/gpt-oss-120b`,
+  `llama-3.1-8b-instant`. Missing `GROQ_API_KEY` makes Groq unavailable.
+- **Added** `ExecutionStrategy` (`any` / `free_first` / `free_only`) via the new
+  `QAOPS_EXECUTION_STRATEGY` setting. `free_only` never invokes paid providers
+  (Anthropic is dropped); `free_first` exhausts free-eligible candidates before
+  paid. Eligibility is per-candidate (`ModelInfo.free`), so Gemini's free
+  `2.5-flash` and OpenRouter `:free` models are usable while their paid models
+  are not. Default `any` preserves existing behaviour exactly.
+- **Added** `FailureKind.PROVIDER_RATE_LIMIT`: an account-wide OpenRouter
+  exhaustion (`free-models-per-day`) now disables OpenRouter for the rest of the
+  run instead of walking more free models. Model-specific/transient 429s keep
+  bounded retry and do not disable the provider.
+- **Changed** the registry: Groq `ProviderInfo` added; `gemini-2.5-flash` marked
+  free and `gemini-2.5-pro` paid (per-model eligibility).
+- **Unchanged**: recovery bounds (5 / 12 / 20), telemetry (existing execution
+  events already expose provider/model/calls/recovery/failure/switches/disable
+  reason), and all prior default behaviour.
+- **Tests**: +18 (5 Groq client, 9 free-execution strategy, 4 OpenRouter
+  quota), all without live LLM calls or real credentials. Backend 635 passed /
+  1 skipped.
+- **ADR-034**. Version stays `0.18.0-dev`; nothing tagged or released.
+
 ### Phase 18: Public production deployment (Render, single service)
 
 QAOps can be deployed as one Render Web Service with one public URL: FastAPI

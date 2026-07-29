@@ -38,6 +38,9 @@ class StageRequirements:
     needs_structured_output: bool = True
     min_context_chars: int = 0
     min_output_chars: int = 0
+    # When True, only free-eligible candidates (ModelInfo.free) pass the filter.
+    # Set by a FREE_ONLY execution strategy; leaves default runs unaffected.
+    free_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,8 @@ def _passes_filter(
     """Whether a model can serve the stage at all, and why not if it cannot."""
     if model.name in excluded:
         return False, "excluded after a prior failure this run"
+    if requirements.free_only and not model.free:
+        return False, "not free-eligible under the free-only strategy"
     if requirements.needs_structured_output and not model.structured_output:
         return False, "no structured-output support"
     if model.max_context_chars < requirements.min_context_chars:

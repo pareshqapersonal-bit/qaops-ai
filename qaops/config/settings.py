@@ -37,6 +37,19 @@ class QAOpsSettings(BaseSettings):
         default="openai/gpt-oss-20b:free",
         description="Model identifier used when provider is 'openrouter'.",
     )
+    groq_model: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Model identifier used when provider is 'groq'.",
+    )
+    execution_strategy: str = Field(
+        default="any",
+        description=(
+            "Recovery eligibility strategy: 'any' (default, unrestricted), "
+            "'free_first' (exhaust free-eligible candidates before paid), or "
+            "'free_only' (only free-eligible candidates; paid providers such as "
+            "Anthropic are never invoked)."
+        ),
+    )
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
     max_output_tokens: int = Field(default=8000, ge=256)
     chunking_strategy: str = Field(
@@ -156,9 +169,18 @@ class QAOpsSettings(BaseSettings):
     @field_validator("provider")
     @classmethod
     def _known_provider(cls, value: str) -> str:
-        known = {"anthropic", "gemini", "openrouter", "mock"}
+        known = {"anthropic", "gemini", "openrouter", "groq", "mock"}
         if value not in known:
             msg = f"Unknown provider {value!r}. Known providers: {sorted(known)}"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("execution_strategy")
+    @classmethod
+    def _known_strategy(cls, value: str) -> str:
+        known = {"any", "free_first", "free_only"}
+        if value not in known:
+            msg = f"Unknown execution_strategy {value!r}. Known: {sorted(known)}"
             raise ValueError(msg)
         return value
 

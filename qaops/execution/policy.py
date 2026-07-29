@@ -19,6 +19,7 @@ class FailureKind(StrEnum):
 
     AUTHENTICATION = "authentication"
     INSUFFICIENT_CREDIT = "insufficient_credit"
+    PROVIDER_RATE_LIMIT = "provider_rate_limit"
     RATE_LIMIT = "rate_limit"
     TIMEOUT = "timeout"
     CONTEXT_LIMIT = "context_limit"
@@ -86,6 +87,23 @@ _PATTERNS: tuple[tuple[FailureKind, tuple[str, ...]], ...] = (
         ("invalid x-api-key", "authentication", "unauthorized", "invalid api key", "401", "403"),
     ),
     (
+        # Account-wide (provider-level) exhaustion, distinct from a per-model or
+        # transient rate limit. OpenRouter's free daily cap is shared across ALL
+        # :free models, so its "free-models-per-day" 429 means no further free
+        # call on this provider will succeed this run - retrying other models
+        # only wastes calls (ADR-034). Matched BEFORE the generic RATE_LIMIT
+        # patterns so it wins. Kept deliberately specific to daily/account
+        # exhaustion wording, never plain "429" or "rate limited".
+        FailureKind.PROVIDER_RATE_LIMIT,
+        (
+            "free-models-per-day",
+            "free model requests per day",
+            "requests per day",
+            "daily limit",
+            "quota exceeded for",
+        ),
+    ),
+    (
         FailureKind.RATE_LIMIT,
         ("rate-limited", "rate limited", "rate_limit", "429", "too many requests"),
     ),
@@ -127,6 +145,14 @@ _POLICY: dict[FailureKind, Recovery] = {
         action=Action.DROP_MODEL_AND_CONTINUE,
         kind=FailureKind.MODEL_UNAVAILABLE,
         explanation="model unavailable; removing it and trying the next",
+    ),
+    FailureKind.PROVIDER_RATE_LIMIT: Recovery(
+        action=Action.DISABLE_AND_SWITCH,
+        kind=FailureKind.PROVIDER_RATE_LIMIT,
+        explanation=(
+            "provider-wide/account daily quota exhausted; every model on this "
+            "provider shares it, so the provider is disabled for the rest of the run"
+        ),
     ),
     FailureKind.RATE_LIMIT: Recovery(
         action=Action.RETRY_SAME_WITH_BACKOFF,

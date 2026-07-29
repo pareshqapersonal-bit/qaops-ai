@@ -324,6 +324,31 @@ Configuration is environment-driven — see `.env.example`; every setting has a
 | Provider | `QAOPS_PROVIDER` | `anthropic` |
 | Anthropic model | `QAOPS_MODEL` | `claude-sonnet-4-6` |
 | Gemini model | `QAOPS_GEMINI_MODEL` | `gemini-2.5-flash` |
+| OpenRouter model | `QAOPS_OPENROUTER_MODEL` | `openai/gpt-oss-20b:free` |
+| Groq model | `QAOPS_GROQ_MODEL` | `llama-3.3-70b-versatile` |
+| Execution strategy | `QAOPS_EXECUTION_STRATEGY` | `any` |
+
+### Free-execution strategy
+
+`QAOPS_EXECUTION_STRATEGY` controls whether recovery may use paid providers:
+
+- `any` (default) — unrestricted; existing behaviour, unchanged.
+- `free_first` — free-eligible candidates are exhausted before any paid one.
+- `free_only` — only free-eligible candidates; paid providers (e.g. Anthropic)
+  are never invoked.
+
+Free eligibility is per-model, not per-provider: Groq's models and OpenRouter
+`:free` models are free, Gemini's `2.5-flash` tier is free while `2.5-pro` is
+paid, and Anthropic is paid. So under `free_only`, Gemini is still usable (on
+its flash model) but Anthropic is skipped entirely.
+
+**Groq** is an OpenAI-compatible free provider (set `GROQ_API_KEY`; a missing key
+simply makes Groq unavailable). It has its own account quota independent of
+OpenRouter, so it provides a real free failover path. OpenRouter's free daily
+cap is account-wide across all `:free` models — when it is exhausted, QAOps
+disables OpenRouter for the rest of the run rather than wasting calls on more
+free models, while a transient per-model rate limit is retried with backoff.
+
 
 ### Adaptive-execution bounds
 

@@ -33,6 +33,7 @@ from qaops.execution.models import ModelHealth, ModelInfo, ModelRegistry
 from qaops.execution.policy import Action, FailureKind, Recovery, recovery_for
 from qaops.execution.registry import ProviderHealth, ProviderInfo
 from qaops.execution.selector import StageRequirements, select_candidates
+from qaops.execution.strategy import ExecutionStrategy, parse_strategy
 from qaops.llm.request_budget import RequestBudgetExhausted, observing
 
 
@@ -67,6 +68,7 @@ _MODEL_FIELD: dict[str, str] = {
     "anthropic": "model",
     "gemini": "gemini_model",
     "openrouter": "openrouter_model",
+    "groq": "groq_model",
 }
 
 
@@ -129,10 +131,21 @@ class AdaptiveExecutor:
         if not providers:
             msg = "AdaptiveExecutor requires at least one provider"
             raise ValueError(msg)
-        self._providers = list(providers)
         self._settings = settings
         self._stage_factory = stage_factory
+        # Registry must be set before applying the strategy: free-eligibility
+        # queries the registry for each provider's models.
         self._registry = registry if registry is not None else ModelRegistry()
+        # Free-execution strategy (ADR-034). ANY (default) preserves prior
+        # behaviour exactly. FREE_ONLY drops providers that expose no free
+        # candidate for this run (e.g. Anthropic) so they are never invoked;
+        # FREE_FIRST keeps them but orders free-eligible providers first.
+        self._strategy = parse_strategy(settings.execution_strategy)
+        ordered = self._apply_strategy_to_providers(list(providers))
+        if not ordered:
+            msg = f"No providers are eligible under the {self._strategy.value!r} execution strategy"
+            raise ValueError(msg)
+        self._providers = ordered
         self._report_line = reporter or (lambda _message: None)
         self._emit_event = events or (lambda _event: None)
         self._max_attempts = max_attempts_per_model
@@ -155,6 +168,62 @@ class AdaptiveExecutor:
         # each stage boundary. Enforces the per-provider-per-stage model cap.
         self._models_tried: dict[str, set[str]] = {info.name: set() for info in providers}
 
+    # --- free-execution strategy ---------------------------------------------
+
+    def _provider_has_free_candidate(self, provider: ProviderInfo) -> bool:
+        """Whether a provider can supply at least one free-eligible candidate.
+
+        Registry-backed providers (groq, openrouter, ollama) are free-eligible
+        when any discovered/static model is free. Providers with no catalogue
+        (anthropic, gemini) fall back to the configured model, whose free
+        eligibility is decided by _configured_model_is_free.
+        """
+        models = self._registry.models_for(provider.name)
+        if models:
+            return any(m.free for m in models)
+        return self._configured_model_is_free(provider.name)
+
+    def _configured_model_is_free(self, provider: str) -> bool:
+        """Free eligibility of a provider's single configured model.
+
+        Gemini's free tier serves its flash models via an API key at no cost, so
+        a configured gemini flash/flash-lite model is free-eligible - Gemini is
+        NOT wholesale paid merely because paid Gemini usage also exists (ADR-034).
+        Anthropic has no free tier, so its configured model is never free.
+        """
+        configured = self._configured_model(provider).casefold()
+        if provider == "gemini":
+            # Flash / flash-lite tiers are the free-eligible Gemini models.
+            return "flash" in configured
+        # Local providers are always free; everything else defaults to not-free
+        # unless a registry model said otherwise (handled above).
+        info = next((p for p in (self._all_provider_info()) if p.name == provider), None)
+        return bool(info and info.local)
+
+    def _all_provider_info(self) -> list[ProviderInfo]:
+        # The providers this executor was constructed with (post-strategy filter
+        # this is a subset, but membership/local flags are unchanged).
+        return list(getattr(self, "_providers", []))
+
+    def _apply_strategy_to_providers(self, providers: list[ProviderInfo]) -> list[ProviderInfo]:
+        """Filter/order providers for the active strategy (ADR-034).
+
+        Called during __init__ before _providers is finalised, so it works on the
+        passed-in list directly. ANY returns the list unchanged. FREE_ONLY keeps
+        only providers with a free candidate. FREE_FIRST keeps all but orders
+        free-eligible providers ahead of paid ones (stable within each group).
+        """
+        if self._strategy is ExecutionStrategy.ANY:
+            return providers
+        # Temporarily expose the list so the free-eligibility helpers can read
+        # local flags during construction.
+        self._providers = providers
+        free = [p for p in providers if self._provider_has_free_candidate(p)]
+        if self._strategy is ExecutionStrategy.FREE_ONLY:
+            return free
+        paid = [p for p in providers if p not in free]
+        return free + paid
+
     # --- candidate selection -------------------------------------------------
 
     def _candidates(self, provider: ProviderInfo) -> list[ModelInfo]:
@@ -175,10 +244,14 @@ class AdaptiveExecutor:
             if provider.name in self._excluded and configured in self._excluded[provider.name]:
                 return []
             name = configured or f"{provider.name}-default"
-            return [ModelInfo(name=name, provider=provider.name)]
+            candidate = self._synthetic_candidate(provider.name, name)
+            # Under FREE_ONLY a non-free synthetic candidate must not run.
+            if self._requirements().free_only and not candidate.free:
+                return []
+            return [candidate]
         scored = select_candidates(
             models,
-            StageRequirements(),
+            self._requirements(),
             limit=self._max_models_per_provider,
             configured=self._configured_model(provider.name) or None,
             excluded=self._excluded[provider.name],
@@ -198,15 +271,33 @@ class AdaptiveExecutor:
             configured = self._configured_model(provider.name)
             if not configured or configured in exclude:
                 return []
-            return [ModelInfo(name=configured, provider=provider.name)]
+            candidate = self._synthetic_candidate(provider.name, configured)
+            if self._requirements().free_only and not candidate.free:
+                return []
+            return [candidate]
         scored = select_candidates(
             models,
-            StageRequirements(),
+            self._requirements(),
             limit=self._max_models_per_provider,
             configured=self._configured_model(provider.name) or None,
             excluded=self._excluded[provider.name] | exclude,
         )
         return [entry.model for entry in scored]
+
+    def _requirements(self) -> StageRequirements:
+        """Stage requirements for the active strategy (free_only when FREE_ONLY)."""
+        return StageRequirements(free_only=self._strategy.requires_free)
+
+    def _synthetic_candidate(self, provider: str, name: str) -> ModelInfo:
+        """A single-model candidate for a provider with no catalogue.
+
+        Its free flag reflects the provider's configured-model eligibility, so
+        FREE_ONLY/FREE_FIRST treat e.g. a gemini flash model as free and an
+        anthropic model as paid.
+        """
+        return ModelInfo(
+            name=name, provider=provider, free=self._configured_model_is_free(provider)
+        )
 
     def _configured_model(self, provider: str) -> str:
         field_name = _MODEL_FIELD.get(provider)

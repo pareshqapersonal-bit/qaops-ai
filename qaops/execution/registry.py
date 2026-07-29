@@ -52,7 +52,7 @@ class ProviderInfo:
 # Providers with no client implementation yet must not be offered for failover,
 # however available their credentials appear. Ollama needs no API key, so
 # without this it would always look usable.
-_IMPLEMENTED = frozenset({"anthropic", "gemini", "openrouter", "mock"})
+_IMPLEMENTED = frozenset({"anthropic", "gemini", "openrouter", "groq", "mock"})
 
 
 _REGISTRY: dict[str, ProviderInfo] = {
@@ -83,6 +83,17 @@ _REGISTRY: dict[str, ProviderInfo] = {
         key_variables=("GEMINI_API_KEY", "GOOGLE_API_KEY"),
         structured_output=True,
         priority=40,
+    ),
+    "groq": ProviderInfo(
+        name="groq",
+        key_variables=("GROQ_API_KEY",),
+        structured_output=True,
+        # Ranks ahead of openrouter as a free failover: a dedicated free tier
+        # with strict json_schema output and its own independent account quota
+        # (ADR-034). Free eligibility is per-model (its curated models are free),
+        # so the free/paid distinction lives on ModelInfo, not here.
+        priority=25,
+        notes="Free tier, OpenAI-compatible, strict structured output",
     ),
     "mock": ProviderInfo(
         name="mock",

@@ -25,6 +25,10 @@ gemini = [
 openrouter = [
     "openai>=1.0",
 ]
+groq = [
+    # Groq is OpenAI-compatible; it reuses the openai SDK, no new dependency.
+    "openai>=1.0",
+]
 excel = [
     "openpyxl>=3.1",
 ]

@@ -38,6 +38,10 @@ def create_client(settings: QAOpsSettings) -> LLMClient:
         from qaops.llm.openrouter_client import OpenRouterClient
 
         return OpenRouterClient(model=settings.openrouter_model, timeout_seconds=timeout)
+    if settings.provider == "groq":
+        from qaops.llm.groq_client import GroqClient
+
+        return GroqClient(model=settings.groq_model, timeout_seconds=timeout)
     if settings.provider == "mock":
         msg = (
             "Provider 'mock' cannot be created by the factory; construct "
