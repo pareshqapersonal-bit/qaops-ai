@@ -1,0 +1,46 @@
+# Render Blueprint for QAOps AI - Phase 18 (ADR-033).
+#
+# ONE Render Web Service serving both the FastAPI API and the built React
+# frontend from a single public URL. The build installs the Python package plus
+# provider extras, installs frontend dependencies, and produces the Vite
+# production build (frontend/dist), which FastAPI serves in production.
+#
+# Provider credentials are NOT stored here. Only variable NAMES are declared
+# (sync: false), so their values are entered in the Render dashboard and never
+# committed to git. See docs/adr/033-production-deployment.md.
+
+services:
+  - type: web
+    name: qaops-ai
+    runtime: python
+    plan: free
+    # Health check hits the backend endpoint, which always returns JSON and is
+    # independent of static/SPA routing.
+    healthCheckPath: /health
+    buildCommand: |
+      set -o errexit
+      pip install --upgrade pip
+      pip install -e ".[api,openrouter,gemini,excel,pdf]"
+      cd frontend
+      npm ci
+      npm run build
+    # No --reload in production. Bind to the port Render provides.
+    startCommand: python -m uvicorn qaops.api.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Pin runtimes for reproducible builds (do not upgrade in this phase).
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: NODE_VERSION
+        value: "22.11.0"
+      # Run workspaces live under a writable, ephemeral path on the instance.
+      - key: QAOPS_RUNTIME_DIR
+        value: /tmp/qaops-runs
+      # Provider credentials: NAMES ONLY. Enter values in the Render dashboard.
+      # At least one provider key must be set for live runs; the app and its
+      # health/UI still work without them (runs will fail clearly at preflight).
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

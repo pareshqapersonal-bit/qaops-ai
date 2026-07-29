@@ -10,3 +10,10 @@ venv/
 output/
 dist/
 build/
+
+# A developer's local repo-root qaops.yaml (e.g. provider: openrouter for manual
+# runs) must never be committed - it would make production accidentally depend on
+# it (ADR-033, spec section: QAOps configuration). Production configures the
+# pipeline via QAOPS_* environment variables instead.
+qaops.yaml
+

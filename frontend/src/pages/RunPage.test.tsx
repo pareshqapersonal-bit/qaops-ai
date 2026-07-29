@@ -142,4 +142,38 @@ describe("RunPage", () => {
     expect(alert.textContent).toContain("[redacted]");
     expect(alert.textContent).not.toMatch(/sk-[a-z0-9]/i);
   });
+
+  it("summarizes a huge provider payload concisely and hides raw text in details", () => {
+    // A Gemini RESOURCE_EXHAUSTED-style blob: large and JSON-ish.
+    const hugePayload =
+      '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"' +
+      "Quota exceeded for quota metric 'Generate requests'. ".repeat(40) +
+      '"}}';
+    const failed = {
+      ...failedRun,
+      error: hugePayload,
+      failed_stage: "requirement_analyzer",
+    };
+    setRun({ run: failed });
+    renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");
+    const alert = screen.getByRole("alert");
+    // The concise summary is shown, not the whole blob, in the headline area.
+    expect(alert.textContent).toMatch(/provider quota was exhausted or unavailable/i);
+    // The raw payload is available but tucked into a collapsible details block.
+    const details = alert.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details?.textContent).toContain("RESOURCE_EXHAUSTED");
+    // The stage is still named.
+    expect(alert.textContent).toContain("requirement_analyzer");
+  });
+
+  it("shows a short error inline without a details disclosure", () => {
+    const failed = { ...failedRun, error: "All providers failed for this stage." };
+    setRun({ run: failed });
+    renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("All providers failed for this stage.");
+    // No details element for an already-concise message.
+    expect(alert.querySelector("details")).toBeNull();
+  });
 });

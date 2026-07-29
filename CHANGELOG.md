@@ -68,6 +68,37 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 18: Public production deployment (Render, single service)
+
+QAOps can be deployed as one Render Web Service with one public URL: FastAPI
+serves both the API and the built React frontend from the same origin (ADR-033).
+
+- **Added** FastAPI static/SPA serving (`_mount_frontend` in `qaops/api/app.py`):
+  `/assets` served from the Vite build; `index.html` served at `/` and for
+  non-API paths so React Router handles `/`, `/design`, `/runs/{id}` on direct
+  navigation and refresh. API routes and `/health` always take precedence; an
+  unknown `/api/*` returns an API 404 (JSON), never `index.html`. A missing
+  build degrades cleanly (503 notice) while the API stays functional.
+- **Added** `APIConfig.static_dir` (env override `QAOPS_STATIC_DIR`), defaulting
+  to `frontend/dist`.
+- **Changed** the frontend API base URL to default to same-origin (`""`); added
+  `frontend/.env.development` (localhost:8000 for dev) and
+  `frontend/.env.production` (empty). No backend host is baked into the
+  production bundle. Local Vite + FastAPI workflow is unchanged.
+- **Added** `render.yaml` (build installs Python + provider extras + frontend,
+  runs uvicorn on `$PORT`, `/health` health check, Python 3.12 / Node 22
+  pinned, provider-key variable names declared with `sync: false`).
+- **Changed** `.gitignore` to exclude a repo-root `qaops.yaml` so production
+  cannot accidentally depend on a developer's local config.
+- **Changed** the run failure view to show a concise summary with the raw
+  provider error moved into an optional collapsible details block
+  (presentation only; no pipeline/recovery change).
+- **Tests**: 16 backend deployment tests (`tests/test_deployment.py`) and 2
+  frontend failure-UX tests, all without live LLM calls or real credentials.
+  Backend 617 passed / 1 skipped; frontend 50 passed.
+- **ADR-033**. Version stays `0.18.0-dev`; nothing tagged, released, or
+  deployed.
+
 ### Phase 17: Web UI MVP
 
 A React + TypeScript + Vite single-page app in `frontend/` over the existing

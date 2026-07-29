@@ -33,5 +33,6 @@
 | [029](029-bounded-execution.md) | Bounded, ranked candidate selection and structured execution progress | Accepted |
 | [030](030-request-timeout.md) | A per-request deadline with QAOps-owned retries, and unambiguous progress | Accepted |
 | [032](032-frontend-architecture.md) | A thin React frontend over the existing API, typed from the real contract | Accepted |
+| [033](033-production-deployment.md) | Single-service production deployment on Render (FastAPI serves the Vite build) | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

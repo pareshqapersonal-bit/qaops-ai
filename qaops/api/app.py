@@ -16,7 +16,8 @@ from typing import Annotated
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi import File as FileParam
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 from qaops.api.config import APIConfig
 from qaops.api.runner import execute_run
@@ -60,6 +61,81 @@ def _sanitize_filename(name: str) -> str:
     base = Path(name).name  # drops any directory components
     cleaned = "".join(c for c in base if c.isalnum() or c in "._- ").strip()
     return cleaned or "upload"
+
+
+def _mount_frontend(app: FastAPI, static_dir: Path | None) -> None:
+    """Serve the built React frontend (Vite output) for the browser UI.
+
+    Registered AFTER all API routes so those always take precedence: FastAPI
+    matches routes in registration order, and the SPA catch-all additionally
+    refuses any path under the API surface, so an unknown ``/api/*`` request
+    returns a real API 404 (JSON) rather than the SPA's index.html, and
+    ``/health`` keeps returning the backend response (spec parts 1-3).
+
+    Static assets (``/assets/...``) are served from disk. Any other GET that is
+    not an API path falls back to ``index.html`` so React Router can handle
+    ``/``, ``/design`` and ``/runs/{id}`` on direct navigation or refresh.
+
+    If the build is absent (``static_dir`` missing - e.g. a pure-API deployment
+    or a test that never built the frontend), the API stays fully functional and
+    non-API browser routes return a clear, controlled message instead of a
+    confusing 500 or a silent break. API routes are unaffected either way.
+    """
+    index_file = static_dir / "index.html" if static_dir is not None else None
+    build_present = index_file is not None and index_file.is_file()
+
+    # Reserved server-side prefixes that must never be answered by the SPA.
+    def _is_api_path(path: str) -> bool:
+        return path == "health" or path == "api" or path.startswith("api/")
+
+    if build_present:
+        assert static_dir is not None  # narrowed by build_present
+        assets_dir = static_dir / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+        @app.get("/", include_in_schema=False)
+        def _spa_root() -> FileResponse:
+            return FileResponse(index_file)  # type: ignore[arg-type]
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def _spa_fallback(full_path: str) -> FileResponse:
+            # API paths are handled by their own routes; if control reaches here
+            # for an api/ or health path, it is an UNKNOWN one and must 404 as an
+            # API response, never as index.html.
+            if _is_api_path(full_path):
+                raise HTTPException(status_code=404, detail="Not found.")
+            # A concrete static file (favicon, etc.) if it exists on disk.
+            candidate = (static_dir / full_path).resolve()
+            static_root = static_dir.resolve()
+            if static_root in candidate.parents and candidate.is_file():
+                return FileResponse(candidate)
+            # Otherwise it is a client-side route: serve the SPA shell.
+            return FileResponse(index_file)  # type: ignore[arg-type]
+
+    else:
+
+        @app.get("/", include_in_schema=False)
+        def _no_build_root() -> PlainTextResponse:
+            return PlainTextResponse(
+                "QAOps API is running, but the frontend build was not found. "
+                "Build it with `npm ci && npm run build` in ./frontend, or set "
+                "QAOPS_STATIC_DIR to the build output. The API remains available "
+                "under /health and /api/v1/.",
+                status_code=503,
+            )
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        def _no_build_fallback(full_path: str) -> PlainTextResponse:
+            # Even without a build, API paths must behave as API paths: an
+            # unknown one is a 404, not this degraded-frontend notice.
+            if _is_api_path(full_path):
+                raise HTTPException(status_code=404, detail="Not found.")
+            return PlainTextResponse(
+                "QAOps frontend build not found. The API remains available "
+                "under /health and /api/v1/.",
+                status_code=503,
+            )
 
 
 def create_app(config: APIConfig | None = None) -> FastAPI:
@@ -258,6 +334,8 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Artifact is not accessible.")
 
         return FileResponse(path=resolved, filename=artifact.name)
+
+    _mount_frontend(app, cfg.static_dir)
 
     return app
 

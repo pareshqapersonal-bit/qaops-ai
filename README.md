@@ -208,6 +208,95 @@ From `frontend/`: `npm run dev` (dev server), `npm run build` (production
 build), `npm run test` (Vitest), `npm run typecheck` (tsc), `npm run lint`
 (ESLint).
 
+## Deployment (Render, single service)
+
+QAOps deploys as **one Render Web Service** with one public URL: FastAPI serves
+both the API and the built React frontend from the same origin (ADR-033).
+
+### Architecture
+
+```
+Browser --HTTPS--> Render Web Service
+                     |-- FastAPI API (/health, /api/v1/...)
+                     |-- React/Vite production build (served by FastAPI)
+                     `-- QAOps pipeline --> LLM providers
+```
+
+Local development keeps the split origin (Vite `:5173` + FastAPI `:8000`, see
+the Web UI section). Production is same-origin: the frontend calls `/api/v1/...`
+relative to the serving host, so no backend URL is baked into the bundle.
+
+### Build and start commands
+
+- **Build:** `pip install -e ".[api,openrouter,gemini,excel,pdf]"` then, in
+  `frontend/`, `npm ci && npm run build`.
+- **Start:** `python -m uvicorn qaops.api.app:app --host 0.0.0.0 --port $PORT`
+  (no `--reload`).
+- **Health check:** `/health` (returns backend JSON, independent of static
+  routing).
+
+These are captured in `render.yaml` so the deployment is versioned and
+reproducible. `frontend/dist` and `frontend/node_modules` are not committed;
+Render builds the frontend at deploy time.
+
+### Runtime versions
+
+Python 3.12 and Node 22 (pinned in `render.yaml`). Phase 18 does not upgrade any
+framework or dependency.
+
+### Environment variables
+
+Set server-side in the Render dashboard (never committed):
+
+- `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` — provider
+  credentials (set at least one for live runs). `render.yaml` declares the
+  names only, with `sync: false`.
+- `QAOPS_RUNTIME_DIR` — writable path for per-run workspaces (e.g.
+  `/tmp/qaops-runs`).
+
+Production configures the pipeline through `QAOPS_*` environment variables and
+does not depend on a repo-root `qaops.yaml` (which is gitignored). No secret
+ever appears in the frontend bundle, API responses, progress events, or
+artifacts.
+
+### Ephemeral storage
+
+Render Free's filesystem and process memory are ephemeral. Uploaded documents,
+in-memory run state, and generated artifacts are **temporary** and may disappear
+after a restart, redeploy, or idle spin-down. This is acceptable for the MVP;
+per-run workspace isolation is unchanged. There is no database or persistent
+storage.
+
+### Deploy steps
+
+1. Ensure `frontend/dist` and `frontend/node_modules` are not committed.
+2. Push the repository to a Git host Render can access.
+3. In Render, create a Blueprint from `render.yaml` (or a Web Service using the
+   build/start commands above).
+4. Set `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` / `GEMINI_API_KEY` and
+   `QAOPS_RUNTIME_DIR` in the service's environment.
+5. Deploy, and watch the build install Python + frontend deps and run the Vite
+   build.
+
+### Post-deployment smoke test
+
+Against `https://<service>.onrender.com`: open `/` (UI loads), `/design` and
+`/runs/example` directly and refresh (SPA loads, not a 404), `/health` (backend
+JSON), and `/api/v1/does-not-exist` (API 404, not HTML). Confirm the browser
+console shows no routing/asset/CORS/API-base errors and that API calls go to the
+same origin. A live LLM run is not required to validate deployment.
+
+### Production-style local check
+
+Build the frontend (`cd frontend && npm ci && npm run build`), then from the
+repo root run only FastAPI:
+
+```bash
+python -m uvicorn qaops.api.app:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000/` and verify the same routes as the smoke test.
+
 ## Golden examples
 
 `examples/` contains four permanent regression fixtures (`login.md`,

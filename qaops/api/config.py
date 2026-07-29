@@ -33,9 +33,27 @@ def _configured_origins() -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
+def _default_static_dir() -> Path | None:
+    """Locate the built frontend (Vite output) to serve in production.
+
+    Order: an explicit QAOPS_STATIC_DIR override, else the repo's
+    ``frontend/dist`` resolved relative to this file. Returns None only if the
+    resolved path does not exist, so the API can degrade cleanly (the frontend
+    may simply not be built in a pure-API or test context). The value is the
+    directory whether or not it currently exists is decided by the caller.
+    """
+    override = os.environ.get("QAOPS_STATIC_DIR")
+    if override:
+        return Path(override)
+    # qaops/api/config.py -> repo root is three parents up (qaops/api -> qaops -> root).
+    repo_root = Path(__file__).resolve().parents[2]
+    return repo_root / "frontend" / "dist"
+
+
 @dataclass
 class APIConfig:
     """Runtime configuration for the API process."""
 
     runtime_dir: Path = field(default_factory=_default_runtime_dir)
     cors_origins: list[str] = field(default_factory=_configured_origins)
+    static_dir: Path | None = field(default_factory=_default_static_dir)

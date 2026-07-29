@@ -134,17 +134,42 @@ function ProgressView({ run }: { run: NonNullable<ReturnType<typeof useRun>["run
 }
 
 function FailureView({ run }: { run: NonNullable<ReturnType<typeof useRun>["run"]> }) {
+  // Keep the primary message concise. Backend errors can be very large raw
+  // provider payloads (e.g. a Gemini RESOURCE_EXHAUSTED JSON blob); dumping the
+  // whole thing into the alert is unreadable. We show a short summary line and
+  // tuck the full backend error into an optional, collapsed details element.
+  // This is presentation only - it does not change pipeline or recovery
+  // behaviour, and the full text remains available to anyone who expands it.
+  const rawError = run.error ?? "The run failed without a specific error message.";
+  const summary = summarizeError(rawError, run.failed_stage);
+  const showDetails = rawError.trim() !== summary.trim();
   return (
     <>
       <div className="alert error" role="alert">
         <div className="title">
           Run failed{run.failed_stage ? ` at ${run.failed_stage}` : ""}
         </div>
-        <div>{run.error ?? "The run failed without a specific error message."}</div>
+        <div>{summary}</div>
         {run.recovery_attempts != null && run.recovery_attempts > 0 && (
           <div className="muted" style={{ marginTop: 8 }}>
             {run.recovery_attempts} recovery action(s) were attempted before failing.
           </div>
+        )}
+        {showDetails && (
+          <details style={{ marginTop: 8 }}>
+            <summary>Technical details</summary>
+            <pre
+              style={{
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                maxHeight: 240,
+                overflow: "auto",
+                marginTop: 8,
+              }}
+            >
+              {rawError}
+            </pre>
+          </details>
         )}
       </div>
       <p>
@@ -152,6 +177,27 @@ function FailureView({ run }: { run: NonNullable<ReturnType<typeof useRun>["run"
       </p>
     </>
   );
+}
+
+// Reduce a possibly-huge raw provider error to a short, human line. Falls back
+// to a length-capped version of the original when we do not recognise it, so we
+// never invent detail and never dump an unbounded blob into the headline.
+function summarizeError(rawError: string, failedStage: string | null): string {
+  const text = rawError.trim();
+  const lower = text.toLowerCase();
+  const stageSuffix = failedStage ? ` at ${failedStage}` : "";
+  if (lower.includes("resource_exhausted") || lower.includes("quota")) {
+    return `All available providers/models failed${stageSuffix}. A provider quota was exhausted or unavailable.`;
+  }
+  if (lower.includes("no api key found")) {
+    // Preserve this actionable message as-is; it is already short and useful.
+    return text;
+  }
+  const firstLine = text.split("\n", 1)[0];
+  if (firstLine.length <= 200 && firstLine === text) {
+    return text;
+  }
+  return `${firstLine.slice(0, 200)}${firstLine.length > 200 || firstLine !== text ? "…" : ""}`;
 }
 
 type ArtifactLoad =

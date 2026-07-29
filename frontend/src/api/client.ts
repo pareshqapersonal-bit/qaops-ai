@@ -11,9 +11,15 @@ import type {
   RunStatusResponse,
 } from "./types";
 
-// Configurable at build time; falls back to the local backend default.
-export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+// Base URL for API requests.
+// - Production (served by FastAPI): defaults to "" so requests are same-origin
+//   and relative (e.g. fetch("/api/v1/models") hits the serving host). No
+//   hard-coded backend host ends up in the production bundle.
+// - Development: set VITE_API_BASE_URL=http://localhost:8000 (or 127.0.0.1) so
+//   the Vite dev server on :5173 can reach FastAPI on :8000.
+// The nullish check means an explicitly empty value is respected; only an
+// undefined VITE_API_BASE_URL falls through to same-origin.
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? "";
 
 // A structured error every caller can inspect, instead of a bare string.
 export class ApiError extends Error {
