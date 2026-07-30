@@ -68,6 +68,39 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 20: Provider reliability, model eligibility & failure observability
+
+Production-reliability fixes from a real failed smoke test, without redesigning
+the AdaptiveExecutor or adding providers (ADR-035).
+
+- **Added** capability-first model eligibility: `ModelInfo.text_capable`;
+  OpenRouter discovery reads `architecture` modalities; the selector filters
+  non-text models (e.g. music/image generators like the incident's
+  `google/lyria-*`) **before** ranking, so a large context window cannot rescue
+  an unsuitable model.
+- **Added** Gemini model discovery (`discover_gemini_models`) via the
+  google-genai SDK `models.list()` filtered on `generateContent`, cached by the
+  existing `ModelRegistry`, with a static fallback updated to stable `*-latest`
+  aliases (`gemini-flash-latest`/`-lite`/`-pro`) instead of the retired pinned
+  `gemini-2.5-flash`. Default `gemini_model` is now `gemini-flash-latest`.
+- **Added** structured-field failure classification:
+  `LLMProviderError.status_code`/`error_code` (sanitized),
+  `classify_failure_fields`, `recovery_for_exception`. Resolves the
+  `rate_limit → unknown` sequence — an opaque 429 is now reliably a rate limit
+  via HTTP status. A provider-wide error code (`insufficient_quota`, billing
+  hard limit) disables the provider; a plain transient 429 stays bounded retry.
+- **Added** failure-chain observability: ordered sanitized `attempt_history`
+  (stage/provider/model/failure_kind/status/code) on `ExecutionReport`,
+  `StageError`, and the API run status response, so a failed run shows the whole
+  failover story rather than only the last error. No secrets are recorded.
+- **Unchanged**: execution bounds (5/12/20), ANY/FREE_FIRST/FREE_ONLY semantics,
+  the FREE_ONLY no-paid guarantee, and pipeline behaviour.
+- **Tests**: +19 (`tests/test_provider_reliability.py`) covering unsuitable-model
+  rejection, Gemini 404, Groq rate-limit scope, bounded UNKNOWN recovery,
+  end-to-end exhaustion with attempt history, and credential sanitization.
+  Backend 654 passed / 1 skipped.
+- **ADR-035**. Version stays `0.18.0-dev`.
+
 ### Phase 19: Free-capacity expansion (Groq, free-execution strategy, OpenRouter quota)
 
 Adds independent free inference capacity and a way to run only on free capacity,

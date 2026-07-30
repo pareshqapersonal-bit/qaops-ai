@@ -30,7 +30,7 @@ from qaops.core.errors import StageError
 from qaops.core.protocols import PipelineStage
 from qaops.execution.events import EventType, ExecutionEvent
 from qaops.execution.models import ModelHealth, ModelInfo, ModelRegistry
-from qaops.execution.policy import Action, FailureKind, Recovery, recovery_for
+from qaops.execution.policy import Action, FailureKind, Recovery, recovery_for_exception
 from qaops.execution.registry import ProviderHealth, ProviderInfo
 from qaops.execution.selector import StageRequirements, select_candidates
 from qaops.execution.strategy import ExecutionStrategy, parse_strategy
@@ -83,6 +83,25 @@ class StageCheckpoint:
 
 
 @dataclass
+class AttemptRecord:
+    """One sanitized provider/model attempt that failed, for the attempt history.
+
+    Contains only normalized, non-sensitive fields (ADR-035): stage, provider,
+    model, failure kind, and optional sanitized HTTP status / provider error
+    code. Never carries keys, headers, request payloads, or raw exception text.
+    """
+
+    stage: str
+    provider: str
+    model: str
+    failure_kind: str
+    status_code: int | None = None
+    error_code: str | None = None
+    model_attempt_number: int = 0
+    provider_call_number: int = 0
+
+
+@dataclass
 class ExecutionReport:
     """What happened during a run, for user feedback and tests."""
 
@@ -91,6 +110,10 @@ class ExecutionReport:
     model_switches: list[tuple[str, str, str]] = field(default_factory=list)
     health: dict[str, ProviderHealth] = field(default_factory=dict)
     model_health: dict[str, ModelHealth] = field(default_factory=dict)
+    # Ordered, sanitized history of every failed attempt across all stages. The
+    # frontend/API uses this to show the full failover story instead of only the
+    # last error (ADR-035).
+    attempts: list[AttemptRecord] = field(default_factory=list)
 
     @property
     def completed_stages(self) -> list[str]:
@@ -225,6 +248,23 @@ class AdaptiveExecutor:
         return free + paid
 
     # --- candidate selection -------------------------------------------------
+
+    def _attempt_history(self) -> list[dict[str, object]]:
+        """Sanitized attempt history for attaching to a terminal StageError.
+
+        Only normalized fields (ADR-035); never keys, headers, or raw bodies.
+        """
+        return [
+            {
+                "stage": a.stage,
+                "provider": a.provider,
+                "model": a.model,
+                "failure_kind": a.failure_kind,
+                "status_code": a.status_code,
+                "error_code": a.error_code,
+            }
+            for a in self.report.attempts
+        ]
 
     def _candidates(self, provider: ProviderInfo) -> list[ModelInfo]:
         """Bounded, ranked, compatible models for a provider (ADR-029).
@@ -398,11 +438,29 @@ class AdaptiveExecutor:
                         f"Provider-call budget exhausted after "
                         f"{self._stage_provider_calls} calls on stage "
                         f"{stage.name!r}. Last model {provider.name}/{model.name}.",
+                        attempts=self._attempt_history(),
                     ) from exc
                 except Exception as exc:  # noqa: BLE001 - classified below
-                    recovery = recovery_for(str(exc))
+                    recovery = recovery_for_exception(exc)
                     self._health_for(provider.name, model.name).record_failure()
                     self.report.health[provider.name].record_failure(recovery.kind.value)
+                    # Record a sanitized attempt for the failure history. Only
+                    # normalized fields are kept - never keys, headers, or raw
+                    # bodies (ADR-035).
+                    exc_status = getattr(exc, "status_code", None)
+                    exc_code = getattr(exc, "error_code", None)
+                    self.report.attempts.append(
+                        AttemptRecord(
+                            stage=stage.name,
+                            provider=provider.name,
+                            model=model.name,
+                            failure_kind=recovery.kind.value,
+                            status_code=exc_status if isinstance(exc_status, int) else None,
+                            error_code=exc_code if isinstance(exc_code, str) else None,
+                            model_attempt_number=model_attempt_number,
+                            provider_call_number=self._stage_provider_calls,
+                        )
+                    )
                     self._report_line(
                         f"  {stage.name}: {provider.name}/{model.name} "
                         f"failed ({recovery.kind.value})"
@@ -465,6 +523,7 @@ class AdaptiveExecutor:
                                 f"{recovery_actions - 1} recovery actions. "
                                 f"Last failure on {provider.name}/{model.name}: "
                                 f"{recovery.kind.value}.",
+                                attempts=self._attempt_history(),
                             ) from exc
 
                     target = self._plan_recovery(
@@ -715,6 +774,7 @@ class AdaptiveExecutor:
             raise StageError(
                 stage_name,
                 f"All providers failed. Last error from {provider.name}/{model.name}: {exc}",
+                attempts=self._attempt_history(),
             ) from exc
         replacement_model = self._candidates(replacement_provider)[0]
         self.report.provider_switches.append((stage_name, provider.name, replacement_provider.name))

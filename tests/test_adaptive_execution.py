@@ -95,10 +95,10 @@ THIRD = ProviderInfo(name="anthropic", key_variables=("ANTHROPIC_API_KEY",))
 
 # Static registry models, first-in-priority:
 #   openrouter -> deepseek/deepseek-chat, openai/gpt-4o-mini, ...
-#   gemini     -> gemini-2.5-flash, gemini-2.5-pro
+#   gemini     -> gemini-flash-latest, gemini-flash-lite-latest, gemini-pro-latest
 OR_FIRST = "openrouter/deepseek/deepseek-chat"
 OR_SECOND = "openrouter/openai/gpt-4o-mini"
-GEM_FIRST = "gemini/gemini-2.5-flash"
+GEM_FIRST = "gemini/gemini-flash-latest"
 
 CREDIT_ERROR = "Error code: 402 - requires more credits, can only afford 15461"
 RATE_ERROR = "Error code: 429 - rate-limited upstream"

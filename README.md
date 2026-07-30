@@ -349,6 +349,35 @@ cap is account-wide across all `:free` models — when it is exhausted, QAOps
 disables OpenRouter for the rest of the run rather than wasting calls on more
 free models, while a transient per-model rate limit is retried with backoff.
 
+### Provider reliability
+
+QAOps chooses models by capability first and recovers from provider/model
+failures within bounded budgets. In brief:
+
+- **Capability-first eligibility.** A model must be suitable for the workload to
+  be a candidate; eligibility is decided before ranking, so a large context
+  window cannot rescue an unsuitable model. Cost and suitability are independent.
+- **Non-text models are rejected.** Discovered models that are not text-in /
+  text-out (e.g. image or music generators) cannot be selected for any pipeline
+  stage.
+- **Gemini dynamic discovery.** Gemini's available models are discovered live and
+  fall back to curated stable aliases (`gemini-flash-latest` and friends) when
+  discovery is unavailable, so a retired model ID never strands the provider.
+- **Structured failure classification.** Failures are classified by scope (using
+  HTTP status and provider error code, not just message text), so a transient
+  rate limit, an account-wide quota exhaustion, and an unavailable model are
+  handled differently.
+- **Bounded recovery.** Model and provider retries/switches always stay within
+  the configured budgets; discovery returning many models never causes a runaway.
+- **Sanitized attempt history.** A failed run reports an ordered `attempt_history`
+  of the providers/models tried and why each failed — normalized fields only,
+  never keys, headers, or raw bodies.
+
+The `ANY` / `FREE_FIRST` / `FREE_ONLY` strategies above are unchanged. See
+[ADR-035](docs/adr/035-provider-reliability.md) for the architectural detail.
+
+
+
 
 ### Adaptive-execution bounds
 

@@ -15,10 +15,23 @@ class ConfigurationError(QAOpsError):
 
 
 class StageError(QAOpsError):
-    """A pipeline stage failed to produce a valid output."""
+    """A pipeline stage failed to produce a valid output.
 
-    def __init__(self, stage_name: str, message: str) -> None:
+    May carry a sanitized ``attempts`` history (ADR-035): an ordered list of
+    dicts (stage/provider/model/failure_kind/status_code/error_code) describing
+    every failed provider/model attempt, so a caller can present the full
+    failover story rather than only the last error. Contains no secrets.
+    """
+
+    def __init__(
+        self,
+        stage_name: str,
+        message: str,
+        *,
+        attempts: list[dict[str, object]] | None = None,
+    ) -> None:
         self.stage_name = stage_name
+        self.attempts = attempts or []
         super().__init__(f"[{stage_name}] {message}")
 
 

@@ -77,6 +77,9 @@ class Run:
     execution: RunProgress = field(default_factory=RunProgress)
     failed_stage: str | None = None
     recovery_attempts: int = 0
+    # Sanitized ordered failure history (ADR-035): list of dicts with
+    # stage/provider/model/failure_kind/status_code/error_code.
+    attempt_history: list[dict[str, object]] = field(default_factory=list)
 
     @property
     def input_dir(self) -> Path:

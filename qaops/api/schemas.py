@@ -66,6 +66,20 @@ class ProgressSchema(BaseModel):
     message: str = ""
 
 
+class AttemptSchema(BaseModel):
+    """One sanitized failed attempt in the failure history (ADR-035).
+
+    Normalized fields only - no keys, headers, payloads, or raw exception text.
+    """
+
+    stage: str
+    provider: str
+    model: str
+    failure_kind: str
+    status_code: int | None = None
+    error_code: str | None = None
+
+
 class RunStatusResponse(BaseModel):
     run_id: str
     status: str
@@ -76,6 +90,9 @@ class RunStatusResponse(BaseModel):
     error: str | None = None
     failed_stage: str | None = None
     recovery_attempts: int | None = None
+    # Ordered sanitized history of failed attempts across providers/models, so a
+    # failed run shows the whole failover story, not only the last error.
+    attempt_history: list[AttemptSchema] | None = None
 
 
 class ArtifactSchema(BaseModel):

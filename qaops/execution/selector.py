@@ -36,6 +36,9 @@ class StageRequirements:
     """
 
     needs_structured_output: bool = True
+    # Every QAOps stage needs a text-in/text-out model; discovery can surface
+    # non-text models (music/image) that must be filtered out (ADR-035).
+    needs_text: bool = True
     min_context_chars: int = 0
     min_output_chars: int = 0
     # When True, only free-eligible candidates (ModelInfo.free) pass the filter.
@@ -60,6 +63,8 @@ def _passes_filter(
         return False, "excluded after a prior failure this run"
     if requirements.free_only and not model.free:
         return False, "not free-eligible under the free-only strategy"
+    if requirements.needs_text and not model.text_capable:
+        return False, "not a text-generation model (unsuitable for QA workloads)"
     if requirements.needs_structured_output and not model.structured_output:
         return False, "no structured-output support"
     if model.max_context_chars < requirements.min_context_chars:

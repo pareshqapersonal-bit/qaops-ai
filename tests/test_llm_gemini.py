@@ -143,7 +143,7 @@ class TestCreateClient:
         monkeypatch.setenv("GEMINI_API_KEY", "test-key-never-used")
         client = create_client(QAOpsSettings())
         assert isinstance(client, GeminiClient)
-        assert client.model == "gemini-2.5-flash"
+        assert client.model == "gemini-flash-latest"
 
     def test_gemini_model_setting_is_respected(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("QAOPS_PROVIDER", "gemini")

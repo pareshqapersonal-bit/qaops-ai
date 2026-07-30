@@ -25,6 +25,7 @@ from qaops.api.runs import RunStore
 from qaops.api.schemas import (
     ArtifactSchema,
     ArtifactsResponse,
+    AttemptSchema,
     HealthResponse,
     ModelSchema,
     ModelsResponse,
@@ -293,6 +294,23 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             error=run.error,
             failed_stage=run.failed_stage,
             recovery_attempts=run.recovery_attempts or None,
+            attempt_history=(
+                [
+                    AttemptSchema(
+                        stage=str(a.get("stage", "")),
+                        provider=str(a.get("provider", "")),
+                        model=str(a.get("model", "")),
+                        failure_kind=str(a.get("failure_kind", "")),
+                        status_code=(sc if isinstance((sc := a.get("status_code")), int) else None),
+                        error_code=(
+                            str(a.get("error_code")) if a.get("error_code") is not None else None
+                        ),
+                    )
+                    for a in run.attempt_history
+                ]
+                if run.attempt_history
+                else None
+            ),
         )
 
     @app.get("/api/v1/runs/{run_id}/artifacts", response_model=ArtifactsResponse, tags=["design"])

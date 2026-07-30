@@ -17,6 +17,7 @@ add moving parts for no benefit.
 
 import json
 import logging
+import os
 import time
 import urllib.error
 import urllib.request
@@ -40,6 +41,13 @@ class ModelInfo:
     max_context_tokens: int = 8_192
     max_output_tokens: int = 4_096
     structured_output: bool = True
+    # Whether the model accepts text input and produces text output - the
+    # workload every QAOps pipeline stage requires (ADR-035). Defaults True so
+    # curated entries and older callers are unaffected; discovery sets it False
+    # for non-text models (e.g. music/image generators) using provider modality
+    # metadata, so they are filtered out before ranking rather than selected on
+    # the strength of a large context window.
+    text_capable: bool = True
     local: bool = False
     free: bool = False
     priority: int = 100
@@ -76,26 +84,40 @@ _STATIC_MODELS: dict[str, tuple[ModelInfo, ...]] = {
             notes="Cheaper fallback",
         ),
     ),
-    # Gemini exposes BOTH free and paid candidates (ADR-034): the 2.5-flash
-    # tier has a genuine no-cost API free tier, while 2.5-pro moved behind
-    # billing. Marking flash free (and pro not) is why Gemini must not be
-    # classified wholesale as paid - eligibility is per-model.
+    # Gemini exposes BOTH free and paid candidates (ADR-034). These curated
+    # entries are only a FALLBACK for when live discovery (discover_gemini_models)
+    # is unavailable; discovery is preferred and normally supplies current IDs.
+    # We use Google's stable *-latest aliases rather than a pinned generation so
+    # the fallback does not itself become a stale single point of failure the way
+    # gemini-2.5-flash did in the Phase 20 production incident (ADR-035). The
+    # flash tier is free-eligible; the pro tier is paid.
     "gemini": (
         ModelInfo(
-            name="gemini-2.5-flash",
+            name="gemini-flash-latest",
             provider="gemini",
             max_context_tokens=1_000_000,
             max_output_tokens=8_192,
             free=True,
             priority=10,
+            notes="Stable alias to the current Gemini Flash GA model",
         ),
         ModelInfo(
-            name="gemini-2.5-pro",
+            name="gemini-flash-lite-latest",
+            provider="gemini",
+            max_context_tokens=1_000_000,
+            max_output_tokens=8_192,
+            free=True,
+            priority=20,
+            notes="Stable alias to the current Gemini Flash-Lite GA model",
+        ),
+        ModelInfo(
+            name="gemini-pro-latest",
             provider="gemini",
             max_context_tokens=1_000_000,
             max_output_tokens=16_384,
             free=False,
-            priority=20,
+            priority=30,
+            notes="Stable alias to the current Gemini Pro GA model (paid)",
         ),
     ),
     "openrouter": (
@@ -233,6 +255,7 @@ def discover_openrouter_models() -> list[ModelInfo]:
         if isinstance(pricing, dict):
             prompt_cost = pricing.get("prompt")
             free = str(prompt_cost) in {"0", "0.0", "-1"} or name.endswith(":free")
+        text_capable = _is_text_capable(entry.get("architecture"))
         models.append(
             ModelInfo(
                 name=name,
@@ -240,10 +263,39 @@ def discover_openrouter_models() -> list[ModelInfo]:
                 max_context_tokens=max_context,
                 max_output_tokens=max_output,
                 free=free,
+                text_capable=text_capable,
                 priority=100,
             )
         )
     return models
+
+
+def _is_text_capable(architecture: object) -> bool:
+    """Whether a discovered model does text-in / text-out, from OpenRouter's
+    ``architecture`` metadata (ADR-035).
+
+    OpenRouter exposes ``architecture.input_modalities`` and
+    ``output_modalities`` (e.g. ``["text"]`` vs ``["text","image"]`` or
+    ``["audio"]``). QAOps stages need a model that both accepts text and emits
+    text. When the metadata is present we require text on both sides; a purely
+    non-text generator (a music model such as the production incident's
+    ``google/lyria-*``, whose output modality is audio, not text) is rejected.
+    When the metadata is absent or malformed we default to True - a conservative
+    fallback that preserves prior behaviour for providers that do not expose
+    modality data, rather than silently excluding usable models.
+    """
+    if not isinstance(architecture, dict):
+        return True
+    inputs = architecture.get("input_modalities")
+    outputs = architecture.get("output_modalities")
+
+    def _has_text(value: object, *, default: bool) -> bool:
+        if not isinstance(value, list) or not value:
+            return default
+        return any(isinstance(item, str) and item.casefold() == "text" for item in value)
+
+    # Output must be text (a QA artifact is text/JSON); input must accept text.
+    return _has_text(inputs, default=True) and _has_text(outputs, default=True)
 
 
 def discover_ollama_models(host: str = "http://localhost:11434") -> list[ModelInfo]:
@@ -275,8 +327,82 @@ def discover_ollama_models(host: str = "http://localhost:11434") -> list[ModelIn
     return models
 
 
+# Model-name fragments that indicate a non-text Gemini model (image/audio/video
+# generators, embeddings, TTS). Discovery's supported_actions filter already
+# keeps only generateContent models; this is a conservative secondary guard for
+# multimodal generators that still advertise generateContent but do not emit
+# text usable as a QA artifact (ADR-035). Kept small and capability-oriented,
+# not an exhaustive blacklist.
+_GEMINI_NON_TEXT_MARKERS = ("image", "vision", "tts", "audio", "embedding", "aqa", "veo")
+
+
+def discover_gemini_models() -> list[ModelInfo]:
+    """Discover currently-available Gemini text models via the google-genai SDK.
+
+    Uses ``client.models.list()`` and keeps only models whose
+    ``supported_actions`` include ``generateContent`` (the documented way to find
+    text-generation models). Non-text generators (image/audio/embedding) are
+    excluded both by that filter and a conservative name guard, so a stale or
+    withdrawn static ID can never be the single point of failure (ADR-035).
+
+    Returns an empty list on any failure (missing key, SDK/import error, network
+    error, empty result), so the registry falls back to the curated static
+    table. Free-tier eligibility is decided per-model by the same flash-tier rule
+    used elsewhere (ADR-034): a flash / flash-lite model is free-eligible.
+    """
+    try:
+        from google import genai
+    except ImportError:
+        return []
+    key = ""
+    for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        key = os.environ.get(var, "").strip()
+        if key:
+            break
+    if not key:
+        return []
+    try:
+        client = genai.Client(api_key=key)
+        listed = list(client.models.list())
+    except Exception as exc:  # noqa: BLE001 - discovery must never raise
+        logger.info("model_discovery.gemini_failed error=%s", type(exc).__name__)
+        return []
+
+    models: list[ModelInfo] = []
+    for entry in listed:
+        raw_name = getattr(entry, "name", None)
+        if not isinstance(raw_name, str) or not raw_name:
+            continue
+        # API returns "models/gemini-x"; the client accepts the bare id too.
+        name = raw_name.split("/", 1)[1] if raw_name.startswith("models/") else raw_name
+        actions = getattr(entry, "supported_actions", None) or ()
+        if "generateContent" not in actions:
+            continue
+        lowered = name.casefold()
+        if any(marker in lowered for marker in _GEMINI_NON_TEXT_MARKERS):
+            continue
+        context = getattr(entry, "input_token_limit", None)
+        output = getattr(entry, "output_token_limit", None)
+        is_free = "flash" in lowered  # flash / flash-lite tiers are free-eligible
+        context_val = context if isinstance(context, int) and context else 1_000_000
+        output_val = output if isinstance(output, int) and output else 8_192
+        models.append(
+            ModelInfo(
+                name=name,
+                provider="gemini",
+                max_context_tokens=context_val,
+                max_output_tokens=output_val,
+                free=is_free,
+                text_capable=True,
+                priority=100,
+            )
+        )
+    return models
+
+
 # Providers with a discovery implementation. Others use the static table.
 _DISCOVERY: dict[str, object] = {
+    "gemini": discover_gemini_models,
     "openrouter": discover_openrouter_models,
     "ollama": discover_ollama_models,
 }

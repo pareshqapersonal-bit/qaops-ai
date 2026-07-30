@@ -8,11 +8,62 @@ matters (provider failure vs. unusable output).
 from qaops.core.errors import LLMError
 
 
-class LLMProviderError(LLMError):
-    """The provider API failed (auth, rate limit, network, server error)."""
+def extract_openai_error_fields(exc: BaseException) -> tuple[int | None, str | None]:
+    """Pull sanitized (status_code, error_code) from an OpenAI-SDK exception.
 
-    def __init__(self, provider: str, message: str) -> None:
+    The OpenAI SDK (used for Groq and OpenRouter) raises APIStatusError
+    subclasses carrying ``status_code`` and a structured ``body``/``code``. We
+    read only the HTTP status and the machine error code/type - never headers,
+    keys, or the full body - so the classifier can distinguish a 429 from a 402
+    or 404 even when the message text is opaque (ADR-035). Returns (None, None)
+    when the exception is not an OpenAI status error or exposes no such fields.
+    """
+    status_code: int | None = None
+    error_code: str | None = None
+    raw_status = getattr(exc, "status_code", None)
+    if isinstance(raw_status, int):
+        status_code = raw_status
+    # `code` is often set directly on the SDK exception; otherwise it lives in
+    # body["error"]["code"] or ["type"]. Read defensively and keep it short.
+    raw_code = getattr(exc, "code", None)
+    if isinstance(raw_code, str) and raw_code:
+        error_code = raw_code
+    else:
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict):
+            err = body.get("error")
+            if isinstance(err, dict):
+                candidate = err.get("code") or err.get("type")
+                if isinstance(candidate, str) and candidate:
+                    error_code = candidate
+    if isinstance(error_code, str) and len(error_code) > 64:
+        error_code = error_code[:64]
+    return status_code, error_code
+
+
+class LLMProviderError(LLMError):
+    """The provider API failed (auth, rate limit, network, server error).
+
+    Optionally carries sanitized structured fields from the provider SDK
+    exception (ADR-035): ``status_code`` (HTTP status) and ``error_code`` (the
+    provider's machine error code/type, e.g. ``rate_limit_exceeded``). These let
+    the failure classifier decide reliably even when the human message text does
+    not contain a recognizable substring - which is what produced the Phase 20
+    ``rate_limit -> unknown`` sequence. Only these normalized, non-sensitive
+    fields are kept; never headers, keys, or full request/response bodies.
+    """
+
+    def __init__(
+        self,
+        provider: str,
+        message: str,
+        *,
+        status_code: int | None = None,
+        error_code: str | None = None,
+    ) -> None:
         self.provider = provider
+        self.status_code = status_code
+        self.error_code = error_code
         super().__init__(f"[{provider}] {message}")
 
 

@@ -22,7 +22,7 @@ from openai import AsyncOpenAI, OpenAI, OpenAIError
 
 from qaops.core.errors import ConfigurationError
 from qaops.llm.deadline import HardDeadlineExceeded, run_with_deadline
-from qaops.llm.errors import LLMProviderError
+from qaops.llm.errors import LLMProviderError, extract_openai_error_fields
 from qaops.llm.models import LLMRequest, LLMResponse, LLMUsage
 from qaops.llm.timeouts import normalize_timeout_message
 
@@ -95,7 +95,13 @@ class GroqClient:
                     max_tokens=request.max_output_tokens,
                 )
             except OpenAIError as exc:
-                raise LLMProviderError("groq", normalize_timeout_message("groq", exc)) from exc
+                status_code, error_code = extract_openai_error_fields(exc)
+                raise LLMProviderError(
+                    "groq",
+                    normalize_timeout_message("groq", exc),
+                    status_code=status_code,
+                    error_code=error_code,
+                ) from exc
             return self._to_response(response)
 
         async def _call() -> LLMResponse:
@@ -115,7 +121,13 @@ class GroqClient:
         except HardDeadlineExceeded as exc:
             raise LLMProviderError("groq", str(exc)) from exc
         except OpenAIError as exc:
-            raise LLMProviderError("groq", normalize_timeout_message("groq", exc)) from exc
+            status_code, error_code = extract_openai_error_fields(exc)
+            raise LLMProviderError(
+                "groq",
+                normalize_timeout_message("groq", exc),
+                status_code=status_code,
+                error_code=error_code,
+            ) from exc
 
     def _to_response(self, response: object) -> LLMResponse:
         choice = response.choices[0] if response.choices else None  # type: ignore[attr-defined]

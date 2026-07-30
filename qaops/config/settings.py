@@ -30,7 +30,7 @@ class QAOpsSettings(BaseSettings):
         description="Model identifier for the anthropic provider.",
     )
     gemini_model: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-flash-latest",
         description="Model identifier used when provider is 'gemini'.",
     )
     openrouter_model: str = Field(

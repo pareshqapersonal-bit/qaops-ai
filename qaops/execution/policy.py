@@ -203,6 +203,86 @@ def classify_failure(message: str) -> FailureKind:
     return FailureKind.UNKNOWN
 
 
+# HTTP status -> failure kind, used only when message-text matching is
+# inconclusive. This is why the Phase 20 "rate_limit -> unknown" sequence could
+# happen: a 429 whose body text lacked a known substring fell through to
+# UNKNOWN. With the SDK's numeric status preserved (ADR-035), a 429 is reliably
+# a rate limit, a 402 insufficient credit, a 404 an unavailable model, a
+# 401/403 authentication. 5xx is a transient server error (retry as timeout-like
+# backoff). We deliberately do NOT map 429 to provider-wide exhaustion - scope
+# is decided separately below.
+_STATUS_TO_KIND: dict[int, FailureKind] = {
+    401: FailureKind.AUTHENTICATION,
+    403: FailureKind.AUTHENTICATION,
+    402: FailureKind.INSUFFICIENT_CREDIT,
+    404: FailureKind.MODEL_UNAVAILABLE,
+    408: FailureKind.TIMEOUT,
+    409: FailureKind.RATE_LIMIT,
+    429: FailureKind.RATE_LIMIT,
+    500: FailureKind.TIMEOUT,
+    502: FailureKind.TIMEOUT,
+    503: FailureKind.TIMEOUT,
+    504: FailureKind.TIMEOUT,
+}
+
+# Provider error codes/types that indicate ACCOUNT/PROJECT-wide exhaustion
+# rather than a transient or per-model limit. Matched case-insensitively against
+# the SDK's structured error code. Kept specific so an ordinary rate_limit code
+# is not mistaken for provider-wide exhaustion.
+_PROVIDER_WIDE_ERROR_CODES = (
+    "insufficient_quota",
+    "billing_hard_limit_reached",
+    "account_deactivated",
+)
+
+
+def classify_failure_fields(
+    message: str,
+    *,
+    status_code: int | None = None,
+    error_code: str | None = None,
+) -> FailureKind:
+    """Classify using sanitized structured fields first, then message text.
+
+    Order (most reliable first):
+    1. A provider-wide error code (insufficient_quota, billing hard limit) ->
+       PROVIDER_RATE_LIMIT so the provider is disabled for the run.
+    2. Message-text patterns - these carry the existing, well-tested distinctions
+       (e.g. OpenRouter's account-wide "free-models-per-day" wording, empty/
+       invalid output) that a bare status code cannot express.
+    3. HTTP status code - the reliable fallback when the text is opaque, which is
+       the Phase 20 fix.
+    Falls back to UNKNOWN only when none of the above resolves (ADR-035).
+    """
+    if error_code:
+        lowered_code = error_code.casefold()
+        if any(code in lowered_code for code in _PROVIDER_WIDE_ERROR_CODES):
+            return FailureKind.PROVIDER_RATE_LIMIT
+    text_kind = classify_failure(message)
+    if text_kind is not FailureKind.UNKNOWN:
+        return text_kind
+    if status_code is not None and status_code in _STATUS_TO_KIND:
+        return _STATUS_TO_KIND[status_code]
+    return FailureKind.UNKNOWN
+
+
 def recovery_for(message: str) -> Recovery:
     """Classify a failure and return the policy response."""
     return _POLICY[classify_failure(message)]
+
+
+def recovery_for_exception(exc: BaseException) -> Recovery:
+    """Classify an exception (using structured fields when present) and return
+    the policy response (ADR-035).
+
+    Reads sanitized ``status_code`` / ``error_code`` off LLMProviderError when
+    available; otherwise behaves exactly like ``recovery_for(str(exc))``.
+    """
+    status_code = getattr(exc, "status_code", None)
+    error_code = getattr(exc, "error_code", None)
+    kind = classify_failure_fields(
+        str(exc),
+        status_code=status_code if isinstance(status_code, int) else None,
+        error_code=error_code if isinstance(error_code, str) else None,
+    )
+    return _POLICY[kind]

@@ -104,14 +104,16 @@ def execute_run(
     try:
         outcome = service.run(input_path, run_settings, report=report, events=on_event)
     except StageError as exc:
-        # A stage exhausted its bounded recovery. Record which stage, for a
-        # useful failure representation (section 13).
+        # A stage exhausted its bounded recovery. Record which stage, and the
+        # sanitized attempt history so the API can show the full failover story
+        # rather than only the last error (ADR-035, section 13).
         logger.info("api.run_failed run=%s stage=%s", run_id, exc.stage_name)
         store.update(
             run_id,
             status=RunStatus.FAILED,
             error=_safe_error(exc),
             failed_stage=exc.stage_name,
+            attempt_history=list(exc.attempts),
         )
         return
     except QAOpsError as exc:
