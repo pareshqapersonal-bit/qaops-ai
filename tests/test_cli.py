@@ -66,6 +66,7 @@ TCS = json.dumps(
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "login works",
                 "expected_result": "dashboard",
@@ -75,6 +76,7 @@ TCS = json.dumps(
             },
             {
                 "scenario_id": "SC-002",
+                "condition_id": "COND-002",
                 "requirement_ids": ["REQ-002"],
                 "title": "lock at fifth attempt",
                 "expected_result": "locked",
@@ -86,7 +88,38 @@ TCS = json.dumps(
     }
 )
 
-FULL_SCRIPT = [ANALYZER, RULES, GAPS, SCEN, TCS]
+CONDS = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "valid login accepted",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
+            },
+            {
+                "scenario_id": "SC-002",
+                "requirement_ids": ["REQ-002"],
+                "business_rule_ids": [],
+                "category": "boundary",
+                "description": "lock at fifth attempt",
+                "rationale": "REQ-002",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {"attempts": "5"},
+                "gap_reference": "",
+            },
+        ]
+    }
+)
+
+FULL_SCRIPT = [ANALYZER, RULES, GAPS, SCEN, CONDS, TCS]
 
 runner = CliRunner()
 

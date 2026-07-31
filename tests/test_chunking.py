@@ -286,9 +286,28 @@ class TestPipelineIntegration:
             ),
             json.dumps(
                 {
+                    "conditions": [
+                        {
+                            "scenario_id": "SC-001",
+                            "requirement_ids": ["REQ-001"],
+                            "business_rule_ids": [],
+                            "category": "positive",
+                            "description": "valid login accepted",
+                            "rationale": "REQ-001",
+                            "source_basis": "explicit_requirement",
+                            "status": "resolved",
+                            "parameters": {},
+                            "gap_reference": "",
+                        }
+                    ]
+                }
+            ),
+            json.dumps(
+                {
                     "test_cases": [
                         {
                             "scenario_id": "SC-001",
+                            "condition_id": "COND-001",
                             "requirement_ids": ["REQ-001"],
                             "title": "login works",
                             "expected_result": "dashboard",

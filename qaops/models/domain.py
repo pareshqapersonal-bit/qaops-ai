@@ -12,10 +12,13 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from qaops.models.enums import (
+    ConditionCategory,
+    ConditionStatus,
     CoverageStatus,
     GapSeverity,
     Priority,
     ScenarioCategory,
+    SourceBasis,
     TestType,
 )
 
@@ -23,6 +26,7 @@ _ID_PATTERNS: dict[str, re.Pattern[str]] = {
     "REQ": re.compile(r"^REQ-\d{3,}$"),
     "BR": re.compile(r"^BR-\d{3,}$"),
     "SC": re.compile(r"^SC-\d{3,}$"),
+    "COND": re.compile(r"^COND-\d{3,}$"),
     "TC": re.compile(r"^TC-\d{3,}$"),
 }
 
@@ -150,6 +154,61 @@ class TestStep(_StrictModel):
     expected: str = ""
 
 
+class TestCondition(_StrictModel):
+    """A distinct testable proposition derived from evidence (ADR-036).
+
+    Sits between Scenario and TestCase: one scenario may yield one or many
+    conditions, and one condition may yield one or more test cases when data
+    variants, boundaries, or states genuinely require distinct execution.
+    Every condition cites evidence (its source_basis plus the referenced
+    requirement/rule/scenario IDs) so a reader can answer 'why does this test
+    exist?'. IDs are assigned by code (COND-*), never by the model.
+
+    When expected behaviour cannot be established from the evidence, the
+    condition is preserved with status=UNRESOLVED and linked to a gap
+    (gap_reference) instead of inventing an expected result.
+    """
+
+    # Domain class, not a pytest test class, despite the Test* name.
+    __test__ = False
+
+    id: NonEmptyStr
+    scenario_id: NonEmptyStr
+    requirement_ids: list[str] = Field(default_factory=list)
+    business_rule_ids: list[str] = Field(default_factory=list)
+    category: ConditionCategory
+    description: NonEmptyStr
+    rationale: str = ""
+    source_basis: SourceBasis
+    status: ConditionStatus = ConditionStatus.RESOLVED
+    # Dimension -> value used for combinatorial control and dedup signatures
+    # (e.g. {"quantity": "2", "eligibility": "eligible"}).
+    parameters: dict[str, str] = Field(default_factory=dict)
+    # When unresolved, the GAP-/question text this condition raised, so the
+    # ambiguity is traceable and not silently dropped.
+    gap_reference: str = ""
+
+    @field_validator("id")
+    @classmethod
+    def _check_id(cls, value: str) -> str:
+        return _validate_prefixed_id(value, "COND")
+
+    @field_validator("scenario_id")
+    @classmethod
+    def _check_scenario_id(cls, value: str) -> str:
+        return _validate_prefixed_id(value, "SC")
+
+    @field_validator("requirement_ids")
+    @classmethod
+    def _check_req_ids(cls, values: list[str]) -> list[str]:
+        return [_validate_prefixed_id(v, "REQ") for v in values]
+
+    @field_validator("business_rule_ids")
+    @classmethod
+    def _check_rule_ids(cls, values: list[str]) -> list[str]:
+        return [_validate_prefixed_id(v, "BR") for v in values]
+
+
 class TestCase(_StrictModel):
     """A production-quality manual test case."""
 
@@ -159,6 +218,13 @@ class TestCase(_StrictModel):
     id: NonEmptyStr
     scenario_id: NonEmptyStr
     requirement_ids: list[str] = Field(min_length=1)
+    # Upstream condition this case validates (ADR-036). Optional so artifacts
+    # generated before Phase 21 remain valid; new runs always populate it.
+    condition_id: str | None = None
+    # True when the case validates an UNRESOLVED condition: it exercises the
+    # documented steps but its expected behaviour is not established by
+    # evidence, so it must not be presented as a normal passing assertion.
+    provisional: bool = False
     module: str = ""
     feature: str = ""
     title: NonEmptyStr
@@ -227,6 +293,22 @@ class ScenarioCoverage(_StrictModel):
     test_case_ids: list[str] = Field(default_factory=list)
 
 
+class ConditionCoverage(_StrictModel):
+    """Coverage verdict for one test condition, computed by code (ADR-036).
+
+    COVERED when a RESOLVED condition has >=1 non-provisional test case;
+    UNCOVERED when a resolved condition has none. An UNRESOLVED condition is
+    reported with status UNCOVERED and unresolved=True so it is visible and
+    never silently treated as done.
+    """
+
+    condition_id: NonEmptyStr
+    scenario_id: NonEmptyStr
+    status: CoverageStatus
+    unresolved: bool = False
+    test_case_ids: list[str] = Field(default_factory=list)
+
+
 class DuplicatePair(_StrictModel):
     """Two test cases flagged as suspected near-duplicates, with the reason."""
 
@@ -263,6 +345,18 @@ class CoverageMetrics(_StrictModel):
     total_scenarios: int = 0
     covered_scenarios: int = 0
     total_test_cases: int = 0
+    # Phase 21 (ADR-036): condition-level depth. total_conditions counts all
+    # identified conditions; covered_conditions counts RESOLVED conditions that
+    # have >=1 non-provisional test case. Unresolved conditions are counted in
+    # the total but never as covered, so condition coverage cannot be inflated
+    # by ambiguity. Defaults keep pre-Phase-21 construction valid.
+    total_conditions: int = 0
+    covered_conditions: int = 0
+    unresolved_conditions: int = 0
+    # True when a configured expansion bound stopped generation while more
+    # valid candidates may remain: condition coverage is then NOT exhaustive
+    # and the UI/report must say so.
+    expansion_truncated: bool = False
 
     @staticmethod
     def _pct(covered: int, total: int) -> float:
@@ -279,6 +373,16 @@ class CoverageMetrics(_StrictModel):
     @property
     def scenario_coverage_pct(self) -> float:
         return self._pct(self.covered_scenarios, self.total_scenarios)
+
+    @property
+    def condition_coverage_pct(self) -> float:
+        """Fraction of identified conditions realized by a real test case.
+
+        Denominator is all identified conditions (resolved + unresolved), so
+        unresolved conditions lower this metric rather than being hidden. When
+        expansion was truncated this figure is a floor, not an exhaustive claim.
+        """
+        return self._pct(self.covered_conditions, self.total_conditions)
 
 
 class TraceabilityMatrix(_StrictModel):
@@ -300,6 +404,7 @@ class CoverageReport(_StrictModel):
     per_requirement: list[RequirementCoverage] = Field(default_factory=list)
     per_business_rule: list[BusinessRuleCoverage] = Field(default_factory=list)
     per_scenario: list[ScenarioCoverage] = Field(default_factory=list)
+    per_condition: list[ConditionCoverage] = Field(default_factory=list)
     traceability: TraceabilityMatrix = Field(default_factory=TraceabilityMatrix)
     metrics: CoverageMetrics = Field(default_factory=CoverageMetrics)
     duplicate_pairs: list[DuplicatePair] = Field(default_factory=list)
@@ -361,6 +466,21 @@ class ScenarioDesignResult(_StrictModel):
     scenarios: list[Scenario] = Field(default_factory=list)
 
 
+class ConditionDesignResult(_StrictModel):
+    """Scenario design plus derived test conditions (ADR-036).
+
+    The carrier between TestConditionAnalyzer and TestCaseGenerator. Composes
+    the scenario design so scenarios/analysis stay immutable, and adds the
+    conditions plus a flag recording whether an expansion bound truncated
+    condition generation.
+    """
+
+    scenario_design: ScenarioDesignResult
+    conditions: list[TestCondition] = Field(default_factory=list)
+    expansion_truncated: bool = False
+    truncation_note: str = ""
+
+
 class TestDesignResult(_StrictModel):
     """Aggregate output of the full Test Design pipeline run."""
 
@@ -372,5 +492,10 @@ class TestDesignResult(_StrictModel):
     business_rules: list[BusinessRule] = Field(default_factory=list)
     gap_report: GapReport = Field(default_factory=GapReport)
     scenarios: list[Scenario] = Field(default_factory=list)
+    conditions: list[TestCondition] = Field(default_factory=list)
     test_cases: list[TestCase] = Field(default_factory=list)
     coverage: CoverageReport = Field(default_factory=CoverageReport)
+    # Set when a Phase 21 expansion bound truncated generation, so coverage
+    # is reported as non-exhaustive.
+    expansion_truncated: bool = False
+    truncation_note: str = ""

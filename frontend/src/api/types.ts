@@ -54,9 +54,16 @@ export interface SummarySchema {
   requirements: number;
   business_rules: number;
   scenarios: number;
+  test_conditions?: number;
   test_cases: number;
   gaps: number;
   coverage_percent: number;
+  requirement_coverage_percent?: number;
+  business_rule_coverage_percent?: number;
+  scenario_coverage_percent?: number;
+  condition_coverage_percent?: number;
+  unresolved_conditions?: number;
+  expansion_truncated?: boolean;
 }
 
 export interface RunStatusResponse {
@@ -140,6 +147,7 @@ export interface TestStep {
 export interface TestCase {
   id: string;
   scenario_id: string;
+  condition_id?: string | null;
   requirement_ids: string[];
   module: string;
   feature: string;
@@ -151,7 +159,24 @@ export interface TestCase {
   expected_result: string;
   priority: Priority;
   test_type: TestType;
+  provisional?: boolean;
   tags: string[];
+}
+
+export type ConditionStatus = "resolved" | "unresolved";
+
+export interface TestCondition {
+  id: string;
+  scenario_id: string;
+  requirement_ids: string[];
+  business_rule_ids: string[];
+  category: string;
+  description: string;
+  rationale: string;
+  source_basis: string;
+  status: ConditionStatus;
+  parameters: Record<string, string>;
+  gap_reference: string;
 }
 
 export interface CoverageMetrics {
@@ -162,6 +187,10 @@ export interface CoverageMetrics {
   total_scenarios: number;
   covered_scenarios: number;
   total_test_cases: number;
+  total_conditions?: number;
+  covered_conditions?: number;
+  unresolved_conditions?: number;
+  expansion_truncated?: boolean;
 }
 
 export interface CoverageReport {
@@ -178,6 +207,9 @@ export interface DesignArtifact {
   business_rules: BusinessRule[];
   gap_report: GapReport;
   scenarios: Scenario[];
+  conditions?: TestCondition[];
   test_cases: TestCase[];
   coverage: CoverageReport;
+  expansion_truncated?: boolean;
+  truncation_note?: string;
 }

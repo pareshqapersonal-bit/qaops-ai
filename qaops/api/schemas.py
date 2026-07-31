@@ -42,9 +42,18 @@ class SummarySchema(BaseModel):
     requirements: int
     business_rules: int
     scenarios: int
+    test_conditions: int = 0
     test_cases: int
     gaps: int
+    # Backward-compatible headline (equals requirement coverage); not a claim of
+    # exhaustive testing. The per-dimension fields tell the fuller story (ADR-036).
     coverage_percent: float
+    requirement_coverage_percent: float = 0.0
+    business_rule_coverage_percent: float = 0.0
+    scenario_coverage_percent: float = 0.0
+    condition_coverage_percent: float = 0.0
+    unresolved_conditions: int = 0
+    expansion_truncated: bool = False
 
 
 class ProgressSchema(BaseModel):

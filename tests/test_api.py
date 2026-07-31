@@ -26,12 +26,31 @@ TEST_CASES = json.dumps(
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "login works",
                 "expected_result": "dashboard",
                 "steps": [{"action": "submit", "expected": "ok"}],
                 "priority": "high",
                 "test_type": "functional",
+            }
+        ]
+    }
+)
+CONDITIONS = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "valid login accepted",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
             }
         ]
     }
@@ -51,6 +70,7 @@ DOWNSTREAM = [
             ]
         }
     ),
+    CONDITIONS,
     TEST_CASES,
 ]
 
@@ -135,7 +155,7 @@ class TestModels:
 
 class TestDesignLifecycle:
     def test_valid_upload_returns_queued(self, client: TestClient) -> None:
-        with _mock_client([TEST_CASES]):
+        with _mock_client([CONDITIONS, TEST_CASES]):
             response = client.post(
                 "/api/v1/design", files={"file": ("s.csv", SCENARIO_CSV, "text/csv")}
             )
@@ -144,7 +164,7 @@ class TestDesignLifecycle:
         assert response.json()["run_id"].startswith("run_")
 
     def test_completed_lifecycle_with_summary(self, client: TestClient) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         status = client.get(f"/api/v1/runs/{run_id}").json()
         assert status["status"] == "completed"
         assert status["entry_point"] == "scenarios"
@@ -209,13 +229,13 @@ class TestRunLookup:
 
 class TestArtifacts:
     def test_lists_artifacts(self, client: TestClient) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         artifacts = client.get(f"/api/v1/runs/{run_id}/artifacts").json()["artifacts"]
         names = {a["name"] for a in artifacts}
         assert any(n.endswith(".json") for n in names)
 
     def test_downloads_an_artifact(self, client: TestClient) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         artifacts = client.get(f"/api/v1/runs/{run_id}/artifacts").json()["artifacts"]
         name = next(a["name"] for a in artifacts if a["name"].endswith(".json"))
         response = client.get(f"/api/v1/runs/{run_id}/artifacts/{name}")
@@ -224,11 +244,11 @@ class TestArtifacts:
         assert json.loads(response.content)
 
     def test_unknown_artifact_is_404(self, client: TestClient) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         assert client.get(f"/api/v1/runs/{run_id}/artifacts/nope.json").status_code == 404
 
     def test_path_traversal_is_rejected(self, client: TestClient) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         for attempt in (
             "..%2f..%2fetc%2fpasswd",
             "....//....//etc/passwd",
@@ -240,8 +260,8 @@ class TestArtifacts:
 
 class TestWorkspaceIsolation:
     def test_runs_have_separate_workspaces(self, client: TestClient) -> None:
-        first = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
-        second = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        first = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
+        second = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         assert first != second
         store = client.app.state.store  # type: ignore[attr-defined]
         run_a = store.get(first)
@@ -266,7 +286,7 @@ class TestAdaptivePathReuse:
             seen.append(input_path.name)
             return original(self, input_path, *args, **kwargs)  # type: ignore[arg-type]
 
-        with patch.object(DesignService, "run", spy), _mock_client([TEST_CASES]):
+        with patch.object(DesignService, "run", spy), _mock_client([CONDITIONS, TEST_CASES]):
             response = client.post(
                 "/api/v1/design", files={"file": ("s.csv", SCENARIO_CSV, "text/csv")}
             )
@@ -283,7 +303,7 @@ class TestRunProgress:
         # Progress is populated from executor events, which run when failover is
         # active (more than one provider available).
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-secret-key-1234567890")
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         status = client.get(f"/api/v1/runs/{run_id}").json()
         assert status["progress"] is not None
         assert status["progress"]["current_stage"]
@@ -309,7 +329,7 @@ class TestRunProgress:
         assert "recovery budget" in status["error"]
 
     def test_progress_contains_no_secret(self, client: TestClient) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         assert "sk-test-secret" not in client.get(f"/api/v1/runs/{run_id}").text
 
 
@@ -323,7 +343,7 @@ class TestInFlightProgress:
         # so progress is populated (Phase 16.1 gap closed).
         for var in ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
             monkeypatch.delenv(var, raising=False)
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         status = client.get(f"/api/v1/runs/{run_id}").json()
         assert status["status"] == "completed"
         assert status["progress"] is not None
@@ -332,7 +352,7 @@ class TestInFlightProgress:
     def test_progress_exposes_request_counters(
         self, monkeypatch: pytest.MonkeyPatch, client: TestClient
     ) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         progress = client.get(f"/api/v1/runs/{run_id}").json()["progress"]
         # The disambiguated counters are present in the schema (section 9, 10).
         assert "model_attempt_number" in progress
@@ -410,6 +430,6 @@ class TestInFlightProgress:
     def test_progress_message_has_no_secret(
         self, monkeypatch: pytest.MonkeyPatch, client: TestClient
     ) -> None:
-        run_id = _submit(client, "s.csv", SCENARIO_CSV, [TEST_CASES])
+        run_id = _submit(client, "s.csv", SCENARIO_CSV, [CONDITIONS, TEST_CASES])
         body = client.get(f"/api/v1/runs/{run_id}").text
         assert "sk-test-secret" not in body

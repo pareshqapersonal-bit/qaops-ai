@@ -10,7 +10,7 @@ function renderResults() {
 }
 
 describe("Results", () => {
-  it("shows a tablist with all six result categories", () => {
+  it("shows a tablist with all seven result categories", () => {
     renderResults();
     const tabs = screen.getAllByRole("tab");
     const labels = tabs.map((t) => t.textContent);
@@ -19,11 +19,34 @@ describe("Results", () => {
         "Requirements",
         "Business Rules",
         "Scenarios",
+        "Test Conditions",
         "Test Cases",
         "Gap Analysis",
         "Coverage",
       ]),
     );
+  });
+
+  it("renders test conditions with their evidence and status", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    await user.click(screen.getByRole("tab", { name: "Test Conditions" }));
+    const panel = screen.getByRole("tabpanel");
+    // COND-001 (resolved) and COND-002 (unresolved) are both shown.
+    expect(within(panel).getByText("COND-001")).toBeInTheDocument();
+    expect(within(panel).getByText("COND-002")).toBeInTheDocument();
+    // The unresolved condition is flagged.
+    expect(within(panel).getByText(/unresolved/i)).toBeInTheDocument();
+  });
+
+  it("shows condition coverage as its own dimension", async () => {
+    const user = userEvent.setup();
+    renderResults();
+    await user.click(screen.getByRole("tab", { name: "Coverage" }));
+    const panel = screen.getByRole("tabpanel");
+    expect(within(panel).getByText("Test conditions")).toBeInTheDocument();
+    // Honest labelling: coverage is not presented as exhaustive.
+    expect(within(panel).getByText(/not a claim that testing is exhaustive/i)).toBeInTheDocument();
   });
 
   it("defaults to the requirements view", () => {

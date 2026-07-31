@@ -16,6 +16,7 @@ have made impossible, so a hit is a defect report).
 from qaops.core.errors import StageError
 from qaops.models import (
     BusinessRuleCoverage,
+    ConditionCoverage,
     CoverageMetrics,
     CoverageReport,
     CoverageStatus,
@@ -28,6 +29,7 @@ from qaops.models import (
     TestDesignResult,
     TraceabilityMatrix,
 )
+from qaops.models.enums import ConditionStatus
 
 # Jaccard overlap on title tokens above which two same-scenario, same-requirement
 # test cases are flagged as suspected near-duplicates. Flags for human review
@@ -52,15 +54,19 @@ class CoverageValidator:
         invalid_references = self._find_invalid_references(data)
         req_coverage = self._requirement_coverage(data)
         scenario_coverage = self._scenario_coverage(data)
+        condition_coverage = self._condition_coverage(data)
         rule_coverage = self._business_rule_coverage(data, req_coverage)
         traceability = self._traceability(req_coverage)
         duplicates = self._duplicate_pairs(data)
-        metrics = self._metrics(data, req_coverage, rule_coverage, scenario_coverage)
+        metrics = self._metrics(
+            data, req_coverage, rule_coverage, scenario_coverage, condition_coverage
+        )
 
         report = CoverageReport(
             per_requirement=req_coverage,
             per_business_rule=rule_coverage,
             per_scenario=scenario_coverage,
+            per_condition=condition_coverage,
             traceability=traceability,
             metrics=metrics,
             duplicate_pairs=duplicates,
@@ -151,6 +157,41 @@ class CoverageValidator:
             for s in data.scenarios
         ]
 
+    def _condition_coverage(self, data: TestDesignResult) -> list[ConditionCoverage]:
+        """Coverage verdict per test condition (ADR-036).
+
+        A RESOLVED condition is COVERED when it has >=1 non-provisional test
+        case, else UNCOVERED. An UNRESOLVED condition is always UNCOVERED and
+        flagged, so ambiguity can never inflate coverage. Provisional cases (from
+        unresolved conditions) are listed but do not confer coverage.
+        """
+        non_provisional_by_condition: dict[str, list[str]] = {c.id: [] for c in data.conditions}
+        all_by_condition: dict[str, list[str]] = {c.id: [] for c in data.conditions}
+        for tc in data.test_cases:
+            if tc.condition_id in all_by_condition:
+                all_by_condition[tc.condition_id].append(tc.id)
+                if not tc.provisional:
+                    non_provisional_by_condition[tc.condition_id].append(tc.id)
+        result: list[ConditionCoverage] = []
+        for cond in data.conditions:
+            unresolved = cond.status is ConditionStatus.UNRESOLVED
+            has_real_case = bool(non_provisional_by_condition[cond.id])
+            status = (
+                CoverageStatus.COVERED
+                if has_real_case and not unresolved
+                else CoverageStatus.UNCOVERED
+            )
+            result.append(
+                ConditionCoverage(
+                    condition_id=cond.id,
+                    scenario_id=cond.scenario_id,
+                    status=status,
+                    unresolved=unresolved,
+                    test_case_ids=all_by_condition[cond.id],
+                )
+            )
+        return result
+
     def _business_rule_coverage(
         self, data: TestDesignResult, req_coverage: list[RequirementCoverage]
     ) -> list[BusinessRuleCoverage]:
@@ -213,6 +254,7 @@ class CoverageValidator:
         req_coverage: list[RequirementCoverage],
         rule_coverage: list[BusinessRuleCoverage],
         scenario_coverage: list[ScenarioCoverage],
+        condition_coverage: list[ConditionCoverage],
     ) -> CoverageMetrics:
         covered = {CoverageStatus.COVERED, CoverageStatus.PARTIAL}
         return CoverageMetrics(
@@ -227,4 +269,12 @@ class CoverageValidator:
                 1 for sc in scenario_coverage if sc.status is CoverageStatus.COVERED
             ),
             total_test_cases=len(data.test_cases),
+            total_conditions=len(condition_coverage),
+            covered_conditions=sum(
+                1 for cc in condition_coverage if cc.status is CoverageStatus.COVERED
+            ),
+            unresolved_conditions=sum(1 for cc in condition_coverage if cc.unresolved),
+            # An expansion bound that truncated generation means condition
+            # coverage is a floor, not an exhaustive claim (ADR-036).
+            expansion_truncated=data.expansion_truncated,
         )

@@ -36,10 +36,28 @@ qaops/
 
 ```
 RequirementInput → RequirementAnalyzer → GapAnalyzer → BusinessRuleExtractor
-    → ScenarioGenerator → TestCaseGenerator → CoverageValidator → Exporters
+    → ScenarioGenerator → TestConditionAnalyzer → TestCaseGenerator
+    → CoverageValidator → Exporters
 ```
 
 The Gap Report is a first-class output: before designing tests, the agent reports missing validations, undefined behaviors, and ambiguities — with the question a QA engineer would ask to close each gap.
+
+### Evidence-bound test conditions
+
+Between scenarios and test cases the agent derives **test conditions** — single
+testable propositions, each carrying its evidence (the requirement or rule it
+comes from and the test-design technique it applies: boundary, equivalence,
+negative, eligibility, state transition, rule combination, and so on). Test
+cases are then generated per condition, so one scenario can legitimately yield
+several cases (for example a stated "quantity ≥ 2" rule produces boundary cases
+at 1, 2, and 3) without inventing behavior the documents do not define. A
+condition whose expected behavior is not documented is kept, flagged as a gap,
+and its case is marked provisional rather than guessed. There is no fixed
+scenario-to-case ratio; counts follow the evidence, within configurable
+expansion bounds. When a bound truncates generation the result says so, and
+coverage is reported across requirement, business-rule, scenario, and condition
+dimensions — measuring how much of what was identified has a test, not claiming
+that testing is exhaustive.
 
 ## Usage
 

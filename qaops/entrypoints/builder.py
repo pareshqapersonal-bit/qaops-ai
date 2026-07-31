@@ -15,6 +15,7 @@ from qaops.core.pipeline import Pipeline
 from qaops.entrypoints.entry_point import EntryPoint
 from qaops.llm import LLMClient, PromptLoader
 from qaops.pipelines.chunking import ChunkedRequirementAnalyzer
+from qaops.pipelines.test_design.conditions import TestConditionAnalyzer
 from qaops.pipelines.test_design.coverage import CoverageValidator
 from qaops.pipelines.test_design.gaps import GapAnalyzer
 from qaops.pipelines.test_design.rules import BusinessRuleExtractor
@@ -34,15 +35,17 @@ def build_pipeline_for(
     rules = BusinessRuleExtractor(client, prompts, settings)
     gaps = GapAnalyzer(client, prompts, settings)
     scenarios = ScenarioGenerator(client, prompts, settings)
+    conditions = TestConditionAnalyzer(client, prompts, settings)
     cases = TestCaseGenerator(client, prompts, settings)
     coverage = CoverageValidator()
 
     if entry_point is EntryPoint.DOCUMENT:
-        return Pipeline([analyzer, rules, gaps, scenarios, cases, coverage])
+        return Pipeline([analyzer, rules, gaps, scenarios, conditions, cases, coverage])
     if entry_point is EntryPoint.REQUIREMENTS:
-        return Pipeline([rules, gaps, scenarios, cases, coverage])
-    # EntryPoint is exhaustive, so this is the SCENARIOS case.
-    return Pipeline([cases, coverage])
+        return Pipeline([rules, gaps, scenarios, conditions, cases, coverage])
+    # EntryPoint is exhaustive, so this is the SCENARIOS case: conditions are
+    # derived from the supplied scenarios, then cases from those conditions.
+    return Pipeline([conditions, cases, coverage])
 
 
 def stage_names_for(entry_point: EntryPoint) -> list[str]:
@@ -52,6 +55,7 @@ def stage_names_for(entry_point: EntryPoint) -> list[str]:
         "business_rule_extractor",
         "gap_analyzer",
         "scenario_generator",
+        "test_condition_analyzer",
         "test_case_generator",
         "coverage_validator",
     ]

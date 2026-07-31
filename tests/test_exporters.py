@@ -245,6 +245,7 @@ TEST_CASES_RESPONSE = json.dumps(
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "Primary case",
                 "expected_result": "works",
@@ -254,12 +255,45 @@ TEST_CASES_RESPONSE = json.dumps(
             },
             {
                 "scenario_id": "SC-002",
+                "condition_id": "COND-002",
                 "requirement_ids": ["REQ-002"],
                 "title": "Boundary case",
                 "expected_result": "handled",
                 "steps": [{"action": "push limit", "expected": "rejected"}],
                 "priority": "critical",
                 "test_type": "boundary",
+            },
+        ]
+    }
+)
+
+
+CONDITIONS_RESPONSE = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "Primary happy path accepted.",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
+            },
+            {
+                "scenario_id": "SC-002",
+                "requirement_ids": ["REQ-002"],
+                "business_rule_ids": [],
+                "category": "boundary",
+                "description": "Secondary boundary handled.",
+                "rationale": "REQ-002",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
             },
         ]
     }
@@ -290,6 +324,7 @@ class TestGoldenExampleExport:
                 RULES_RESPONSE,
                 GAPS_RESPONSE,
                 SCENARIOS_RESPONSE,
+                CONDITIONS_RESPONSE,
                 TEST_CASES_RESPONSE,
             ]
         )
@@ -297,7 +332,7 @@ class TestGoldenExampleExport:
             RequirementInput(text=text, source_name=example)
         )
         assert isinstance(result, TestDesignResult)
-        assert mock.call_count == 5  # exporters add no LLM call
+        assert mock.call_count == 6  # exporters add no LLM call; +1 for conditions
 
         stem = tmp_path / Path(example).stem
         json_path = JsonExporter().export(result, f"{stem}.json")

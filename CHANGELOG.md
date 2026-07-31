@@ -68,6 +68,50 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 21: Exhaustive, evidence-bound test design (test conditions)
+
+Replaces the de-facto one-case-per-scenario behaviour with technique-driven,
+evidence-bound expansion, without changing the provider/execution architecture
+(ADR-036).
+
+- **Added** a `TestCondition` domain concept between `Scenario` and `TestCase`,
+  making the design chain REQ -> BR -> SC -> COND -> TC. New enums
+  `ConditionCategory`, `SourceBasis`, `ConditionStatus`; `COND-*` IDs assigned by
+  code.
+- **Added** the `TestConditionAnalyzer` pipeline stage (scenarios ->
+  conditions -> cases -> coverage) with deterministic evidence validation: a
+  derived boundary/equivalence/combination/state condition must cite the rule or
+  requirement carrying its basis, or it is rejected. No invented behaviour.
+- **Changed** `TestCaseGenerator` to be condition-driven: one or more cases per
+  condition, only when data/boundary/state genuinely differ. No fixed
+  scenario:case or condition:case ratio.
+- **Added** deterministic canonical-signature de-duplication for conditions and
+  cases that preserves legitimate boundary variants (quantity 2 vs 3) while
+  collapsing restatements; duplicate cases are dropped, not raised.
+- **Added** ambiguity handling: an unresolved condition is preserved, linked to
+  a synthesized gap (deduplicated against existing gaps), and its case is marked
+  `provisional`; unresolved conditions never count as covered.
+- **Added** expansion bounds (`max_conditions_per_scenario`,
+  `max_cases_per_condition`, `max_total_test_cases`); hitting a bound sets
+  `expansion_truncated` and a visible note rather than silently dropping
+  candidates.
+- **Changed** coverage to multi-dimensional (requirement, business-rule,
+  scenario, condition) with `condition_coverage_pct`; the headline
+  `coverage_percent` is retained for compatibility and equals requirement
+  coverage. Coverage is labelled as non-exhaustive.
+- **Added** API fields (`test_conditions`, per-dimension coverage percentages,
+  `unresolved_conditions`, `expansion_truncated`) and a **Test Conditions** tab
+  plus multi-dimension coverage view in the frontend, with provisional and
+  truncation indicators.
+- **Added** `condition_id`/`provisional` columns to CSV export; JSON already
+  carries conditions.
+- **Compatibility**: `TestCase.condition_id`/`provisional` are optional
+  defaults; the SCENARIOS entry point still works (conditions derived from the
+  supplied scenarios); Phase 19/20 provider/execution architecture unchanged.
+- **Tests**: +15 (`tests/test_phase21_expansion.py`) plus condition-driven
+  updates across the suite. Backend 671 passed; frontend 52 passed.
+- **ADR-036**. Version stays `0.18.0-dev`.
+
 ### Phase 20: Provider reliability, model eligibility & failure observability
 
 Production-reliability fixes from a real failed smoke test, without redesigning

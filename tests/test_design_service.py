@@ -20,6 +20,7 @@ TEST_CASES = json.dumps(
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "t",
                 "expected_result": "r",
@@ -32,11 +33,31 @@ TEST_CASES = json.dumps(
 )
 
 
+CONDITIONS = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "primary condition",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
+            }
+        ]
+    }
+)
+
+
 @pytest.fixture(autouse=True)
 def _mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "qaops.services.design_service.create_client",
-        lambda settings: MockLLMClient([TEST_CASES]),
+        lambda settings: MockLLMClient([CONDITIONS, TEST_CASES]),
     )
 
 
@@ -112,7 +133,16 @@ class TestSummarize:
             "requirements",
             "business_rules",
             "scenarios",
+            "test_conditions",
             "test_cases",
             "gaps",
             "coverage_percent",
+            "requirement_coverage_percent",
+            "business_rule_coverage_percent",
+            "scenario_coverage_percent",
+            "condition_coverage_percent",
+            "unresolved_conditions",
+            "expansion_truncated",
         }
+        # Backward-compatible headline still equals requirement coverage.
+        assert summary["coverage_percent"] == summary["requirement_coverage_percent"]

@@ -151,6 +151,32 @@ class QAOpsSettings(BaseSettings):
         "budget is spent the stage fails cleanly instead of making more calls.",
     )
 
+    # Phase 21 test-design expansion bounds (ADR-036). Safety limits, never a
+    # coverage target: when a bound truncates generation the result is marked
+    # expansion_truncated and coverage is reported as non-exhaustive, rather
+    # than silently discarding candidates.
+    max_conditions_per_scenario: int = Field(
+        default=25,
+        ge=1,
+        le=500,
+        description="Maximum test conditions kept per scenario. A hit marks the "
+        "run expansion_truncated; it never inflates or pads conditions.",
+    )
+    max_cases_per_condition: int = Field(
+        default=15,
+        ge=1,
+        le=200,
+        description="Maximum test cases kept per condition (data/boundary/state "
+        "variants). A hit marks the run expansion_truncated.",
+    )
+    max_total_test_cases: int = Field(
+        default=2_000,
+        ge=1,
+        le=50_000,
+        description="Absolute ceiling on generated test cases across the run, a "
+        "backstop against runaway combinatorial expansion.",
+    )
+
     # Input guardrails (chunking is a future milestone; V1 fails fast)
     max_input_chars: int = Field(
         default=60_000,

@@ -50,5 +50,9 @@ def scenario_ids() -> IdGenerator:
     return IdGenerator("SC")
 
 
+def condition_ids() -> IdGenerator:
+    return IdGenerator("COND")
+
+
 def test_case_ids() -> IdGenerator:
     return IdGenerator("TC")

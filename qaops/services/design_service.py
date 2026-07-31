@@ -352,7 +352,17 @@ def summarize(result: TestDesignResult) -> dict[str, float | int]:
         "requirements": metrics.total_requirements,
         "business_rules": metrics.total_business_rules,
         "scenarios": metrics.total_scenarios,
+        "test_conditions": metrics.total_conditions,
         "test_cases": metrics.total_test_cases,
         "gaps": len(result.gap_report.gaps),
+        # Kept for backward compatibility: a single headline percent equal to
+        # requirement coverage. It is NOT a claim of exhaustive testing; the
+        # per-dimension figures below tell the fuller story (ADR-036).
         "coverage_percent": metrics.requirement_coverage_pct,
+        "requirement_coverage_percent": metrics.requirement_coverage_pct,
+        "business_rule_coverage_percent": metrics.business_rule_coverage_pct,
+        "scenario_coverage_percent": metrics.scenario_coverage_pct,
+        "condition_coverage_percent": metrics.condition_coverage_pct,
+        "unresolved_conditions": metrics.unresolved_conditions,
+        "expansion_truncated": int(metrics.expansion_truncated),
     }

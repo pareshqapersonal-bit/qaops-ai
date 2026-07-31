@@ -38,6 +38,7 @@ _TEST_CASES = json.dumps(
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "t",
                 "objective": "o",
@@ -45,6 +46,24 @@ _TEST_CASES = json.dumps(
                 "steps": [{"action": "a", "expected": "e"}],
                 "priority": "high",
                 "test_type": "functional",
+            }
+        ]
+    }
+)
+_CONDITIONS = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "primary condition",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
             }
         ]
     }
@@ -95,7 +114,7 @@ class TestCleanEnvironmentApi:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         client = self._client(tmp_path, monkeypatch)
-        with _mock_client([_TEST_CASES]):
+        with _mock_client([_CONDITIONS, _TEST_CASES]):
             response = client.post(
                 "/api/v1/design", files={"file": ("s.csv", _SCENARIO_CSV, "text/csv")}
             )
@@ -132,7 +151,7 @@ class TestCleanEnvironmentService:
         settings = QAOpsSettings(
             provider="mock", output_dir=tmp_path / "out", default_export_formats=["json"]
         )
-        with _mock_client([_TEST_CASES]):
+        with _mock_client([_CONDITIONS, _TEST_CASES]):
             outcome = DesignService().run(path, settings)
         assert outcome.artifacts
         assert all(a.path.exists() for a in outcome.artifacts)
@@ -143,7 +162,7 @@ class TestCleanEnvironmentService:
         settings = QAOpsSettings(
             provider="mock", output_dir=tmp_path / "out", default_export_formats=["json"]
         )
-        with _mock_client([_TEST_CASES]):
+        with _mock_client([_CONDITIONS, _TEST_CASES]):
             outcome = DesignService().run(path, settings)
         json_artifacts = [a for a in outcome.artifacts if a.path.suffix == ".json"]
         assert json_artifacts

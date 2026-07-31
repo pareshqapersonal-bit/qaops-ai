@@ -36,5 +36,6 @@
 | [033](033-production-deployment.md) | Single-service production deployment on Render (FastAPI serves the Vite build) | Accepted |
 | [034](034-free-provider-expansion.md) | Free-capacity expansion: Groq, free-execution strategy, OpenRouter provider-wide quota | Accepted |
 | [035](035-provider-reliability.md) | Provider reliability: capability-first model eligibility, Gemini discovery, structured failure classification, attempt-history observability | Accepted |
+| [036](036-exhaustive-test-design.md) | Exhaustive, evidence-bound test design via test conditions (REQ->BR->SC->COND->TC) | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

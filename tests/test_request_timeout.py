@@ -643,11 +643,30 @@ class TestCliCompatibility:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret-should-not-leak-123")
         for var in ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
             monkeypatch.delenv(var, raising=False)
+        test_conditions = json.dumps(
+            {
+                "conditions": [
+                    {
+                        "scenario_id": "SC-001",
+                        "requirement_ids": ["REQ-001"],
+                        "business_rule_ids": [],
+                        "category": "positive",
+                        "description": "primary condition",
+                        "rationale": "REQ-001",
+                        "source_basis": "explicit_requirement",
+                        "status": "resolved",
+                        "parameters": {},
+                        "gap_reference": "",
+                    }
+                ]
+            }
+        )
         test_cases = json.dumps(
             {
                 "test_cases": [
                     {
                         "scenario_id": "SC-001",
+                        "condition_id": "COND-001",
                         "requirement_ids": ["REQ-001"],
                         "title": "t",
                         "expected_result": "r",
@@ -663,7 +682,7 @@ class TestCliCompatibility:
         csv.write_text("title,category,requirement_ids\r\nvalid,positive,REQ-001\r\n", newline="")
         monkeypatch.setattr(
             "qaops.services.design_service.create_client",
-            lambda settings: MockLLMClient([test_cases]),
+            lambda settings: MockLLMClient([test_conditions, test_cases]),
         )
         result = CliRunner().invoke(
             appmod.app,

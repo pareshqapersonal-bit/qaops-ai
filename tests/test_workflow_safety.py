@@ -23,12 +23,31 @@ TEST_CASES = json.dumps(
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "login works",
                 "expected_result": "dashboard",
                 "steps": [{"action": "submit", "expected": "ok"}],
                 "priority": "high",
                 "test_type": "functional",
+            }
+        ]
+    }
+)
+CONDITIONS = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "primary condition",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
             }
         ]
     }
@@ -48,7 +67,8 @@ def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def mock_client(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "qaops.services.design_service.create_client", lambda settings: MockLLMClient([TEST_CASES])
+        "qaops.services.design_service.create_client",
+        lambda settings: MockLLMClient([CONDITIONS, TEST_CASES]),
     )
 
 
@@ -243,7 +263,8 @@ class TestFilesystemErrors:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         monkeypatch.setattr(
-            "qaops.services.design_service.create_client", lambda s: MockLLMClient([TEST_CASES])
+            "qaops.services.design_service.create_client",
+            lambda s: MockLLMClient([CONDITIONS, TEST_CASES]),
         )
         source = tmp_path / "scen.csv"
         source.write_text(SCENARIO_CSV, newline="")

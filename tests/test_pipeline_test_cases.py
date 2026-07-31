@@ -15,6 +15,7 @@ from qaops.config import QAOpsSettings
 from qaops.core.errors import StageError
 from qaops.llm import MockLLMClient, PromptLoader
 from qaops.models import (
+    ConditionDesignResult,
     Priority,
     ScenarioDesignResult,
     TestDesignResult,
@@ -32,6 +33,7 @@ from qaops.pipelines.test_design import (
     TestCaseGenerator,
     build_test_design_pipeline,
 )
+from qaops.pipelines.test_design.conditions import TestConditionAnalyzer
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 
@@ -94,15 +96,49 @@ SCENARIOS_RESPONSE = json.dumps(
 )
 
 
+CONDITIONS_RESPONSE = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "Valid registered credentials are accepted.",
+                "rationale": "REQ-001 states valid login succeeds.",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
+            },
+            {
+                "scenario_id": "SC-002",
+                "requirement_ids": ["REQ-002"],
+                "business_rule_ids": [],
+                "category": "boundary",
+                "description": "Account locks exactly on the fifth failed attempt.",
+                "rationale": "BR sets lockout at 5 attempts.",
+                "source_basis": "derived_boundary",
+                "status": "resolved",
+                "parameters": {"attempts": "5"},
+                "gap_reference": "",
+            },
+        ]
+    }
+)
+
+
 def _test_case(
     title: str,
     scenario_id: str = "SC-001",
+    condition_id: str = "COND-001",
     req_ids: list[str] | None = None,
     steps: list[dict[str, str]] | None = None,
     **overrides: object,
 ) -> dict[str, object]:
     base: dict[str, object] = {
         "scenario_id": scenario_id,
+        "condition_id": condition_id,
         "requirement_ids": req_ids or ["REQ-001"],
         "module": "Authentication",
         "feature": "Login",
@@ -132,6 +168,7 @@ TEST_CASES_RESPONSE = json.dumps(
             _test_case(
                 "Account locks on the fifth consecutive failed attempt",
                 scenario_id="SC-002",
+                condition_id="COND-002",
                 req_ids=["REQ-002"],
                 priority="critical",
                 test_type="boundary",
@@ -146,8 +183,10 @@ TEST_CASES_RESPONSE = json.dumps(
             _test_case(
                 "Locked account rejects correct credentials",
                 scenario_id="SC-002",
+                condition_id="COND-002",
                 req_ids=["REQ-002"],
                 test_type="negative",
+                expected_result="The locked account is refused despite correct credentials.",
             ),
         ]
     }
@@ -181,12 +220,21 @@ def designed(settings: QAOpsSettings, prompts: PromptLoader) -> ScenarioDesignRe
     return ScenarioGenerator(MockLLMClient([SCENARIOS_RESPONSE]), prompts, settings).run(enriched)
 
 
+@pytest.fixture
+def conditioned(
+    designed: ScenarioDesignResult, settings: QAOpsSettings, prompts: PromptLoader
+) -> ConditionDesignResult:
+    return TestConditionAnalyzer(MockLLMClient([CONDITIONS_RESPONSE]), prompts, settings).run(
+        designed
+    )
+
+
 class TestTestCaseGenerator:
     def test_assigns_tc_ids_and_maps_all_fields(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         mock = MockLLMClient([TEST_CASES_RESPONSE])
-        result = TestCaseGenerator(mock, prompts, settings).run(designed)
+        result = TestCaseGenerator(mock, prompts, settings).run(conditioned)
 
         assert isinstance(result, TestDesignResult)
         assert [t.id for t in result.test_cases] == ["TC-001", "TC-002", "TC-003"]
@@ -204,39 +252,39 @@ class TestTestCaseGenerator:
         assert second.test_type is TCType.BOUNDARY
 
     def test_step_numbers_assigned_by_code_from_order(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         mock = MockLLMClient([TEST_CASES_RESPONSE])
-        result = TestCaseGenerator(mock, prompts, settings).run(designed)
+        result = TestCaseGenerator(mock, prompts, settings).run(conditioned)
         for tc in result.test_cases:
             assert [s.number for s in tc.steps] == list(range(1, len(tc.steps) + 1))
         assert result.test_cases[1].steps[1].expected == "The lockout message is shown."
 
     def test_analysis_artifacts_pass_through_untouched(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         mock = MockLLMClient([TEST_CASES_RESPONSE])
-        result = TestCaseGenerator(mock, prompts, settings).run(designed)
-        assert result.requirements == designed.analysis.requirements
-        assert result.business_rules == designed.analysis.business_rules
-        assert result.gap_report == designed.analysis.gap_report
-        assert result.scenarios == designed.scenarios
+        result = TestCaseGenerator(mock, prompts, settings).run(conditioned)
+        assert result.requirements == conditioned.scenario_design.analysis.requirements
+        assert result.business_rules == conditioned.scenario_design.analysis.business_rules
+        assert result.gap_report == conditioned.scenario_design.analysis.gap_report
+        assert result.scenarios == conditioned.scenario_design.scenarios
         assert result.source_name == "login.md"
 
     def test_coverage_is_left_for_phase_5(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         mock = MockLLMClient([TEST_CASES_RESPONSE])
-        result = TestCaseGenerator(mock, prompts, settings).run(designed)
+        result = TestCaseGenerator(mock, prompts, settings).run(conditioned)
         assert result.coverage.per_requirement == []
         assert result.coverage.traceability.entries == {}
         assert result.coverage.suspected_duplicates == []
 
     def test_prompt_contains_scenarios_requirements_rules(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         mock = MockLLMClient([TEST_CASES_RESPONSE])
-        TestCaseGenerator(mock, prompts, settings).run(designed)
+        TestCaseGenerator(mock, prompts, settings).run(conditioned)
         content = mock.requests[0].messages[0].content
         assert "SC-001" in content and "SC-002" in content
         assert "REQ-001" in content
@@ -246,34 +294,65 @@ class TestTestCaseGenerator:
         assert "never invent IDs" in content
 
     def test_unknown_scenario_reference_is_a_stage_error(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         bad = json.dumps({"test_cases": [_test_case("x", scenario_id="SC-099")]})
         with pytest.raises(StageError, match="SC-099"):
-            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(designed)
+            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(conditioned)
+
+    def test_unknown_condition_reference_is_a_stage_error(
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
+    ) -> None:
+        bad = json.dumps({"test_cases": [_test_case("x", condition_id="COND-099")]})
+        with pytest.raises(StageError, match="COND-099"):
+            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(conditioned)
 
     def test_unknown_requirement_reference_is_a_stage_error(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         bad = json.dumps({"test_cases": [_test_case("x", req_ids=["REQ-777"])]})
         with pytest.raises(StageError, match="REQ-777"):
-            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(designed)
+            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(conditioned)
 
-    def test_requirement_not_linked_to_its_scenario_is_a_stage_error(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+    def test_case_scenario_must_match_its_condition_scenario(
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
-        # REQ-001 is a real requirement, but SC-002 is linked only to REQ-002.
-        # A global check would pass this; the per-scenario subset check (ADR-014)
-        # must reject the hallucinated cross-link.
+        # COND-001 belongs to SC-001; claiming SC-002 for it is a hallucinated
+        # cross-link the per-condition check (ADR-014/036) must reject.
         bad = json.dumps(
-            {"test_cases": [_test_case("cross-linked", scenario_id="SC-002", req_ids=["REQ-001"])]}
+            {
+                "test_cases": [
+                    _test_case("cross-linked", scenario_id="SC-002", condition_id="COND-001")
+                ]
+            }
         )
-        with pytest.raises(StageError, match="not linked to that scenario"):
-            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(designed)
+        with pytest.raises(StageError, match="belongs to scenario"):
+            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(conditioned)
 
-    def test_duplicates_within_a_scenario_are_a_stage_error(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+    def test_requirement_not_linked_to_its_condition_is_a_stage_error(
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
+        # COND-002 is linked only to REQ-002; REQ-001 is a hallucinated cross-link.
+        bad = json.dumps(
+            {
+                "test_cases": [
+                    _test_case(
+                        "cross-linked",
+                        scenario_id="SC-002",
+                        condition_id="COND-002",
+                        req_ids=["REQ-001"],
+                    )
+                ]
+            }
+        )
+        with pytest.raises(StageError, match="not linked to that condition"):
+            TestCaseGenerator(MockLLMClient([bad]), prompts, settings).run(conditioned)
+
+    def test_exact_duplicate_cases_are_dropped_not_raised(
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
+    ) -> None:
+        # Two cases with the same condition, data, and expected result collapse
+        # to one via the canonical signature (ADR-036) - dropped, not an error.
         dup = json.dumps(
             {
                 "test_cases": [
@@ -282,54 +361,69 @@ class TestTestCaseGenerator:
                 ]
             }
         )
-        with pytest.raises(StageError, match="duplicate test cases"):
-            TestCaseGenerator(MockLLMClient([dup]), prompts, settings).run(designed)
+        result = TestCaseGenerator(MockLLMClient([dup]), prompts, settings).run(conditioned)
+        assert len(result.test_cases) == 1
 
-    def test_same_title_across_scenarios_is_not_a_duplicate(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+    def test_boundary_variants_survive_deduplication(
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
-        ok = json.dumps(
+        # Same condition, different data values -> different signatures -> both kept.
+        variants = json.dumps(
             {
                 "test_cases": [
-                    _test_case("Verify behavior", scenario_id="SC-001"),
-                    _test_case("Verify behavior", scenario_id="SC-002", req_ids=["REQ-002"]),
+                    _test_case(
+                        "Attempts below threshold",
+                        scenario_id="SC-002",
+                        condition_id="COND-002",
+                        req_ids=["REQ-002"],
+                        test_data={"attempts": "4"},
+                        expected_result="Account remains unlocked at four attempts.",
+                    ),
+                    _test_case(
+                        "Attempts at threshold",
+                        scenario_id="SC-002",
+                        condition_id="COND-002",
+                        req_ids=["REQ-002"],
+                        test_data={"attempts": "5"},
+                        expected_result="Account locks at five attempts.",
+                    ),
                 ]
             }
         )
-        result = TestCaseGenerator(MockLLMClient([ok]), prompts, settings).run(designed)
+        result = TestCaseGenerator(MockLLMClient([variants]), prompts, settings).run(conditioned)
         assert len(result.test_cases) == 2
 
     def test_missing_mandatory_fields_trigger_repair_retry(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         # empty title and empty steps violate the wire schema
         bad = json.dumps({"test_cases": [_test_case("", steps=[])]})
         mock = MockLLMClient([bad, TEST_CASES_RESPONSE])
-        result = TestCaseGenerator(mock, prompts, settings).run(designed)
+        result = TestCaseGenerator(mock, prompts, settings).run(conditioned)
         assert mock.call_count == 2
         assert len(result.test_cases) == 3
 
     def test_invalid_priority_triggers_repair_retry(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         bad = json.dumps({"test_cases": [_test_case("x", priority="urgent")]})
         mock = MockLLMClient([bad, TEST_CASES_RESPONSE])
-        TestCaseGenerator(mock, prompts, settings).run(designed)
+        TestCaseGenerator(mock, prompts, settings).run(conditioned)
         assert mock.call_count == 2
 
     def test_zero_test_cases_is_a_stage_error(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
         with pytest.raises(StageError, match="zero test cases"):
             TestCaseGenerator(MockLLMClient(['{"test_cases": []}']), prompts, settings).run(
-                designed
+                conditioned
             )
 
-    def test_requires_prior_scenarios(
-        self, settings: QAOpsSettings, prompts: PromptLoader, designed: ScenarioDesignResult
+    def test_requires_prior_conditions(
+        self, settings: QAOpsSettings, prompts: PromptLoader, conditioned: ConditionDesignResult
     ) -> None:
-        empty = ScenarioDesignResult(analysis=designed.analysis, scenarios=[])
-        with pytest.raises(StageError, match="ScenarioGenerator first"):
+        empty = ConditionDesignResult(scenario_design=conditioned.scenario_design, conditions=[])
+        with pytest.raises(StageError, match="TestConditionAnalyzer first"):
             TestCaseGenerator(MockLLMClient([]), prompts, settings).run(empty)
 
 
@@ -347,6 +441,7 @@ class TestComposedTestDesignPipeline:
                 RULES_RESPONSE,
                 GAPS_RESPONSE,
                 SCENARIOS_RESPONSE,
+                CONDITIONS_RESPONSE,
                 TEST_CASES_RESPONSE,
             ]
         )
@@ -356,18 +451,21 @@ class TestComposedTestDesignPipeline:
             "business_rule_extractor",
             "gap_analyzer",
             "scenario_generator",
+            "test_condition_analyzer",
             "test_case_generator",
         ]
         result = pipeline.run(ReqInput(text=text, source_name=example))
         assert isinstance(result, TestDesignResult)
         assert result.source_name == example
-        assert mock.call_count == 5
+        assert mock.call_count == 6
 
         # full traceability closure: every TC -> a real SC and real REQs of this run
         known_scenarios = {s.id for s in result.scenarios}
         known_requirements = {r.id for r in result.requirements}
+        known_conditions = {c.id for c in result.conditions}
         for tc in result.test_cases:
             assert tc.scenario_id in known_scenarios
             assert set(tc.requirement_ids) <= known_requirements
+            assert tc.condition_id in known_conditions
             assert [s.number for s in tc.steps] == list(range(1, len(tc.steps) + 1))
         assert result.gap_report.has_blockers  # gap report survived to the end

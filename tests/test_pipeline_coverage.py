@@ -321,11 +321,42 @@ SCENARIOS_RESPONSE = json.dumps(
         ]
     }
 )
+CONDITIONS_RESPONSE = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "Primary happy path is accepted.",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
+            },
+            {
+                "scenario_id": "SC-002",
+                "requirement_ids": ["REQ-002"],
+                "business_rule_ids": [],
+                "category": "boundary",
+                "description": "Secondary boundary is handled.",
+                "rationale": "REQ-002",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
+            },
+        ]
+    }
+)
 TEST_CASES_RESPONSE = json.dumps(
     {
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "Primary case",
                 "expected_result": "works",
@@ -335,6 +366,7 @@ TEST_CASES_RESPONSE = json.dumps(
             },
             {
                 "scenario_id": "SC-002",
+                "condition_id": "COND-002",
                 "requirement_ids": ["REQ-002"],
                 "title": "Boundary case",
                 "expected_result": "handled",
@@ -371,6 +403,7 @@ class TestComposedFullPipeline:
                 RULES_RESPONSE,
                 GAPS_RESPONSE,
                 SCENARIOS_RESPONSE,
+                CONDITIONS_RESPONSE,
                 TEST_CASES_RESPONSE,
             ]
         )
@@ -379,7 +412,7 @@ class TestComposedFullPipeline:
 
         result = pipeline.run(RequirementInput(text=text, source_name=example))
         assert isinstance(result, TestDesignResult)
-        assert mock.call_count == 5  # validator adds no LLM call
+        assert mock.call_count == 6  # validator adds no LLM call; +1 for conditions
 
         report = result.coverage
         # Every requirement, rule, and scenario got a coverage verdict.

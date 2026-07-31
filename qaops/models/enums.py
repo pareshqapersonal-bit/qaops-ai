@@ -57,3 +57,57 @@ class CoverageStatus(StrEnum):
     COVERED = "covered"
     PARTIAL = "partial"
     UNCOVERED = "uncovered"
+
+
+class ConditionCategory(StrEnum):
+    """Test-design technique / focus a test condition applies (ADR-036).
+
+    Aligned with ScenarioCategory/TestType vocabulary so the three layers
+    share one taxonomy. A condition carries the technique that produced it,
+    which the coverage report groups by.
+    """
+
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+    BOUNDARY = "boundary"
+    EQUIVALENCE = "equivalence"
+    VALIDATION = "validation"
+    ELIGIBILITY = "eligibility"
+    STATE_TRANSITION = "state_transition"
+    ALTERNATE_FLOW = "alternate_flow"
+    ERROR_HANDLING = "error_handling"
+    BUSINESS_RULE = "business_rule"
+    DATA_VARIATION = "data_variation"
+    ROLE_VARIATION = "role_variation"
+    COMBINATION = "combination"
+
+
+class SourceBasis(StrEnum):
+    """The kind of evidence that justifies a test condition (ADR-036).
+
+    Every condition must cite one, so a reader can answer 'why does this
+    test exist?'. Derived bases (boundary/equivalence/state/combination)
+    require the underlying documented rule/limit to be present; otherwise
+    the condition is unsupported and must not be generated.
+    """
+
+    EXPLICIT_REQUIREMENT = "explicit_requirement"
+    EXPLICIT_RULE = "explicit_rule"
+    SCENARIO = "scenario"
+    DERIVED_BOUNDARY = "derived_boundary"
+    DERIVED_EQUIVALENCE = "derived_equivalence"
+    DOCUMENTED_COMBINATION = "documented_combination"
+    DOCUMENTED_STATE_TRANSITION = "documented_state_transition"
+
+
+class ConditionStatus(StrEnum):
+    """Whether a condition's expected behaviour is established (ADR-036).
+
+    RESOLVED conditions yield ordinary executable test cases. UNRESOLVED
+    conditions have meaningful test intent but undocumented expected
+    behaviour: they are preserved, linked to a gap, and never counted as
+    fully covered, and their test cases (if any) are provisional.
+    """
+
+    RESOLVED = "resolved"
+    UNRESOLVED = "unresolved"

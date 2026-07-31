@@ -75,7 +75,9 @@
       "test_type": "functional",
       "tags": [
         "smoke"
-      ]
+      ],
+      "condition_id": "COND-001",
+      "provisional": false
     }
   ],
   "coverage": {
@@ -92,10 +94,48 @@
       "covered_business_rules": 1,
       "total_scenarios": 1,
       "covered_scenarios": 1,
-      "total_test_cases": 1
+      "total_test_cases": 1,
+      "total_conditions": 2,
+      "covered_conditions": 1,
+      "unresolved_conditions": 1,
+      "expansion_truncated": false
     },
     "duplicate_pairs": [],
     "invalid_references": [],
     "suspected_duplicates": []
-  }
+  },
+  "conditions": [
+    {
+      "id": "COND-001",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "business_rule_ids": [],
+      "category": "positive",
+      "description": "Primary documented behaviour is accepted.",
+      "rationale": "REQ-001 states the behaviour.",
+      "source_basis": "explicit_requirement",
+      "status": "resolved",
+      "parameters": {},
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-002",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "business_rule_ids": [],
+      "category": "state_transition",
+      "description": "Behaviour on an undocumented edge is unspecified.",
+      "rationale": "Implied by the scenario.",
+      "source_basis": "scenario",
+      "status": "unresolved",
+      "parameters": {},
+      "gap_reference": "Expected behaviour on the undocumented edge is not specified."
+    }
+  ],
+  "expansion_truncated": false,
+  "truncation_note": ""
 }

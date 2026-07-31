@@ -22,12 +22,31 @@ TEST_CASES = json.dumps(
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "login works",
                 "expected_result": "dashboard",
                 "steps": [{"action": "submit", "expected": "ok"}],
                 "priority": "high",
                 "test_type": "functional",
+            }
+        ]
+    }
+)
+CONDITIONS = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "valid login accepted",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
             }
         ]
     }
@@ -47,6 +66,7 @@ DOWNSTREAM = [
             ]
         }
     ),
+    CONDITIONS,
     TEST_CASES,
 ]
 
@@ -237,7 +257,7 @@ class TestCliAutoDetection:
     def test_scenarios_xlsx_without_from(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        self._client(monkeypatch, [TEST_CASES])
+        self._client(monkeypatch, [CONDITIONS, TEST_CASES])
         path = tmp_path / "Scenarios.xlsx"
         make_xlsx(
             path, [["Scenario", "Type", "Requirement IDs"], ["Valid login", "positive", "REQ-001"]]
@@ -336,7 +356,8 @@ class TestPipelineBuilderReuse:
 
         monkeypatch.setattr("qaops.services.design_service.build_pipeline_for", spy)
         monkeypatch.setattr(
-            "qaops.services.design_service.create_client", lambda s: MockLLMClient([TEST_CASES])
+            "qaops.services.design_service.create_client",
+            lambda s: MockLLMClient([CONDITIONS, TEST_CASES]),
         )
         path = tmp_path / "Scenarios.xlsx"
         make_xlsx(path, [["title", "category"], ["Valid login", "positive"]])

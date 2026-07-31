@@ -47,11 +47,30 @@ SCENARIOS = json.dumps(
         ]
     }
 )
+CONDITIONS = json.dumps(
+    {
+        "conditions": [
+            {
+                "scenario_id": "SC-001",
+                "requirement_ids": ["REQ-001"],
+                "business_rule_ids": [],
+                "category": "positive",
+                "description": "valid login is accepted",
+                "rationale": "REQ-001",
+                "source_basis": "explicit_requirement",
+                "status": "resolved",
+                "parameters": {},
+                "gap_reference": "",
+            }
+        ]
+    }
+)
 TEST_CASES = json.dumps(
     {
         "test_cases": [
             {
                 "scenario_id": "SC-001",
+                "condition_id": "COND-001",
                 "requirement_ids": ["REQ-001"],
                 "title": "login works",
                 "expected_result": "dashboard",
@@ -225,7 +244,7 @@ class TestPipelineBuilder:
     ) -> None:
         pipeline = build_pipeline_for(EntryPoint.DOCUMENT, MockLLMClient([]), prompts, settings)
         assert pipeline.stage_names == stage_names_for(EntryPoint.DOCUMENT)
-        assert len(pipeline.stage_names) == 6
+        assert len(pipeline.stage_names) == 7
 
     def test_requirements_entry_skips_the_analyzer(
         self, settings: QAOpsSettings, prompts: PromptLoader
@@ -238,7 +257,11 @@ class TestPipelineBuilder:
         self, settings: QAOpsSettings, prompts: PromptLoader
     ) -> None:
         pipeline = build_pipeline_for(EntryPoint.SCENARIOS, MockLLMClient([]), prompts, settings)
-        assert pipeline.stage_names == ["test_case_generator", "coverage_validator"]
+        assert pipeline.stage_names == [
+            "test_condition_analyzer",
+            "test_case_generator",
+            "coverage_validator",
+        ]
 
 
 class TestEntryPointsEndToEnd:
@@ -248,13 +271,13 @@ class TestEntryPointsEndToEnd:
         path = tmp_path / "reqs.json"
         path.write_text(json.dumps([{"title": "Login", "description": "Users log in."}]))
         analysis = parse_requirements(path)
-        client = MockLLMClient([RULES, GAPS, SCENARIOS, TEST_CASES])
+        client = MockLLMClient([RULES, GAPS, SCENARIOS, CONDITIONS, TEST_CASES])
         result = build_pipeline_for(EntryPoint.REQUIREMENTS, client, prompts, settings).run(
             analysis
         )
         assert isinstance(result, TestDesignResult)
         assert len(result.test_cases) == 1
-        assert client.call_count == 4  # analyzer skipped
+        assert client.call_count == 5  # analyzer skipped
 
     def test_scenarios_entry_makes_a_single_llm_call(
         self, settings: QAOpsSettings, prompts: PromptLoader, tmp_path: Path
@@ -265,10 +288,10 @@ class TestEntryPointsEndToEnd:
             newline="",
         )
         design = parse_scenarios(path)
-        client = MockLLMClient([TEST_CASES])
+        client = MockLLMClient([CONDITIONS, TEST_CASES])
         result = build_pipeline_for(EntryPoint.SCENARIOS, client, prompts, settings).run(design)
         assert isinstance(result, TestDesignResult)
-        assert client.call_count == 1  # only test-case generation
+        assert client.call_count == 2  # condition analysis + test-case generation
         assert result.coverage.metrics.scenario_coverage_pct == 100.0
 
     def test_stages_are_unaware_of_the_route(
@@ -283,7 +306,7 @@ class TestEntryPointsEndToEnd:
         )
         design = parse_scenarios(path)
         result = build_pipeline_for(
-            EntryPoint.SCENARIOS, MockLLMClient([TEST_CASES]), prompts, settings
+            EntryPoint.SCENARIOS, MockLLMClient([CONDITIONS, TEST_CASES]), prompts, settings
         ).run(design)
         assert isinstance(result, TestDesignResult)
         assert result.test_cases[0].id == "TC-001"
@@ -300,7 +323,7 @@ class TestExportersAcrossEntryPoints:
         )
         design = parse_scenarios(path)
         result = build_pipeline_for(
-            EntryPoint.SCENARIOS, MockLLMClient([TEST_CASES]), prompts, settings
+            EntryPoint.SCENARIOS, MockLLMClient([CONDITIONS, TEST_CASES]), prompts, settings
         ).run(design)
         assert isinstance(result, TestDesignResult)
 
@@ -323,7 +346,7 @@ class TestCliRouting:
         return client
 
     def test_from_requirements(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        self._client(monkeypatch, [RULES, GAPS, SCENARIOS, TEST_CASES])
+        self._client(monkeypatch, [RULES, GAPS, SCENARIOS, CONDITIONS, TEST_CASES])
         path = tmp_path / "reqs.json"
         path.write_text(json.dumps([{"title": "Login", "description": "Users log in."}]))
         result = runner.invoke(
@@ -344,7 +367,7 @@ class TestCliRouting:
         assert "business_rule_extractor" in result.output
 
     def test_from_scenarios(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        self._client(monkeypatch, [TEST_CASES])
+        self._client(monkeypatch, [CONDITIONS, TEST_CASES])
         path = tmp_path / "scen.csv"
         path.write_text(
             "title,description,category,requirement_ids\r\nvalid login,d,positive,REQ-001\r\n",
@@ -355,7 +378,9 @@ class TestCliRouting:
             ["design", str(path), "--from", "scenarios", "-o", str(tmp_path / "o"), "-f", "json"],
         )
         assert result.exit_code == 0, result.output
-        assert "test_case_generator -> coverage_validator" in result.output
+        assert (
+            "test_condition_analyzer -> test_case_generator -> coverage_validator" in result.output
+        )
 
     def test_unknown_entry_point_is_friendly(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -376,7 +401,7 @@ class TestCliRouting:
         analyzer = json.dumps(
             {"requirements": [{"title": "Login", "description": "Users log in."}]}
         )
-        self._client(monkeypatch, [analyzer, RULES, GAPS, SCENARIOS, TEST_CASES])
+        self._client(monkeypatch, [analyzer, RULES, GAPS, SCENARIOS, CONDITIONS, TEST_CASES])
         path = tmp_path / "doc.md"
         path.write_text("# PRD\nUsers log in with email and password.")
         result = runner.invoke(

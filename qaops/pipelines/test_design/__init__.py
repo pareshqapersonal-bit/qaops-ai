@@ -10,6 +10,7 @@ from qaops.core.pipeline import Pipeline
 from qaops.llm import LLMClient, PromptLoader
 from qaops.pipelines.chunking import ChunkedRequirementAnalyzer
 from qaops.pipelines.test_design.analyzer import RequirementAnalyzer
+from qaops.pipelines.test_design.conditions import TestConditionAnalyzer
 from qaops.pipelines.test_design.coverage import CoverageValidator
 from qaops.pipelines.test_design.gaps import GapAnalyzer
 from qaops.pipelines.test_design.rules import BusinessRuleExtractor
@@ -23,6 +24,7 @@ __all__ = [
     "GapAnalyzer",
     "RequirementAnalyzer",
     "ScenarioGenerator",
+    "TestConditionAnalyzer",
     "TestCaseGenerator",
     "build_analysis_pipeline",
     "build_scenario_pipeline",
@@ -74,6 +76,7 @@ def build_test_design_pipeline(
             BusinessRuleExtractor(client, prompts, settings),
             GapAnalyzer(client, prompts, settings),
             ScenarioGenerator(client, prompts, settings),
+            TestConditionAnalyzer(client, prompts, settings),
             TestCaseGenerator(client, prompts, settings),
         ]
     )
@@ -95,6 +98,7 @@ def build_full_pipeline(
             BusinessRuleExtractor(client, prompts, settings),
             GapAnalyzer(client, prompts, settings),
             ScenarioGenerator(client, prompts, settings),
+            TestConditionAnalyzer(client, prompts, settings),
             TestCaseGenerator(client, prompts, settings),
             CoverageValidator(),
         ]

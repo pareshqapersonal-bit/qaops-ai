@@ -262,9 +262,18 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
                 requirements=int(s["requirements"]),
                 business_rules=int(s["business_rules"]),
                 scenarios=int(s["scenarios"]),
+                test_conditions=int(s.get("test_conditions", 0)),
                 test_cases=int(s["test_cases"]),
                 gaps=int(s["gaps"]),
                 coverage_percent=float(s["coverage_percent"]),
+                requirement_coverage_percent=float(
+                    s.get("requirement_coverage_percent", s["coverage_percent"])
+                ),
+                business_rule_coverage_percent=float(s.get("business_rule_coverage_percent", 0.0)),
+                scenario_coverage_percent=float(s.get("scenario_coverage_percent", 0.0)),
+                condition_coverage_percent=float(s.get("condition_coverage_percent", 0.0)),
+                unresolved_conditions=int(s.get("unresolved_conditions", 0)),
+                expansion_truncated=bool(s.get("expansion_truncated", 0)),
             )
         # Progress is meaningful while running and preserved after, so a
         # completed/failed run still shows the final stage state (section 13).
