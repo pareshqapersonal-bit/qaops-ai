@@ -68,6 +68,39 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 22: Condition expansion & ambiguity integrity
+
+Fixes a behavioural weakness found in production Phase 21 runs, where each
+scenario yielded exactly one condition and one case, and known gaps coexisted
+with 100% condition coverage. No new stage, no model/API/frontend redesign
+(ADR-037).
+
+- **Added** a deterministic gap -> unresolved-condition linkage: a condition is
+  forced `UNRESOLVED` (and linked to the gap) when a requirement-analysis gap
+  both targets a requirement the condition tests and matches the condition's
+  subject. Informational or non-matching gaps are left alone. A gap that blocks
+  testable behaviour can no longer coexist with 100% condition coverage.
+- **Added** the gap report to the `TestConditionAnalyzer` prompt inputs
+  (`gaps_json`), and rewrote the prompt for technique-driven derivation (list
+  each scenario's documented dimensions; worked decision-table example; forbids
+  fabricated expected results including "confirm with product owner").
+- **Added** a deterministic guard rejecting a `negative` condition whose
+  description states the criteria ARE met (the COND-006 contradiction class).
+- **Changed** the scenario prompt minimally: scenarios are behaviour-level, not
+  one-per-condition, so the analyzer has something to decompose. Broader
+  scenario-granularity tuning is deferred to Phase 22.1.
+- **Added** deterministic expansion diagnostics (counts only; no prompts,
+  secrets, or document content) via the existing logger.
+- **Preserved**: evidence validation, canonical-signature dedup with boundary
+  survival, expansion bounds and `expansion_truncated`, condition-coverage
+  arithmetic, all Phase 21 models/IDs/entry-points/API/exports/frontend, and the
+  provider/execution architecture.
+- **Tests**: +17 (`tests/test_phase22_condition_integrity.py`) with a BOGO/cart
+  fixture proving multi-condition derivation, gap->unresolved, gap reuse,
+  coverage drop below 100%, dedup/bounds, contradiction rejection, and
+  legitimate 1:1. Backend 688 passed. No frontend change.
+- **ADR-037**. Version stays `0.18.0-dev`.
+
 ### Phase 21: Exhaustive, evidence-bound test design (test conditions)
 
 Replaces the de-facto one-case-per-scenario behaviour with technique-driven,

@@ -19,7 +19,7 @@ Rules:
 - Ground every scenario in the requirements and business rules provided. Do not design scenarios for behavior the documents do not define.
 - Each scenario must reference one or more requirement_ids from the provided list. Use only the given IDs; never invent IDs. Do not create scenario IDs of any kind.
 - Base boundary_value and equivalence_partition scenarios on the numeric limits and input classes stated in the business rules.
-- One scenario per distinct condition. Titles must be specific and unique: name the condition being tested, not the technique.
+- Each scenario is a business/user behaviour, not a single test condition. A scenario groups the related situations that will later be decomposed into individual test conditions (positive, negative, boundary, combinations). Keep scenarios at the level of a documented behaviour or user flow — do not split every individual condition into its own scenario. Titles must be specific and unique: name the behaviour being verified.
 - Do NOT generate duplicate scenarios: no two scenarios may test the same condition, and no two scenarios may share the same title.
 - description states what the scenario verifies in one or two sentences. No test steps, no test data, no expected results - those are designed later.
 

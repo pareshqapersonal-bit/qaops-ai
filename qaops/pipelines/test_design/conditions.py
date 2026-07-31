@@ -25,6 +25,8 @@ expansion_truncated so coverage is reported as non-exhaustive rather than
 silently dropping candidates.
 """
 
+import logging
+
 from qaops.config import QAOpsSettings
 from qaops.core.errors import StageError
 from qaops.core.ids import condition_ids
@@ -35,11 +37,13 @@ from qaops.models import (
     ScenarioDesignResult,
     TestCondition,
 )
-from qaops.models.enums import ConditionStatus, GapSeverity, SourceBasis
+from qaops.models.enums import ConditionCategory, ConditionStatus, GapSeverity, SourceBasis
 from qaops.pipelines.test_design._support import requirements_as_prompt_json, run_structured_stage
 from qaops.pipelines.test_design.schemas import ExtractedTestCondition, TestConditionExtraction
 
 PROMPT_NAME = "test_condition_analyzer"
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_gap_text(text: str) -> str:
@@ -110,6 +114,7 @@ class TestConditionAnalyzer:
             scenarios_json=requirements_as_prompt_json(list(data.scenarios)),
             requirements_json=requirements_as_prompt_json(list(analysis.requirements)),
             rules_json=requirements_as_prompt_json(list(analysis.business_rules)),
+            gaps_json=requirements_as_prompt_json(list(analysis.gap_report.gaps)),
         )
         if not extraction.conditions:
             raise StageError(
@@ -143,15 +148,170 @@ class TestConditionAnalyzer:
             for wire in bounded
         ]
 
+        # Phase 22 (ADR-037): deterministic gap -> unresolved integration. A gap
+        # the requirement analysis already found can make a condition's expected
+        # behaviour unknowable; such conditions must be UNRESOLVED and linked to
+        # the gap, so a known ambiguity cannot coexist with 100% condition
+        # coverage. Runs BEFORE gap synthesis so we do not duplicate gaps.
+        conditions = self._apply_gap_linkage(conditions, analysis.gap_report.gaps)
+
         # Ambiguity handling (ADR-036): every unresolved condition becomes a gap
         # so the missing behaviour is tracked, without inventing an answer and
         # without duplicating an equivalent gap already found by GapAnalyzer.
         enriched_design = self._merge_unresolved_gaps(data, conditions)
+        self._log_expansion(data, conditions, truncated)
         return ConditionDesignResult(
             scenario_design=enriched_design,
             conditions=conditions,
             expansion_truncated=truncated,
             truncation_note=note,
+        )
+
+    def _apply_gap_linkage(
+        self, conditions: list[TestCondition], gaps: list[Gap]
+    ) -> list[TestCondition]:
+        """Force a condition UNRESOLVED when a gap blocks its expected behaviour.
+
+        Deterministic Step-4 integration (ADR-037). A gap affects a condition
+        only when BOTH are true:
+          * the gap is tied to a requirement the condition tests
+            (gap.requirement_id in condition.requirement_ids), and
+          * the gap concerns the SPECIFIC behaviour the condition checks, judged
+            by keyword overlap between the gap text and the condition's
+            description/parameters (so a gap about "exact tag copy" unresolves a
+            copy-validation condition but not a tag-visibility condition).
+        Informational gaps with no requirement link, or gaps whose subject does
+        not match the condition, are left alone - we do NOT convert every gap
+        into an unresolved condition. Conditions the model already marked
+        unresolved are left as-is.
+        """
+        if not gaps:
+            return conditions
+        # Index gaps by the requirement they constrain.
+        gaps_by_req: dict[str, list[Gap]] = {}
+        for gap in gaps:
+            if gap.requirement_id:
+                gaps_by_req.setdefault(gap.requirement_id, []).append(gap)
+        if not gaps_by_req:
+            return conditions
+
+        updated: list[TestCondition] = []
+        for cond in conditions:
+            if cond.status is ConditionStatus.UNRESOLVED:
+                updated.append(cond)
+                continue
+            blocking = self._blocking_gap(cond, gaps_by_req)
+            if blocking is None:
+                updated.append(cond)
+                continue
+            # This gap makes the expected behaviour unknowable -> unresolve it,
+            # preserving evidence and linking the gap. No fabricated answer.
+            updated.append(
+                cond.model_copy(
+                    update={
+                        "status": ConditionStatus.UNRESOLVED,
+                        "gap_reference": blocking.description,
+                    }
+                )
+            )
+        return updated
+
+    def _blocking_gap(self, cond: TestCondition, gaps_by_req: dict[str, list[Gap]]) -> Gap | None:
+        """Return a gap that blocks this condition's expected behaviour, or None.
+
+        Requires a requirement-link match AND subject-matter overlap. Subject
+        overlap is decided by shared significant tokens between the gap text and
+        the condition description/parameter values, which keeps the linkage
+        specific: a gap about undefined tag COPY unresolves a copy-checking
+        condition, not a mere visibility condition for the same requirement.
+        """
+        cond_tokens = self._significant_tokens(
+            cond.description + " " + " ".join(cond.parameters.values())
+        )
+        for req_id in cond.requirement_ids:
+            for gap in gaps_by_req.get(req_id, ()):  # only requirement-linked gaps
+                gap_tokens = self._significant_tokens(
+                    gap.description + " " + gap.suggested_question
+                )
+                overlap = cond_tokens & gap_tokens
+                if len(overlap) >= 2:
+                    return gap
+        return None
+
+    @staticmethod
+    def _significant_tokens(text: str) -> set[str]:
+        """Lowercase alphanumeric tokens >= 4 chars, minus common filler.
+
+        Small deterministic helper for subject-matter overlap; not NLP, just
+        enough to tell "tag copy/format/wording" apart from "tag visibility".
+        """
+        stop = {
+            "when",
+            "then",
+            "with",
+            "that",
+            "this",
+            "from",
+            "into",
+            "does",
+            "will",
+            "must",
+            "item",
+            "items",
+            "cart",
+            "user",
+            "system",
+            "shown",
+            "show",
+            "displayed",
+            "display",
+            "condition",
+            "behaviour",
+            "behavior",
+            "eligible",
+            "offer",
+        }
+        tokens = {
+            t
+            for t in "".join(c if c.isalnum() else " " for c in text.casefold()).split()
+            if len(t) >= 4
+        }
+        return tokens - stop
+
+    def _log_expansion(
+        self, data: ScenarioDesignResult, conditions: list[TestCondition], truncated: bool
+    ) -> None:
+        """Deterministic, non-sensitive expansion diagnostics (ADR-037 Step 13).
+
+        Logs only counts - never prompts, secrets, or document content - using
+        the existing module logger.
+        """
+        scenario_count = len(data.scenarios)
+        per_scenario: dict[str, int] = {}
+        resolved = unresolved = derived = explicit = 0
+        for c in conditions:
+            per_scenario[c.scenario_id] = per_scenario.get(c.scenario_id, 0) + 1
+            if c.status is ConditionStatus.UNRESOLVED:
+                unresolved += 1
+            else:
+                resolved += 1
+            if c.source_basis in _DERIVED_BASES:
+                derived += 1
+            else:
+                explicit += 1
+        distribution = sorted(per_scenario.values(), reverse=True)
+        logger.info(
+            "test_condition_analyzer.expansion scenarios=%d conditions=%d "
+            "resolved=%d unresolved=%d derived=%d explicit=%d "
+            "conditions_per_scenario=%s expansion_truncated=%s",
+            scenario_count,
+            len(conditions),
+            resolved,
+            unresolved,
+            derived,
+            explicit,
+            distribution,
+            truncated,
         )
 
     def _merge_unresolved_gaps(
@@ -281,6 +441,38 @@ class TestConditionAnalyzer:
                     f"Condition {wire.description!r} is marked unresolved but gives "
                     "no gap_reference describing the missing behaviour.",
                 )
+            self._check_category_consistency(wire)
+
+    def _check_category_consistency(self, wire: ExtractedTestCondition) -> None:
+        """Reject a NEGATIVE condition whose description asserts the criteria are
+        met (ADR-037 Step 11 #21).
+
+        This is the COND-006 class: a negative-category condition that reads
+        "system detects X as not eligible WHEN the criteria are met" is
+        internally contradictory. We only flag the clear, deterministic case: a
+        negative condition whose text contains an explicit "criteria/conditions
+        ... are met / when met" affirmation. We do not attempt fuzzy semantic
+        judgement - just the unambiguous self-contradiction.
+        """
+        if wire.category is not ConditionCategory.NEGATIVE:
+            return
+        text = " ".join(wire.description.casefold().split())
+        met_phrases = (
+            "criteria are met",
+            "conditions are met",
+            "criteria met",
+            "when met",
+            "when the criteria are met",
+            "when eligibility criteria are met",
+            "requirements are met",
+        )
+        if any(p in text for p in met_phrases):
+            raise StageError(
+                self.name,
+                f"Condition {wire.description!r} is categorised 'negative' but its "
+                "description states the criteria ARE met, which is contradictory. "
+                "A negative condition must describe criteria NOT being met.",
+            )
 
     # --- dedup & bounds ------------------------------------------------------
 

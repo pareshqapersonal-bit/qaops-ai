@@ -52,7 +52,11 @@ cases are then generated per condition, so one scenario can legitimately yield
 several cases (for example a stated "quantity ≥ 2" rule produces boundary cases
 at 1, 2, and 3) without inventing behavior the documents do not define. A
 condition whose expected behavior is not documented is kept, flagged as a gap,
-and its case is marked provisional rather than guessed. There is no fixed
+and its case is marked provisional rather than guessed. When a
+requirement-analysis gap blocks the behavior a condition would check (for
+example an undefined exact-copy string), that condition is marked unresolved and
+linked to the gap, so a known ambiguity cannot hide behind 100% condition
+coverage. There is no fixed
 scenario-to-case ratio; counts follow the evidence, within configurable
 expansion bounds. When a bound truncates generation the result says so, and
 coverage is reported across requirement, business-rule, scenario, and condition
