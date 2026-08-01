@@ -221,6 +221,13 @@ class TestCase(_StrictModel):
     # Upstream condition this case validates (ADR-036). Optional so artifacts
     # generated before Phase 21 remain valid; new runs always populate it.
     condition_id: str | None = None
+    # Phase 23 (ADR-038): the deterministic expansion-plan slot this case fills,
+    # and the QA technique that produced it (boundary, equivalence, ...). Both
+    # optional/defaulted so pre-Phase-23 artifacts stay valid and API/export/
+    # frontend consumers are unaffected. They make "why does this case exist?"
+    # answerable at the technique level.
+    slot_id: str | None = None
+    technique: str | None = None
     # True when the case validates an UNRESOLVED condition: it exercises the
     # documented steps but its expected behaviour is not established by
     # evidence, so it must not be presented as a normal passing assertion.

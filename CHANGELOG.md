@@ -68,6 +68,37 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 23: Technique-driven test-case expansion
+
+Breaks the condition->case 1:1 bottleneck by operationalising each condition's
+QA technique into concrete case variants, deterministically (ADR-038).
+
+- **Added** `ExpansionPlanner` (`qaops/pipelines/test_design/expansion.py`): a
+  pure, deterministic planner that turns each condition's `category` +
+  `parameters` into bounded `ExpansionSlot`s — the variants the technique
+  requires, from documented evidence only. Boundary -> below/at/above;
+  equivalence -> one per partition; state_transition -> one per transition;
+  data/role variation -> one per documented value; single-variant techniques and
+  unresolved conditions -> one slot. It never invents a number, partition, or
+  state; a single-dimension condition stays 1:1.
+- **Changed** `TestCaseGenerator` to plan first, then have the model author
+  exactly one case per slot (echoing `slot_id`). The count is now a
+  deterministic function of documented dimensions, not model whim.
+- **Added** optional `slot_id` and `technique` to `TestCase` for per-case
+  technique-level traceability (both defaulted; artifacts, API, exports, and
+  frontend unaffected).
+- **Rewrote** the test-case prompt to be plan-driven (one case per slot, use the
+  slot's `parameter_delta` as concrete test data).
+- **Preserved**: canonical-signature dedup (collapses identical slot output,
+  keeps variant data), bounds/`expansion_truncated`, evidence validation,
+  condition-coverage semantics, provider/execution architecture, and API/export
+  compatibility. Frontend types extended additively; no behavioural change.
+- **Tests**: +21 (`tests/test_phase23_expansion_techniques.py`) — planner unit
+  tests for every supported technique plus end-to-end proofs (boundary->3,
+  equivalence->N, unresolved->1 provisional, positive 1:1, cross-slot dedup,
+  coverage/traceability). Backend 709 passed; frontend 52 passed.
+- **ADR-038**. Version stays `0.18.0-dev`.
+
 ### Phase 22: Condition expansion & ambiguity integrity
 
 Fixes a behavioural weakness found in production Phase 21 runs, where each

@@ -28,9 +28,40 @@ from qaops.llm import LLMClient, PromptLoader
 from qaops.models import ConditionDesignResult, TestCase, TestCondition, TestDesignResult, TestStep
 from qaops.models.enums import ConditionStatus
 from qaops.pipelines.test_design._support import requirements_as_prompt_json, run_structured_stage
+from qaops.pipelines.test_design.expansion import ExpansionPlan, ExpansionPlanner
 from qaops.pipelines.test_design.schemas import ExtractedTestCase, TestCaseExtraction
 
 PROMPT_NAME = "test_case_generator"
+
+
+def _plan_as_prompt_json(plan: ExpansionPlan) -> str:
+    """Serialize the expansion plan for the prompt (ADR-038).
+
+    Emits, per condition, the slots the model must author - one case per slot,
+    echoing slot_id. The model never adds or removes slots; it fills them. Kept
+    to the fields the author needs: slot_id, technique, variant_label, reason,
+    and the concrete parameter_delta for the variant.
+    """
+    import json
+
+    payload = [
+        {
+            "condition_id": cp.condition_id,
+            "scenario_id": cp.scenario_id,
+            "slots": [
+                {
+                    "slot_id": s.slot_id,
+                    "technique": s.technique,
+                    "variant_label": s.variant_label,
+                    "reason": s.reason,
+                    "parameter_delta": s.parameter_delta,
+                }
+                for s in cp.slots
+            ],
+        }
+        for cp in plan.per_condition
+    ]
+    return json.dumps(payload)
 
 
 def _canonical_signature(wire: ExtractedTestCase) -> tuple[str, ...]:
@@ -76,12 +107,21 @@ class TestCaseGenerator:
                 self.name, "No test conditions present; run TestConditionAnalyzer first."
             )
 
+        conditions_by_id = {c.id: c for c in data.conditions}
+
+        # Phase 23 (ADR-038): deterministically plan the technique-appropriate
+        # variant slots for each condition BEFORE authoring. The planner decides
+        # HOW MANY cases and WHICH variants (from documented evidence only); the
+        # model only authors the content of each planned slot.
+        plan = ExpansionPlanner(self._settings.max_cases_per_condition).plan(list(data.conditions))
+
         extraction = run_structured_stage(
             client=self._client,
             prompts=self._prompts,
             settings=self._settings,
             prompt_name=PROMPT_NAME,
             schema=TestCaseExtraction,
+            expansion_plan_json=_plan_as_prompt_json(plan),
             conditions_json=requirements_as_prompt_json(list(data.conditions)),
             scenarios_json=requirements_as_prompt_json(list(scenario_design.scenarios)),
             requirements_json=requirements_as_prompt_json(list(analysis.requirements)),
@@ -94,7 +134,6 @@ class TestCaseGenerator:
                 "The prompt or the condition output needs review.",
             )
 
-        conditions_by_id = {c.id: c for c in data.conditions}
         self._validate_references(scenario_design, analysis, conditions_by_id, extraction)
 
         # Deterministic dedup, then bounds. Signature dedup preserves boundary
@@ -103,12 +142,19 @@ class TestCaseGenerator:
         deduped = self._dedup(extraction.test_cases)
         bounded, truncated_here, note = self._apply_bounds(deduped)
 
+        # Slot -> technique lookup for durable per-case traceability (ADR-038).
+        slot_technique = {
+            slot.slot_id: slot.technique for cp in plan.per_condition for slot in cp.slots
+        }
+
         ids = test_case_ids()
         test_cases = [
             TestCase(
                 id=ids.next(),
                 scenario_id=wire.scenario_id,
                 condition_id=wire.condition_id,
+                slot_id=wire.slot_id or None,
+                technique=slot_technique.get(wire.slot_id),
                 requirement_ids=wire.requirement_ids,
                 # A case inherits its condition's provisional status.
                 provisional=(

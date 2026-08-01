@@ -148,6 +148,8 @@ export interface TestCase {
   id: string;
   scenario_id: string;
   condition_id?: string | null;
+  slot_id?: string | null;
+  technique?: string | null;
   requirement_ids: string[];
   module: string;
   feature: string;

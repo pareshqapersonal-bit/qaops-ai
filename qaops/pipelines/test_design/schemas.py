@@ -150,6 +150,11 @@ class ExtractedTestCase(_WireModel):
 
     scenario_id: str = Field(min_length=1)
     condition_id: str = Field(min_length=1)
+    # Phase 23: the expansion-plan slot this case fills (ADR-038). The planner
+    # assigns slots deterministically; the model echoes the slot_id so its
+    # authored case maps back to the planned variant. Optional/defaulted so
+    # pre-Phase-23 fixtures and the unplanned path stay valid.
+    slot_id: str = ""
     requirement_ids: list[str] = Field(min_length=1)
     module: str = ""
     feature: str = ""

@@ -58,7 +58,11 @@ example an undefined exact-copy string), that condition is marked unresolved and
 linked to the gap, so a known ambiguity cannot hide behind 100% condition
 coverage. There is no fixed
 scenario-to-case ratio; counts follow the evidence, within configurable
-expansion bounds. When a bound truncates generation the result says so, and
+expansion bounds. Each condition's QA technique then drives how many cases it
+produces: a boundary condition with a documented threshold yields below/at/above
+cases, an equivalence condition yields one case per documented partition, and a
+single-dimension condition yields one — all decided deterministically from the
+documented values, never invented. When a bound truncates generation the result says so, and
 coverage is reported across requirement, business-rule, scenario, and condition
 dimensions — measuring how much of what was identified has a test, not claiming
 that testing is exhaustive.
