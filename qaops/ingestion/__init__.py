@@ -6,7 +6,7 @@ and an extension registry (ADR-018). `load_document(path)` is the single
 entry point; everything downstream receives normalized text and never
 learns the source format.
 
-Implemented: text/markdown, PDF. Registered stubs: DOCX, HTML.
+Implemented: text/markdown, PDF, DOCX. Registered stub: HTML.
 """
 
 from qaops.ingestion.docx_loader import DocxLoader

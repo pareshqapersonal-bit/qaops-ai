@@ -138,11 +138,6 @@ class TestPdfLoader:
 
 
 class TestStubLoaders:
-    def test_docx_is_registered_but_not_implemented(self) -> None:
-        assert ".docx" in DocxLoader().supported_extensions
-        with pytest.raises(DocumentLoadError, match="not yet implemented"):
-            DocxLoader().load(Path("whatever.docx"))
-
     def test_html_is_registered_but_not_implemented(self) -> None:
         assert ".html" in HtmlLoader().supported_extensions
         with pytest.raises(DocumentLoadError, match="not yet implemented"):
@@ -184,7 +179,7 @@ class TestRegistryDispatch:
         assert excinfo.value.install_hint == ""  # rtf isn't a known-but-extra format
 
     def test_stub_format_dispatches_to_not_implemented(self, tmp_path: Path) -> None:
-        f = tmp_path / "doc.docx"
-        f.write_bytes(b"PK\x03\x04dummy")  # docx magic, but stub won't parse it
+        f = tmp_path / "doc.html"
+        f.write_text("<h1>hi</h1>", encoding="utf-8")
         with pytest.raises(DocumentLoadError, match="not yet implemented"):
             load_document(f)

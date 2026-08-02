@@ -39,5 +39,6 @@
 | [036](036-exhaustive-test-design.md) | Exhaustive, evidence-bound test design via test conditions (REQ->BR->SC->COND->TC) | Accepted |
 | [037](037-condition-expansion-and-ambiguity-integrity.md) | Condition expansion & ambiguity integrity: technique-driven derivation, deterministic gap->unresolved linkage | Accepted |
 | [038](038-technique-driven-expansion.md) | Technique-driven test-case expansion: deterministic ExpansionPlanner turns each condition's technique into bounded variant slots | Accepted |
+| [039](039-docx-ingestion.md) | DOCX ingestion via the existing loader abstraction (python-docx, [docx] extra) | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

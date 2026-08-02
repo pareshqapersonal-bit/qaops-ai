@@ -38,6 +38,7 @@ REGISTRY: dict[str, DocumentLoader] = {
 # Extensions whose loaders need an optional extra, for the install hint.
 _INSTALL_HINTS: dict[str, str] = {
     ".pdf": "Install PDF support with: pip install 'qaops-ai[pdf]'.",
+    ".docx": "Install DOCX support with: pip install 'qaops-ai[docx]'.",
 }
 
 

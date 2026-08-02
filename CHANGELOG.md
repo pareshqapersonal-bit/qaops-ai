@@ -68,6 +68,43 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 24: Multi-format document ingestion (DOCX)
+
+Adds Microsoft Word `.docx` as a first-class requirement-document input
+alongside PDF, text, and Markdown. Input-layer only: the pipeline
+(RequirementAnalyzer through Coverage) and provider/execution architecture are
+untouched (ADR-039).
+
+- **Implemented** `DocxLoader` (was a registered placeholder) using python-docx:
+  walks the document's paragraph/table block stream in order and renders
+  Markdown-shaped normalized text — title/headings as ATX headings, numbered
+  lists as `1. `, bullets as `- `, tables flattened to pipe-delimited rows with
+  a header separator. Output passes the shared `normalize_text` contract, so
+  downstream stages receive the same normalized-text model as any other format
+  and never learn the source.
+- **Added** the `[docx]` optional extra (`python-docx>=1.1`) and its install
+  hint; a missing install raises a friendly message, as with `[pdf]`.
+- **Rejection**: `.doc`, `.ppt`, `.xls`, `.zip`, and images remain unregistered
+  and produce a friendly unsupported-format error; a non-package file reaching
+  the loader raises a clear "not a valid Word .docx" error. Text/Markdown remain
+  supported (not rejected) to preserve backward compatibility.
+- **Empty / malformed** documents raise `DocumentLoadError` with clear causes,
+  mirroring the PDF loader.
+- **UI**: already labelled "Upload a requirement document" and already accepted
+  `.docx` with meaningful validation — no change required.
+- **No pipeline, coverage, API, or provider change.** The architecture Phase 24
+  specified (loader protocol + registry factory + shared normalized model)
+  already existed from ADR-018; this phase filled in the DOCX loader.
+- **Tests**: +17 (`tests/test_phase24_docx_ingestion.py`) — headings,
+  paragraphs, numbered/bullet lists, tables, document order, mixed formatting,
+  empty, malformed, registry dispatch, install hint, and a DOCX-vs-Markdown
+  normalization-equivalence regression: the same content as DOCX and as Markdown
+  produces byte-identical normalized text, so ingestion guarantees identical
+  pipeline input regardless of source format (downstream artifact equivalence
+  then depends on provider/model determinism, not on ingestion). Existing
+  ingestion stub tests updated. Backend 724 passed; frontend 52 passed.
+- **ADR-039**. Version stays `0.18.0-dev`.
+
 ### Phase 23: Technique-driven test-case expansion
 
 Breaks the condition->case 1:1 bottleneck by operationalising each condition's
