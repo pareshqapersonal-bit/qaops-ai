@@ -124,6 +124,29 @@ export function getArtifacts(
   );
 }
 
+// Resume a resumable run from its last checkpoint (ADR-040). Completed stages
+// are reused; only the remaining stages run.
+export function resumeRun(
+  runId: string,
+  opts?: RequestOptions,
+): Promise<RunCreatedResponse> {
+  return request<RunCreatedResponse>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/resume`,
+    { method: "POST", signal: opts?.signal },
+  );
+}
+
+// Request cooperative cancellation; the run stops at the next stage boundary.
+export function cancelRun(
+  runId: string,
+  opts?: RequestOptions,
+): Promise<RunStatusResponse> {
+  return request<RunStatusResponse>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/cancel`,
+    { method: "POST", signal: opts?.signal },
+  );
+}
+
 // A plain URL for a browser download / anchor href. The backend enforces
 // path safety and authorization; the client only builds the address.
 export function artifactDownloadUrl(runId: string, name: string): string {

@@ -13,6 +13,8 @@ API never returns tracebacks. Provider-specific secret redaction happens in
 
 import logging
 import re
+from datetime import UTC, datetime
+from pathlib import Path
 
 from qaops.api.runs import ArtifactMeta, RunProgress, RunStatus, RunStore
 from qaops.config import QAOpsSettings
@@ -40,6 +42,98 @@ def _safe_error(exc: Exception) -> str:
     return message
 
 
+def _collect_partial_artifacts(output_dir: Path) -> list[ArtifactMeta]:
+    """Gather report files a failed run left in its workspace (ADR-040).
+
+    The service writes partial CSV-bundle and partial JSON files on failure;
+    this discovers them so the API can offer them for download. The checkpoint
+    directory itself is internal and never listed.
+    """
+    artifacts: list[ArtifactMeta] = []
+    if not output_dir.exists():
+        return artifacts
+    for path in sorted(output_dir.iterdir()):
+        if path.is_dir():
+            continue
+        suffix = path.suffix.lower()
+        if suffix == ".csv":
+            fmt = "CSV (partial)"
+        elif suffix == ".json":
+            fmt = "JSON (partial)"
+        elif suffix == ".md":
+            fmt = "Markdown (partial)"
+        else:
+            continue
+        artifacts.append(ArtifactMeta(name=path.name, format=fmt, path=path))
+    return artifacts
+
+
+def resume_run(
+    store: RunStore,
+    run_id: str,
+    settings: QAOpsSettings,
+    service: DesignService,
+) -> None:
+    """Resume a resumable run from its last checkpoint (ADR-040).
+
+    Reuses completed stages via the workspace checkpoints and runs only the
+    remaining stages. On success the run becomes COMPLETED with full artifacts;
+    on another failure it stays PARTIALLY_COMPLETED/resumable.
+    """
+    run = store.get(run_id)
+    if run is None:  # pragma: no cover
+        return
+    input_files = list(run.input_dir.iterdir())
+    if not input_files:  # pragma: no cover
+        store.update(run_id, status=RunStatus.FAILED, error="No input file for resume.")
+        return
+    input_path = input_files[0]
+
+    store.update(run_id, status=RunStatus.RUNNING, resumable=False, cancel_requested=False)
+    run_settings = settings.model_copy(update={"output_dir": run.output_dir})
+
+    def report(line: str) -> None:
+        store.append_progress(run_id, line)
+
+    try:
+        outcome = service.resume(input_path, run_settings, report=report)
+    except StageError as exc:
+        logger.info("api.resume_failed run=%s stage=%s", run_id, exc.stage_name)
+        partial = _collect_partial_artifacts(run_settings.output_dir)
+        status = RunStatus.PARTIALLY_COMPLETED if partial else RunStatus.FAILED
+        store.update(
+            run_id,
+            status=status,
+            error=_safe_error(exc),
+            failed_stage=exc.stage_name,
+            attempt_history=list(exc.attempts),
+            artifacts=partial,
+            resumable=True,
+            finished_at=datetime.now(UTC),
+        )
+        return
+    except QAOpsError as exc:
+        store.update(run_id, status=RunStatus.FAILED, error=_safe_error(exc))
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api.resume_crashed run=%s", run_id)
+        store.update(run_id, status=RunStatus.FAILED, error=_safe_error(exc))
+        return
+
+    store.update(
+        run_id,
+        status=RunStatus.COMPLETED,
+        entry_point=outcome.entry_point.value,
+        detection=(outcome.detection.description if outcome.detection else None),
+        summary=summarize(outcome.result),
+        resumable=False,
+        finished_at=datetime.now(UTC),
+        artifacts=[
+            ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
+        ],
+    )
+
+
 def execute_run(
     store: RunStore,
     run_id: str,
@@ -59,11 +153,29 @@ def execute_run(
         return
     input_path = input_files[0]
 
-    store.update(run_id, status=RunStatus.RUNNING)
+    store.update(run_id, status=RunStatus.RUNNING, started_at=datetime.now(UTC))
     run_settings = settings.model_copy(update={"output_dir": run.output_dir})
 
     def report(line: str) -> None:
         store.append_progress(run_id, line)
+
+    # Track per-stage status from execution events (ADR-040). Additive: this
+    # populates run.stage_statuses for the UI without changing pipeline flow.
+    def _record_stage(stage: str, status: str) -> None:
+        prior = store.get(run_id)
+        if prior is None:
+            return
+        stages = list(prior.stage_statuses)
+        now = datetime.now(UTC).isoformat()
+        for entry in stages:
+            if entry.get("stage") == stage:
+                entry["status"] = status
+                if status in ("completed", "failed"):
+                    entry["finished_at"] = now
+                break
+        else:
+            stages.append({"stage": stage, "status": status, "started_at": now})
+        store.update(run_id, stage_statuses=stages)
 
     def on_event(event: ExecutionEvent) -> None:
         # Translate structured execution events into run progress. No log-string
@@ -97,23 +209,35 @@ def execute_run(
         updates: dict[str, object] = {"execution": progress}
         if event.recovery_attempts:
             updates["recovery_attempts"] = event.recovery_attempts
+        if event.type is EventType.STAGE_STARTED:
+            _record_stage(event.stage, "running")
+        elif event.type is EventType.STAGE_COMPLETED:
+            _record_stage(event.stage, "completed")
         if event.type is EventType.STAGE_FAILED:
             updates["failed_stage"] = event.stage
+            _record_stage(event.stage, "failed")
         store.update(run_id, **updates)
 
     try:
         outcome = service.run(input_path, run_settings, report=report, events=on_event)
     except StageError as exc:
-        # A stage exhausted its bounded recovery. Record which stage, and the
-        # sanitized attempt history so the API can show the full failover story
-        # rather than only the last error (ADR-035, section 13).
+        # A stage exhausted its bounded recovery. Partial artifacts (from
+        # completed stages) were written to the workspace by the service; expose
+        # them and mark the run resumable so completed work is never lost
+        # (ADR-040). Records the failed stage and sanitized attempt history so
+        # the API can show the full failover story (ADR-035, section 13).
         logger.info("api.run_failed run=%s stage=%s", run_id, exc.stage_name)
+        partial = _collect_partial_artifacts(run_settings.output_dir)
+        status = RunStatus.PARTIALLY_COMPLETED if partial else RunStatus.FAILED
         store.update(
             run_id,
-            status=RunStatus.FAILED,
+            status=status,
             error=_safe_error(exc),
             failed_stage=exc.stage_name,
             attempt_history=list(exc.attempts),
+            artifacts=partial,
+            resumable=True,
+            finished_at=datetime.now(UTC),
         )
         return
     except QAOpsError as exc:
@@ -132,6 +256,7 @@ def execute_run(
         entry_point=outcome.entry_point.value,
         detection=(outcome.detection.description if outcome.detection else None),
         summary=summarize(outcome.result),
+        finished_at=datetime.now(UTC),
         artifacts=[
             ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
         ],

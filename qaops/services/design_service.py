@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from qaops.cli.registry import ExporterInstance, resolve_exporters
 from qaops.config import QAOpsSettings
-from qaops.core.errors import ConfigurationError, ExportError
+from qaops.core.errors import ConfigurationError, ExportError, StageError
 from qaops.core.protocols import PipelineStage
 from qaops.entrypoints import (
     Classification,
@@ -41,11 +41,14 @@ from qaops.execution import (
     available_providers,
     get_provider,
 )
+from qaops.execution.checkpoint import CheckpointStore
 from qaops.execution.events import EventSink
+from qaops.execution.executor import CheckpointSink
 from qaops.exporters import CsvBundleExporter
 from qaops.ingestion import load_document
 from qaops.llm import PromptLoader, create_client
 from qaops.models import (
+    ConditionDesignResult,
     RequirementAnalysisResult,
     RequirementInput,
     ScenarioDesignResult,
@@ -158,7 +161,30 @@ class DesignService:
         emit(f"Reading {input_path} ({detail})")
         emit(f"Provider: {settings.provider} | formats: {', '.join(export_formats)}")
 
-        result = self._execute(entry_point, pipeline_input, settings, emit, emit_event)
+        # Checkpoint each completed stage into the run workspace so partial
+        # artifacts survive a later failure and the run can resume (ADR-040).
+        # Checkpoints live under the output dir; a run with no workspace still
+        # works - the store just writes beside the reports.
+        checkpoints = CheckpointStore(settings.output_dir)
+
+        def _checkpoint(stage_name: str, stage_index: int, output: BaseModel) -> None:
+            checkpoints.write_stage(stage_name, stage_index, output)
+
+        try:
+            result = self._execute(
+                entry_point,
+                pipeline_input,
+                settings,
+                emit,
+                emit_event,
+                checkpoint=_checkpoint,
+            )
+        except StageError as exc:
+            # Never discard completed work: export whatever the furthest
+            # checkpoint produced, then re-raise so the caller records the
+            # failure. Downstream artifacts simply remain unavailable.
+            self._export_partial(checkpoints, exporters, settings, input_path, want_bundle, emit)
+            raise exc
 
         artifacts = self._write_reports(
             result, exporters, settings, input_path, want_bundle=want_bundle, emit=emit
@@ -171,6 +197,106 @@ class DesignService:
         )
 
     # --- internals -----------------------------------------------------------
+
+    def resume(
+        self,
+        input_path: Path,
+        settings: QAOpsSettings,
+        *,
+        from_: str | None = None,
+        formats: Sequence[str] | None = None,
+        report: ProgressReporter | None = None,
+        events: EventSink | None = None,
+    ) -> DesignOutcome:
+        """Resume a failed run from its last successful checkpoint (ADR-040).
+
+        Reads checkpoints under settings.output_dir, rehydrates the furthest
+        completed stage's output, and runs only the remaining stages - completed
+        stages are reused, never re-run. If no checkpoint exists, this falls back
+        to a normal full run. In-process resume only: it does not reconstruct
+        state across a server restart (out of scope for Phase 25).
+        """
+        emit = report or (lambda _line: None)
+        emit_event = events or (lambda _event: None)
+
+        entry_point, detection = self.resolve_entry_point(input_path, from_)
+        export_formats = list(formats) if formats else list(settings.default_export_formats)
+        want_bundle = CsvBundleExporter.format_name in export_formats
+        file_formats = [f for f in export_formats if f != CsvBundleExporter.format_name]
+        exporters = resolve_exporters(file_formats)
+
+        checkpoints = CheckpointStore(settings.output_dir)
+        checkpoint = checkpoints.latest_checkpoint()
+        if checkpoint is None:
+            emit("No checkpoint found; starting a fresh run.")
+            return self.run(
+                input_path,
+                settings,
+                from_=from_,
+                formats=formats,
+                report=report,
+                events=events,
+            )
+
+        stage_names = stage_names_for(entry_point)
+        # The checkpoint's stage_index is absolute (full pipeline). Translate to
+        # this entry point's stage list to find where to resume.
+        completed_names = set(checkpoints.completed_stages())
+        resume_index = 0
+        for i, name in enumerate(stage_names):
+            if name in completed_names:
+                resume_index = i + 1
+        if resume_index >= len(stage_names):
+            emit("All stages already completed; re-exporting from checkpoint.")
+            partial = _promote_to_partial_result(checkpoint.result, input_path.stem)
+            result = partial if isinstance(partial, TestDesignResult) else None
+            if result is not None:
+                artifacts = self._write_reports(
+                    result,
+                    exporters,
+                    settings,
+                    input_path,
+                    want_bundle=want_bundle,
+                    emit=emit,
+                )
+                return DesignOutcome(
+                    result=result,
+                    entry_point=entry_point,
+                    detection=detection,
+                    artifacts=artifacts,
+                )
+
+        emit(
+            f"Resuming '{input_path.name}' from stage {resume_index} "
+            f"({stage_names[resume_index] if resume_index < len(stage_names) else 'end'})"
+        )
+
+        def _checkpoint(stage_name: str, stage_index: int, output: BaseModel) -> None:
+            checkpoints.write_stage(stage_name, stage_index, output)
+
+        try:
+            result = self._execute(
+                entry_point,
+                checkpoint.result,
+                settings,
+                emit,
+                emit_event,
+                checkpoint=_checkpoint,
+                start_index=resume_index,
+            )
+        except StageError as exc:
+            self._export_partial(checkpoints, exporters, settings, input_path, want_bundle, emit)
+            raise exc
+
+        artifacts = self._write_reports(
+            result, exporters, settings, input_path, want_bundle=want_bundle, emit=emit
+        )
+        return DesignOutcome(
+            result=result,
+            entry_point=entry_point,
+            detection=detection,
+            artifacts=artifacts,
+        )
 
     def _prepare_input(
         self, input_path: Path, entry_point: EntryPoint
@@ -192,6 +318,8 @@ class DesignService:
         settings: QAOpsSettings,
         emit: ProgressReporter,
         emit_event: EventSink,
+        checkpoint: CheckpointSink | None = None,
+        start_index: int = 0,
     ) -> TestDesignResult:
         """Run through the adaptive executor (single- or multi-provider)."""
         emit(f"Running pipeline ({entry_point.value}): {' -> '.join(stage_names_for(entry_point))}")
@@ -224,6 +352,8 @@ class DesignService:
             registry=self._registry,
             reporter=emit,
             events=emit_event,
+            checkpoint=checkpoint,
+            start_index=start_index,
         )
         result = executor.run(pipeline_input)
 
@@ -231,6 +361,57 @@ class DesignService:
             msg = "Pipeline did not produce a TestDesignResult"
             raise ConfigurationError(msg)
         return result
+
+    def _export_partial(
+        self,
+        checkpoints: CheckpointStore,
+        exporters: list[ExporterInstance],
+        settings: QAOpsSettings,
+        input_path: Path,
+        want_bundle: bool,
+        emit: ProgressReporter,
+    ) -> list[DesignArtifact]:
+        """Export whatever the furthest checkpoint produced (ADR-040).
+
+        Called when a stage fails. Promotes the latest checkpoint (a cumulative
+        snapshot) to a partial TestDesignResult and writes the CSV-bundle files
+        for the dimensions that have data; absent dimensions are simply not
+        written. Best-effort: any export error here is swallowed so it cannot
+        mask the original StageError.
+        """
+        try:
+            checkpoint = checkpoints.latest_checkpoint()
+        except Exception:  # noqa: BLE001 - corrupt checkpoint must not mask failure
+            emit("No usable checkpoint to export partial artifacts from.")
+            return []
+        if checkpoint is None:
+            return []
+        partial = _promote_to_partial_result(checkpoint.result, input_path.stem)
+        if partial is None:
+            return []
+        emit(f"Exporting partial artifacts from '{checkpoint.stage_name}' checkpoint")
+        artifacts: list[DesignArtifact] = []
+        out_dir = settings.output_dir
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            # The CSV bundle writes one file per dimension and naturally emits
+            # empty files for absent dimensions; write it for partial results.
+            bundle_paths = CsvBundleExporter().export_bundle(partial, out_dir)
+            for path in bundle_paths:
+                p = Path(path)
+                artifacts.append(DesignArtifact(name=p.name, format="CSV (partial)", path=p))
+            # Also emit the canonical partial JSON so the full snapshot is
+            # downloadable.
+            for exporter in exporters:
+                if exporter.format_name.lower() == "json":
+                    stem = input_path.stem
+                    target = out_dir / f"{stem}.partial{exporter.file_extension}"
+                    written = exporter.export(partial, str(target))
+                    wp = Path(written)
+                    artifacts.append(DesignArtifact(name=wp.name, format="JSON (partial)", path=wp))
+        except (OSError, ExportError):  # pragma: no cover - best effort
+            emit("Partial export encountered a filesystem error; skipping.")
+        return artifacts
 
     def _write_reports(
         self,
@@ -293,6 +474,47 @@ def _resolved(path: Path) -> Path:
         return path.resolve()
     except OSError:
         return path.absolute()
+
+
+def _promote_to_partial_result(model: BaseModel, source_name: str) -> TestDesignResult | None:
+    """Build a partial TestDesignResult from any checkpoint model (ADR-040).
+
+    Stage outputs are cumulative and nested, so every checkpoint type carries a
+    prefix of the final result's dimensions. We copy whatever is present and
+    leave the rest at their empty defaults; only source_name is required.
+    A model we do not recognise yields None (nothing to export).
+    """
+    if isinstance(model, TestDesignResult):
+        return model
+    if isinstance(model, ConditionDesignResult):
+        analysis = model.scenario_design.analysis
+        return TestDesignResult(
+            source_name=analysis.source_name or source_name,
+            requirements=list(analysis.requirements),
+            business_rules=list(analysis.business_rules),
+            gap_report=analysis.gap_report,
+            scenarios=list(model.scenario_design.scenarios),
+            conditions=list(model.conditions),
+            expansion_truncated=model.expansion_truncated,
+            truncation_note=model.truncation_note,
+        )
+    if isinstance(model, ScenarioDesignResult):
+        analysis = model.analysis
+        return TestDesignResult(
+            source_name=analysis.source_name or source_name,
+            requirements=list(analysis.requirements),
+            business_rules=list(analysis.business_rules),
+            gap_report=analysis.gap_report,
+            scenarios=list(model.scenarios),
+        )
+    if isinstance(model, RequirementAnalysisResult):
+        return TestDesignResult(
+            source_name=model.source_name or source_name,
+            requirements=list(model.requirements),
+            business_rules=list(model.business_rules),
+            gap_report=model.gap_report,
+        )
+    return None
 
 
 def _check_output_collisions(

@@ -151,6 +151,42 @@ export const failedRun: RunStatusResponse = {
   recovery_attempts: 12,
 };
 
+export const partiallyCompletedRun: RunStatusResponse = {
+  run_id: "run_partial",
+  status: "partially_completed",
+  entry_point: "document",
+  detection: "requirement document (DOCX)",
+  summary: null,
+  progress: {
+    current_stage: "test_condition_analyzer",
+    stage_index: 4,
+    stage_count: 7,
+    provider: "openrouter",
+    model: "some/model:free",
+    model_attempt_number: 3,
+    request_attempt: 1,
+    provider_call_number: 6,
+    models_attempted: 0,
+    recovery_attempts: 3,
+    message: "stage recovery budget exhausted",
+  },
+  error: "[test_condition_analyzer] All providers failed.",
+  failed_stage: "test_condition_analyzer",
+  recovery_attempts: 3,
+  resumable: true,
+  completed_stages: [
+    "requirement_analyzer",
+    "business_rule_extractor",
+    "gap_analyzer",
+    "scenario_generator",
+  ],
+  stage_statuses: [
+    { stage: "requirement_analyzer", status: "completed" },
+    { stage: "scenario_generator", status: "completed" },
+    { stage: "test_condition_analyzer", status: "failed" },
+  ],
+};
+
 export const artifactsList: ArtifactsResponse = {
   run_id: "run_abc123",
   artifacts: [

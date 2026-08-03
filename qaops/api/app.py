@@ -20,8 +20,8 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from qaops.api.config import APIConfig
-from qaops.api.runner import execute_run
-from qaops.api.runs import RunStore
+from qaops.api.runner import execute_run, resume_run
+from qaops.api.runs import RunStatus, RunStore
 from qaops.api.schemas import (
     ArtifactSchema,
     ArtifactsResponse,
@@ -33,6 +33,7 @@ from qaops.api.schemas import (
     ProviderModelsSchema,
     RunCreatedResponse,
     RunStatusResponse,
+    StageStatusSchema,
     SummarySchema,
 )
 from qaops.cli.config_loader import load_settings
@@ -249,6 +250,48 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         background.add_task(execute_run, store, run.id, settings, service)
         return RunCreatedResponse(run_id=run.id, status=run.status.value)
 
+    @app.post(
+        "/api/v1/runs/{run_id}/resume",
+        response_model=RunCreatedResponse,
+        status_code=202,
+        tags=["design"],
+    )
+    def resume_design(run_id: str, background: BackgroundTasks) -> RunCreatedResponse:
+        """Resume a resumable run from its last checkpoint (ADR-040).
+
+        Only runs marked resumable (a stage failed with completed work behind it)
+        can resume; completed stages are reused, not re-run.
+        """
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+        if not run.resumable:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Run {run_id!r} is not resumable (status {run.status.value}).",
+            )
+        settings = load_settings(None)
+        background.add_task(resume_run, store, run.id, settings, service)
+        return RunCreatedResponse(run_id=run.id, status=RunStatus.RUNNING.value)
+
+    @app.post(
+        "/api/v1/runs/{run_id}/cancel",
+        response_model=RunStatusResponse,
+        tags=["design"],
+    )
+    def cancel_design(run_id: str) -> RunStatusResponse:
+        """Request cooperative cancellation of a run (ADR-040).
+
+        Cancellation is cooperative: a run stops at the next stage boundary. A
+        run that has already finished is returned unchanged.
+        """
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+        if run.status in (RunStatus.QUEUED, RunStatus.RUNNING):
+            store.update(run_id, cancel_requested=True, status=RunStatus.CANCELLED)
+        return run_status(run_id)
+
     @app.get("/api/v1/runs/{run_id}", response_model=RunStatusResponse, tags=["design"])
     def run_status(run_id: str) -> RunStatusResponse:
         """Current state of a run, with a summary once completed."""
@@ -318,6 +361,33 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
                     for a in run.attempt_history
                 ]
                 if run.attempt_history
+                else None
+            ),
+            stage_statuses=(
+                [
+                    StageStatusSchema(
+                        stage=str(s.get("stage", "")),
+                        status=str(s.get("status", "")),
+                        started_at=(
+                            str(s["started_at"]) if s.get("started_at") is not None else None
+                        ),
+                        finished_at=(
+                            str(s["finished_at"]) if s.get("finished_at") is not None else None
+                        ),
+                    )
+                    for s in run.stage_statuses
+                ]
+                if run.stage_statuses
+                else None
+            ),
+            resumable=run.resumable,
+            completed_stages=(
+                [
+                    str(s.get("stage", ""))
+                    for s in run.stage_statuses
+                    if s.get("status") == "completed"
+                ]
+                if run.stage_statuses
                 else None
             ),
         )

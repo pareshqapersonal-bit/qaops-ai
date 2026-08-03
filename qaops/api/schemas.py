@@ -89,6 +89,15 @@ class AttemptSchema(BaseModel):
     error_code: str | None = None
 
 
+class StageStatusSchema(BaseModel):
+    """Per-stage execution status for the run screen (ADR-040)."""
+
+    stage: str
+    status: str
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
 class RunStatusResponse(BaseModel):
     run_id: str
     status: str
@@ -102,6 +111,12 @@ class RunStatusResponse(BaseModel):
     # Ordered sanitized history of failed attempts across providers/models, so a
     # failed run shows the whole failover story, not only the last error.
     attempt_history: list[AttemptSchema] | None = None
+    # Phase 25 (ADR-040), all additive with defaults so existing clients are
+    # unaffected: per-stage statuses, whether the run can be resumed, and the
+    # names of stages that completed (for partial-progress display).
+    stage_statuses: list[StageStatusSchema] | None = None
+    resumable: bool = False
+    completed_stages: list[str] | None = None
 
 
 class ArtifactSchema(BaseModel):

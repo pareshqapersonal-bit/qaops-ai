@@ -7,6 +7,7 @@ import {
   completedRun,
 
   failedRun,
+  partiallyCompletedRun,
   queuedRun,
   runningRun,
 } from "../test/fixtures";
@@ -104,6 +105,19 @@ describe("RunPage", () => {
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toMatch(/run failed/i);
     expect(alert.textContent).toContain("requirement_analyzer");
+  });
+
+  it("shows partial completion with completed stages and a resume button", () => {
+    setRun({ run: partiallyCompletedRun });
+    renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/partially completed/i);
+    // Names the stages that completed before the failure.
+    expect(alert.textContent).toContain("scenario_generator");
+    // Offers a resume action.
+    expect(
+      screen.getByRole("button", { name: /resume from last checkpoint/i }),
+    ).toBeInTheDocument();
   });
 
   it("shows the backend error text and recovery-action count on failure", () => {

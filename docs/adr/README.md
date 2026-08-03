@@ -40,5 +40,6 @@
 | [037](037-condition-expansion-and-ambiguity-integrity.md) | Condition expansion & ambiguity integrity: technique-driven derivation, deterministic gap->unresolved linkage | Accepted |
 | [038](038-technique-driven-expansion.md) | Technique-driven test-case expansion: deterministic ExpansionPlanner turns each condition's technique into bounded variant slots | Accepted |
 | [039](039-docx-ingestion.md) | DOCX ingestion via the existing loader abstraction (python-docx, [docx] extra) | Accepted |
+| [040](040-execution-checkpointing-and-resume.md) | Execution checkpointing, partial artifacts, and in-process resume | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

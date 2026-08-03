@@ -6,6 +6,7 @@ import {
   artifactDownloadUrl,
   getArtifacts,
   getJsonArtifact,
+  resumeRun,
 } from "../api/client";
 import type { ArtifactSchema, DesignArtifact } from "../api/types";
 import { useRun } from "../hooks/useRun";
@@ -71,7 +72,7 @@ export function RunPage() {
         </div>
       )}
 
-      {run.status === "failed" ? (
+      {run.status === "failed" || run.status === "partially_completed" || run.status === "cancelled" ? (
         <FailureView run={run} />
       ) : run.status === "completed" ? (
         <CompletedView runId={run.run_id} summary={run.summary} />
@@ -143,13 +144,38 @@ function FailureView({ run }: { run: NonNullable<ReturnType<typeof useRun>["run"
   const rawError = run.error ?? "The run failed without a specific error message.";
   const summary = summarizeError(rawError, run.failed_stage);
   const showDetails = rawError.trim() !== summary.trim();
+  const isPartial = run.status === "partially_completed";
+  const completed = run.completed_stages ?? [];
+  const [resuming, setResuming] = useState(false);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
+  async function onResume() {
+    setResuming(true);
+    setResumeError(null);
+    try {
+      await resumeRun(run.run_id);
+      // The polling hook will pick up the run returning to "running".
+      window.location.reload();
+    } catch (e) {
+      setResumeError(e instanceof Error ? e.message : "Resume failed.");
+      setResuming(false);
+    }
+  }
+
   return (
     <>
-      <div className="alert error" role="alert">
+      <div className={`alert ${isPartial ? "warn" : "error"}`} role="alert">
         <div className="title">
-          Run failed{run.failed_stage ? ` at ${run.failed_stage}` : ""}
+          {isPartial ? "Run partially completed" : "Run failed"}
+          {run.failed_stage ? ` at ${run.failed_stage}` : ""}
         </div>
         <div>{summary}</div>
+        {completed.length > 0 && (
+          <div className="muted" style={{ marginTop: 8 }}>
+            {completed.length} stage(s) completed before the failure:{" "}
+            {completed.join(", ")}. Their results are available below.
+          </div>
+        )}
         {run.recovery_attempts != null && run.recovery_attempts > 0 && (
           <div className="muted" style={{ marginTop: 8 }}>
             {run.recovery_attempts} recovery action(s) were attempted before failing.
@@ -172,11 +198,45 @@ function FailureView({ run }: { run: NonNullable<ReturnType<typeof useRun>["run"
           </details>
         )}
       </div>
+      {run.resumable && (
+        <div style={{ marginBottom: 16 }}>
+          <button className="primary" onClick={onResume} disabled={resuming}>
+            {resuming ? "Resuming…" : "Resume from last checkpoint"}
+          </button>
+          {resumeError && (
+            <div className="alert error" role="alert" style={{ marginTop: 8 }}>
+              {resumeError}
+            </div>
+          )}
+        </div>
+      )}
+      {isPartial && <PartialDownloads runId={run.run_id} />}
       <p>
         <Link to="/">← Start a new run</Link>
       </p>
     </>
   );
+}
+
+// Lists whatever artifacts a partially-completed run produced, so completed
+// work is downloadable even though the run did not finish (ADR-040).
+function PartialDownloads({ runId }: { runId: string }) {
+  const [artifacts, setArtifacts] = useState<ArtifactSchema[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    getArtifacts(runId)
+      .then((r) => {
+        if (active) setArtifacts(r.artifacts);
+      })
+      .catch(() => {
+        if (active) setArtifacts([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [runId]);
+  if (!artifacts || artifacts.length === 0) return null;
+  return <DownloadBar runId={runId} artifacts={artifacts} />;
 }
 
 // Reduce a possibly-huge raw provider error to a short, human line. Falls back

@@ -62,6 +62,9 @@ StageFactory = Callable[[QAOpsSettings], Sequence[PipelineStage[BaseModel, BaseM
 
 Reporter = Callable[[str], None]
 EventSink = Callable[[ExecutionEvent], None]
+# (stage_name, stage_index, stage_output_model) -> None. Called after a stage
+# completes so the orchestration layer can persist a checkpoint (ADR-040).
+CheckpointSink = Callable[[str, int, BaseModel], None]
 
 # Settings field holding the model name, per provider.
 _MODEL_FIELD: dict[str, str] = {
@@ -148,6 +151,8 @@ class AdaptiveExecutor:
         registry: ModelRegistry | None = None,
         reporter: Reporter | None = None,
         events: EventSink | None = None,
+        checkpoint: CheckpointSink | None = None,
+        start_index: int = 0,
         max_attempts_per_model: int = 3,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -171,6 +176,15 @@ class AdaptiveExecutor:
         self._providers = ordered
         self._report_line = reporter or (lambda _message: None)
         self._emit_event = events or (lambda _event: None)
+        # Optional per-stage checkpoint sink (ADR-040). Called with
+        # (stage_name, stage_index, output_model) after each stage completes.
+        # Default no-op means CLI/tests behave exactly as before.
+        self._checkpoint = checkpoint or (lambda _name, _index, _output: None)
+        # Resume support (ADR-040): stages before start_index were completed in a
+        # prior attempt and are skipped; the caller seeds `data` with the last
+        # checkpoint's model so the remaining stages run against real upstream
+        # output. 0 = normal full run.
+        self._start_index = start_index
         self._max_attempts = max_attempts_per_model
         # Bounds from settings (ADR-029). These keep recovery from walking a
         # hundreds-long discovered catalogue.
@@ -377,7 +391,7 @@ class AdaptiveExecutor:
         model = self._candidates(provider)[0]
         stages = list(self._stage_factory(self._settings_for(provider, model)))
         current: BaseModel = data
-        index = 0
+        index = self._start_index
 
         while index < len(stages):
             stage = stages[index]
@@ -598,6 +612,10 @@ class AdaptiveExecutor:
                 )
                 self._report_line(f"  {stage.name}: {provider.name}/{model.name} ok")
                 self._emit(EventType.STAGE_COMPLETED, stage, index, len(stages), provider, model)
+                # Persist this stage's output before advancing (ADR-040). The
+                # sink is a no-op unless the orchestration layer supplied one, so
+                # this does not change CLI/test behaviour or pipeline semantics.
+                self._checkpoint(stage.name, index, output)
                 current = output
                 index += 1
                 break

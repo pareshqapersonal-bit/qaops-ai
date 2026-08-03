@@ -68,6 +68,46 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 25: Execution checkpointing, partial artifacts & resume
+
+Makes runs resilient to mid-pipeline failure: completed stages are checkpointed,
+their artifacts are exported even when a later stage fails, and a failed run can
+resume from the last checkpoint without re-running completed stages (ADR-040).
+Pipeline stages, provider execution, and orchestration semantics are unchanged;
+every change is additive.
+
+- **Added** `CheckpointStore` (`qaops/execution/checkpoint.py`): atomic per-stage
+  JSON checkpoints under the run workspace, a manifest of stage statuses, and
+  deterministic rehydration into the exact Pydantic model. Corrupt/missing/
+  unknown-type checkpoints raise `CheckpointError`.
+- **Excluded** `source_text` from checkpoint payloads: because stage outputs are
+  cumulative it was duplicated in every checkpoint (~7x); it is the raw input,
+  already on disk, and read by no downstream stage. A placeholder is re-injected
+  on rehydration. Delta checkpoints deferred as future work.
+- **Added** an optional `checkpoint` sink and `start_index` to `AdaptiveExecutor`
+  (default no-op / 0 — CLI and tests unchanged; failover untouched).
+- **Added** partial export on failure: the service promotes the latest
+  checkpoint to a partial `TestDesignResult` and writes the artifacts for
+  completed dimensions only; a stage that raised never checkpoints, so no
+  half-computed downstream artifact can appear.
+- **Added** `DesignService.resume()` and `runner.resume_run()`: reuse completed
+  stages, run only the remainder; fall back to a full run if no checkpoint.
+- **Extended** run state additively: `RunStatus` gains
+  `PARTIALLY_COMPLETED`/`RESUMABLE`/`CANCELLED` (original four unchanged); `Run`
+  gains `stage_statuses`/`resumable`/`cancel_requested`/timings. New endpoints
+  `POST /runs/{id}/resume` and `POST /runs/{id}/cancel`; status response surfaces
+  per-stage statuses, `resumable`, and `completed_stages`.
+- **UI**: partial-completion state, completed-stages list, per-artifact
+  downloads, and a Resume button.
+- **Scope**: in-process resume only; restart-resilient registry rebuild is
+  future work. Cancellation is cooperative (honoured at stage boundaries).
+- **Tests**: +16 backend (`tests/test_phase25_checkpoint_resume.py`) covering
+  round-trip, source_text exclusion, corrupt/missing/unknown checkpoints,
+  fail-at-stage → partial export, resume without re-running completed stages,
+  no-checkpoint fallback, second-failure-stays-resumable, last-stage resume; +1
+  frontend (partial/resume UI). Backend 740 passed; frontend 53 passed.
+- **ADR-040**. Version stays `0.18.0-dev`.
+
 ### Phase 24: Multi-format document ingestion (DOCX)
 
 Adds Microsoft Word `.docx` as a first-class requirement-document input

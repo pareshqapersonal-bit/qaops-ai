@@ -34,7 +34,14 @@ export interface RunCreatedResponse {
   status: RunStatus;
 }
 
-export type RunStatus = "queued" | "running" | "completed" | "failed";
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "partially_completed"
+  | "resumable"
+  | "cancelled";
 
 export interface ProgressSchema {
   current_stage: string | null;
@@ -66,6 +73,13 @@ export interface SummarySchema {
   expansion_truncated?: boolean;
 }
 
+export interface StageStatusSchema {
+  stage: string;
+  status: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
 export interface RunStatusResponse {
   run_id: string;
   status: RunStatus;
@@ -76,6 +90,9 @@ export interface RunStatusResponse {
   error: string | null;
   failed_stage: string | null;
   recovery_attempts: number | null;
+  stage_statuses?: StageStatusSchema[] | null;
+  resumable?: boolean;
+  completed_stages?: string[] | null;
 }
 
 export interface ArtifactSchema {

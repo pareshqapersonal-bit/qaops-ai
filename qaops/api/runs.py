@@ -27,6 +27,11 @@ class RunStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    # Phase 25 (ADR-040), additive - existing four are unchanged so old clients
+    # and stored responses keep working.
+    PARTIALLY_COMPLETED = "partially_completed"
+    RESUMABLE = "resumable"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -80,6 +85,15 @@ class Run:
     # Sanitized ordered failure history (ADR-035): list of dicts with
     # stage/provider/model/failure_kind/status_code/error_code.
     attempt_history: list[dict[str, object]] = field(default_factory=list)
+    # Phase 25 (ADR-040), all additive with safe defaults:
+    # per-stage status records (name/status/timestamps) surfaced to the UI;
+    # whether a failed/partial run can be resumed; and a cooperative cancel flag
+    # checked at stage boundaries.
+    stage_statuses: list[dict[str, object]] = field(default_factory=list)
+    resumable: bool = False
+    cancel_requested: bool = False
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
 
     @property
     def input_dir(self) -> Path:

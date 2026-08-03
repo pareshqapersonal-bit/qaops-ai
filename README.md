@@ -42,6 +42,8 @@ RequirementInput → RequirementAnalyzer → GapAnalyzer → BusinessRuleExtract
 
 The Gap Report is a first-class output: before designing tests, the agent reports missing validations, undefined behaviors, and ambiguities — with the question a QA engineer would ask to close each gap.
 
+Runs are resilient to mid-pipeline failure: each completed stage is checkpointed to the run workspace, so if a later stage fails the artifacts from completed stages are still available to download, and the run can be resumed from the last checkpoint without re-running the stages that already succeeded (in-process resume; ADR-040).
+
 ### Evidence-bound test conditions
 
 Between scenarios and test cases the agent derives **test conditions** — single
