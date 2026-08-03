@@ -124,6 +124,48 @@ export const completedRun: RunStatusResponse = {
   error: null,
   failed_stage: null,
   recovery_attempts: 0,
+  plan: {
+    goal: "Generate a complete test-design pack.",
+    entry_point: "document",
+    resume: false,
+    no_intervention: true,
+    steps: [
+      {
+        order: 1,
+        stage: "requirement_analyzer",
+        status: "run",
+        reason: "Run requirement_analyzer: it derives structured requirements.",
+        dependencies: [],
+        expected_output: "structured requirements",
+      },
+      {
+        order: 2,
+        stage: "coverage_validator",
+        status: "run",
+        reason: "Run coverage_validator: it derives coverage metrics.",
+        dependencies: ["test_case_generator"],
+        expected_output: "coverage metrics and traceability",
+      },
+    ],
+    decisions: [
+      {
+        decision: "Run the full pipeline from the first stage.",
+        reason: "No checkpoints exist for this run.",
+        alternative_considered: "Resume from a checkpoint.",
+        rejected_because: "There is no completed stage to resume from.",
+      },
+    ],
+  },
+  reflection: {
+    summary: "Completed 7 stage(s).",
+    successes: ["requirement_analyzer", "coverage_validator"],
+    failures: [],
+    retries: [],
+    recovered_stages: [],
+    skipped_stages: [],
+    lessons: ["Execution was clean; no retries or failures to learn from."],
+    recommendations: ["No blocking ambiguity detected; the pack is ready for review."],
+  },
 };
 
 export const failedRun: RunStatusResponse = {

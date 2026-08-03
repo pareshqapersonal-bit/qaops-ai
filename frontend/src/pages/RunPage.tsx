@@ -8,7 +8,12 @@ import {
   getJsonArtifact,
   resumeRun,
 } from "../api/client";
-import type { ArtifactSchema, DesignArtifact } from "../api/types";
+import type {
+  ArtifactSchema,
+  DesignArtifact,
+  ExecutionPlanSchema,
+  ReflectionSchema,
+} from "../api/types";
 import { useRun } from "../hooks/useRun";
 import {
   PIPELINE_STAGES,
@@ -72,6 +77,8 @@ export function RunPage() {
         </div>
       )}
 
+      {run.plan && <ExecutionPlanPanel plan={run.plan} />}
+
       {run.status === "failed" || run.status === "partially_completed" || run.status === "cancelled" ? (
         <FailureView run={run} />
       ) : run.status === "completed" ? (
@@ -79,7 +86,93 @@ export function RunPage() {
       ) : (
         <ProgressView run={run} />
       )}
+
+      {run.reflection && <ReflectionPanel reflection={run.reflection} />}
     </div>
+  );
+}
+
+// Phase 26 (ADR-041): the orchestrator agent's execution plan and the decisions
+// behind it. Purely additive - reasoning about execution, shown alongside the
+// existing run views. Absent for runs created before the agent existed.
+function ExecutionPlanPanel({ plan }: { plan: ExecutionPlanSchema }) {
+  return (
+    <section className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ marginTop: 0 }}>Execution plan</h2>
+      <p className="muted">
+        Goal: {plan.goal} · Entry point: {plan.entry_point} ·{" "}
+        {plan.resume ? "Resuming from checkpoints" : "Full run"}
+      </p>
+      <ol style={{ marginTop: 8 }}>
+        {plan.steps.map((s) => (
+          <li key={s.stage} style={{ marginBottom: 4 }}>
+            <strong>{s.stage}</strong>{" "}
+            <span className="muted">[{s.status}]</span>
+            {s.reason ? <> — {s.reason}</> : null}
+          </li>
+        ))}
+      </ol>
+      {plan.decisions.length > 0 && (
+        <details style={{ marginTop: 8 }}>
+          <summary>Decisions ({plan.decisions.length})</summary>
+          <ul style={{ marginTop: 8 }}>
+            {plan.decisions.map((d, i) => (
+              <li key={i} style={{ marginBottom: 6 }}>
+                <strong>{d.decision}</strong> — {d.reason}
+                {d.alternative_considered ? (
+                  <div className="muted">
+                    Alternative: {d.alternative_considered} — rejected because{" "}
+                    {d.rejected_because}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+// Phase 26 (ADR-041): the orchestrator agent's post-run reflection. Reasoning
+// only - it never contains pipeline artifacts.
+function ReflectionPanel({ reflection }: { reflection: ReflectionSchema }) {
+  return (
+    <section className="card" style={{ marginTop: 16 }}>
+      <h2 style={{ marginTop: 0 }}>Execution reflection</h2>
+      <p>{reflection.summary}</p>
+      {reflection.recommendations.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <strong>Recommendations</strong>
+          <ul>
+            {reflection.recommendations.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(reflection.recovered_stages.length > 0 ||
+        reflection.skipped_stages.length > 0) && (
+        <p className="muted">
+          {reflection.skipped_stages.length > 0 && (
+            <>Reused: {reflection.skipped_stages.join(", ")}. </>
+          )}
+          {reflection.recovered_stages.length > 0 && (
+            <>Recovered after retry: {reflection.recovered_stages.join(", ")}.</>
+          )}
+        </p>
+      )}
+      {reflection.lessons.length > 0 && (
+        <details style={{ marginTop: 8 }}>
+          <summary>Lessons</summary>
+          <ul style={{ marginTop: 8 }}>
+            {reflection.lessons.map((l, i) => (
+              <li key={i}>{l}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
   );
 }
 

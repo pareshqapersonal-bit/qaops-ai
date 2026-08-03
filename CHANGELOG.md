@@ -68,6 +68,45 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 26: The Orchestrator Agent (first agentic capability)
+
+Introduces QAOps' first agent. It reasons about HOW the deterministic pipeline
+executes — builds an execution plan, decides resume-vs-restart, records the
+decisions, and produces a post-run reflection — while the pipeline stays the
+sole author of every artifact (requirements, business rules, gaps, scenarios,
+conditions, test cases, coverage). All changes additive (ADR-041).
+
+- **Added** `qaops/agent/` package (extension point for future agents):
+  `base.py` (Agent ABC), `models.py` (ExecutionPlan / PlanStep / Decision /
+  Reflection), `planner.py`, `reflection.py`, `orchestrator.py`.
+- **`OrchestratorAgent`** plans, delegates execution to the unchanged
+  `DesignService.run()` / `.resume()`, and reflects. It has no method that emits
+  a pipeline artifact.
+- **Two-layer reasoning**: structure is deterministic (stage list from the entry
+  point; reuse/resume from `CheckpointStore`; successes/failures/retries from the
+  manifest and attempt history; clarification recommendation from the
+  deterministic unresolved-conditions/gap signal). An optional LLM enriches the
+  human-readable prose only, is forbidden from changing which stages run, and
+  degrades to deterministic text on failure.
+- **Determinism preserved**: with no intervention (no checkpoints → full run),
+  agent-driven execution is byte-identical to Phase 25 — asserted by test.
+- **Decision rules**: checkpoints → resume not restart; succeeded stage → reuse;
+  repeatedly failing stage → stop (don't re-resume); ambiguity over threshold →
+  recommend clarification. Each decision records reason + alternative + why
+  rejected.
+- **Additive API/UI**: run status gains `plan` and `reflection` fields (new
+  schemas); the run page shows an execution-plan panel (steps + decisions) and a
+  reflection panel (summary, recommendations, lessons). No existing endpoint,
+  field, or workflow changed; pre-agent runs render as before. Plan/reflection
+  generation is best-effort and never blocks or fails a run.
+- **Tests**: +18 backend (`tests/test_phase26_orchestrator_agent.py`) — plan
+  generation, skipped-stage planning, resume/restart decision, explanation
+  enrichment + LLM-failure fallback, reflection (successes, clarification/gap
+  recommendations, retry lessons, recovered stages), deterministic no-op
+  identity, the "agent never generates artifacts" invariant, checkpoint reuse;
+  +3 frontend (plan/reflection panels). Backend 758 passed; frontend 55 passed.
+- **ADR-041**. Version stays `0.18.0-dev`.
+
 ### Phase 25: Execution checkpointing, partial artifacts & resume
 
 Makes runs resilient to mid-pipeline failure: completed stages are checkpointed,

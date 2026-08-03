@@ -26,11 +26,13 @@ from qaops.api.schemas import (
     ArtifactSchema,
     ArtifactsResponse,
     AttemptSchema,
+    ExecutionPlanSchema,
     HealthResponse,
     ModelSchema,
     ModelsResponse,
     ProgressSchema,
     ProviderModelsSchema,
+    ReflectionSchema,
     RunCreatedResponse,
     RunStatusResponse,
     StageStatusSchema,
@@ -389,6 +391,10 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
                 ]
                 if run.stage_statuses
                 else None
+            ),
+            plan=(ExecutionPlanSchema.model_validate(run.plan) if run.plan else None),
+            reflection=(
+                ReflectionSchema.model_validate(run.reflection) if run.reflection else None
             ),
         )
 

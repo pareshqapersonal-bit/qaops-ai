@@ -41,5 +41,6 @@
 | [038](038-technique-driven-expansion.md) | Technique-driven test-case expansion: deterministic ExpansionPlanner turns each condition's technique into bounded variant slots | Accepted |
 | [039](039-docx-ingestion.md) | DOCX ingestion via the existing loader abstraction (python-docx, [docx] extra) | Accepted |
 | [040](040-execution-checkpointing-and-resume.md) | Execution checkpointing, partial artifacts, and in-process resume | Accepted |
+| [041](041-orchestrator-agent.md) | The Orchestrator Agent: QAOps' first agentic capability (plan / decide / reflect, artifacts stay pipeline-owned) | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

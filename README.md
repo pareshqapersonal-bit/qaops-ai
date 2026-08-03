@@ -44,6 +44,8 @@ The Gap Report is a first-class output: before designing tests, the agent report
 
 Runs are resilient to mid-pipeline failure: each completed stage is checkpointed to the run workspace, so if a later stage fails the artifacts from completed stages are still available to download, and the run can be resumed from the last checkpoint without re-running the stages that already succeeded (in-process resume; ADR-040).
 
+An Orchestrator Agent reasons about *how* each run executes — it builds an execution plan (which stages run, which are reused from checkpoints, and why), decides resume-vs-restart, and produces a post-run reflection with recommendations. The agent only orchestrates: every artifact is still produced by the deterministic pipeline, and a run with no agent intervention behaves identically to a plain pipeline run (ADR-041).
+
 ### Evidence-bound test conditions
 
 Between scenarios and test cases the agent derives **test conditions** — single

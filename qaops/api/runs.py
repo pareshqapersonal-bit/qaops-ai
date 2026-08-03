@@ -94,6 +94,11 @@ class Run:
     cancel_requested: bool = False
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    # Phase 26 (ADR-041), additive: the orchestrator agent's execution plan and
+    # post-run reflection, stored as plain dicts (schema-agnostic) so the API can
+    # surface them without the runs layer depending on the agent package.
+    plan: dict[str, object] | None = None
+    reflection: dict[str, object] | None = None
 
     @property
     def input_dir(self) -> Path:

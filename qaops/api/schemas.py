@@ -98,6 +98,59 @@ class StageStatusSchema(BaseModel):
     finished_at: str | None = None
 
 
+class PlanStepSchema(BaseModel):
+    """One stage in the agent's execution plan (ADR-041)."""
+
+    order: int
+    stage: str
+    status: str
+    reason: str = ""
+    dependencies: list[str] = []
+    expected_output: str = ""
+
+
+class DecisionSchema(BaseModel):
+    """One recorded orchestration decision (ADR-041)."""
+
+    decision: str
+    reason: str
+    alternative_considered: str = ""
+    rejected_because: str = ""
+
+
+class ExecutionPlanSchema(BaseModel):
+    """The agent's execution plan and the decisions behind it (ADR-041)."""
+
+    goal: str
+    entry_point: str
+    resume: bool
+    no_intervention: bool
+    steps: list[PlanStepSchema] = []
+    decisions: list[DecisionSchema] = []
+
+
+class StageOutcomeSchema(BaseModel):
+    stage: str
+    status: str
+    retried: bool = False
+    recovered: bool = False
+    skipped: bool = False
+
+
+class ReflectionSchema(BaseModel):
+    """The agent's post-execution reflection (ADR-041, reasoning only)."""
+
+    summary: str
+    successes: list[str] = []
+    failures: list[str] = []
+    retries: list[str] = []
+    recovered_stages: list[str] = []
+    skipped_stages: list[str] = []
+    lessons: list[str] = []
+    recommendations: list[str] = []
+    stage_outcomes: list[StageOutcomeSchema] = []
+
+
 class RunStatusResponse(BaseModel):
     run_id: str
     status: str
@@ -117,6 +170,9 @@ class RunStatusResponse(BaseModel):
     stage_statuses: list[StageStatusSchema] | None = None
     resumable: bool = False
     completed_stages: list[str] | None = None
+    # Phase 26 (ADR-041), additive: the orchestrator agent's plan and reflection.
+    plan: ExecutionPlanSchema | None = None
+    reflection: ReflectionSchema | None = None
 
 
 class ArtifactSchema(BaseModel):

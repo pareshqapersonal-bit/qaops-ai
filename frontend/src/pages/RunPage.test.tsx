@@ -120,6 +120,21 @@ describe("RunPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the agent execution plan when present", () => {
+    setRun({ run: completedRun });
+    renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");
+    expect(screen.getByText(/execution plan/i)).toBeInTheDocument();
+    // Lists a planned stage with its reasoning.
+    expect(screen.getAllByText(/requirement_analyzer/i).length).toBeGreaterThan(0);
+  });
+
+  it("renders the agent execution reflection when present", () => {
+    setRun({ run: completedRun });
+    renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");
+    expect(screen.getByText(/execution reflection/i)).toBeInTheDocument();
+    expect(screen.getByText(/ready for review/i)).toBeInTheDocument();
+  });
+
   it("shows the backend error text and recovery-action count on failure", () => {
     setRun({ run: failedRun });
     renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");

@@ -16,6 +16,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
+from qaops.agent import OrchestratorAgent
 from qaops.api.runs import ArtifactMeta, RunProgress, RunStatus, RunStore
 from qaops.config import QAOpsSettings
 from qaops.core.errors import QAOpsError, StageError
@@ -156,6 +157,17 @@ def execute_run(
     store.update(run_id, status=RunStatus.RUNNING, started_at=datetime.now(UTC))
     run_settings = settings.model_copy(update={"output_dir": run.output_dir})
 
+    # Phase 26 (ADR-041): the orchestrator agent builds an execution plan before
+    # running. This is reasoning ABOUT execution - the deterministic pipeline
+    # still performs the run below. Plan generation is best-effort; a failure
+    # here must never block the actual run.
+    agent = OrchestratorAgent(service)
+    try:
+        plan = agent.plan(input_path, run_settings)
+        store.update(run_id, plan=plan.model_dump(mode="json"))
+    except Exception:  # noqa: BLE001 - planning must not break execution
+        logger.info("api.plan_failed run=%s", run_id)
+
     def report(line: str) -> None:
         store.append_progress(run_id, line)
 
@@ -229,6 +241,14 @@ def execute_run(
         logger.info("api.run_failed run=%s stage=%s", run_id, exc.stage_name)
         partial = _collect_partial_artifacts(run_settings.output_dir)
         status = RunStatus.PARTIALLY_COMPLETED if partial else RunStatus.FAILED
+        failure_reflection: dict[str, object] | None = None
+        try:
+            reflection = agent.reflect(
+                None, run_settings, failed_stage=exc.stage_name, attempt_history=list(exc.attempts)
+            )
+            failure_reflection = reflection.model_dump(mode="json")
+        except Exception:  # noqa: BLE001 - advisory
+            logger.info("api.reflection_failed run=%s", run_id)
         store.update(
             run_id,
             status=status,
@@ -237,6 +257,7 @@ def execute_run(
             attempt_history=list(exc.attempts),
             artifacts=partial,
             resumable=True,
+            reflection=failure_reflection,
             finished_at=datetime.now(UTC),
         )
         return
@@ -250,6 +271,16 @@ def execute_run(
         store.update(run_id, status=RunStatus.FAILED, error=_safe_error(exc))
         return
 
+    # Phase 26 (ADR-041): produce a post-run reflection (reasoning only; never
+    # regenerates artifacts). Best-effort - a reflection failure must not turn a
+    # successful run into a failed one.
+    reflection_payload: dict[str, object] | None = None
+    try:
+        reflection = agent.reflect(outcome, run_settings)
+        reflection_payload = reflection.model_dump(mode="json")
+    except Exception:  # noqa: BLE001 - reflection is advisory
+        logger.info("api.reflection_failed run=%s", run_id)
+
     store.update(
         run_id,
         status=RunStatus.COMPLETED,
@@ -257,6 +288,7 @@ def execute_run(
         detection=(outcome.detection.description if outcome.detection else None),
         summary=summarize(outcome.result),
         finished_at=datetime.now(UTC),
+        reflection=reflection_payload,
         artifacts=[
             ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
         ],

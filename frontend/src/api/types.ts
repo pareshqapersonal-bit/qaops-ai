@@ -80,6 +80,42 @@ export interface StageStatusSchema {
   finished_at?: string | null;
 }
 
+export interface PlanStepSchema {
+  order: number;
+  stage: string;
+  status: string;
+  reason: string;
+  dependencies: string[];
+  expected_output: string;
+}
+
+export interface DecisionSchema {
+  decision: string;
+  reason: string;
+  alternative_considered: string;
+  rejected_because: string;
+}
+
+export interface ExecutionPlanSchema {
+  goal: string;
+  entry_point: string;
+  resume: boolean;
+  no_intervention: boolean;
+  steps: PlanStepSchema[];
+  decisions: DecisionSchema[];
+}
+
+export interface ReflectionSchema {
+  summary: string;
+  successes: string[];
+  failures: string[];
+  retries: string[];
+  recovered_stages: string[];
+  skipped_stages: string[];
+  lessons: string[];
+  recommendations: string[];
+}
+
 export interface RunStatusResponse {
   run_id: string;
   status: RunStatus;
@@ -93,6 +129,8 @@ export interface RunStatusResponse {
   stage_statuses?: StageStatusSchema[] | null;
   resumable?: boolean;
   completed_stages?: string[] | null;
+  plan?: ExecutionPlanSchema | null;
+  reflection?: ReflectionSchema | null;
 }
 
 export interface ArtifactSchema {
