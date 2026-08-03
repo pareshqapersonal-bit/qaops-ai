@@ -59,11 +59,16 @@ export function useBackendStatus(): BackendStatus {
 
 // The six pipeline stages, in order, with human labels. The internal stage
 // names come from the backend progress.current_stage field.
+// The full DOCUMENT-entry-point pipeline, in the exact order the backend
+// executes it (stage_names_for(EntryPoint.DOCUMENT)). Keys must match the
+// backend stage names verbatim, since progress/resume reconstruction joins on
+// them. A regression test pins this list to the backend order.
 export const PIPELINE_STAGES: { key: string; label: string }[] = [
   { key: "requirement_analyzer", label: "Requirement Analysis" },
   { key: "business_rule_extractor", label: "Business Rules" },
   { key: "gap_analyzer", label: "Gap Analysis" },
   { key: "scenario_generator", label: "Scenario Generation" },
+  { key: "test_condition_analyzer", label: "Test Condition Analysis" },
   { key: "test_case_generator", label: "Test Case Generation" },
   { key: "coverage_validator", label: "Coverage Validation" },
 ];
@@ -81,7 +86,10 @@ export type StageState = "pending" | "active" | "completed" | "failed";
  *                      progress yet (queued), all are pending.
  */
 export function deriveStageStates(
-  run: Pick<RunStatusResponse, "status" | "progress" | "failed_stage"> | null,
+  run: Pick<
+    RunStatusResponse,
+    "status" | "progress" | "failed_stage" | "completed_stages" | "stage_statuses"
+  > | null,
 ): StageState[] {
   const n = PIPELINE_STAGES.length;
   if (!run) return Array(n).fill("pending");
@@ -95,23 +103,37 @@ export function deriveStageStates(
     ? PIPELINE_STAGES.findIndex((s) => s.key === currentKey)
     : -1;
 
+  // Stages already completed in this run (including any carried over from a
+  // prior attempt on resume). This is the checkpoint-backed truth the backend
+  // preserves across resume, so we can reconstruct progress immediately -
+  // before the first STAGE_STARTED event of the resumed stage arrives - instead
+  // of briefly showing every stage as pending.
+  const completedKeys = new Set(
+    run.completed_stages ??
+      (run.stage_statuses ?? [])
+        .filter((s) => s.status === "completed")
+        .map((s) => s.stage),
+  );
+
   if (run.status === "failed") {
     const failedKey = run.failed_stage ?? currentKey;
     const failedIndex = failedKey
       ? PIPELINE_STAGES.findIndex((s) => s.key === failedKey)
       : currentIndex;
-    return PIPELINE_STAGES.map((_, i) => {
-      if (failedIndex >= 0 && i < failedIndex) return "completed";
+    return PIPELINE_STAGES.map((stage, i) => {
       if (i === failedIndex) return "failed";
+      if (completedKeys.has(stage.key)) return "completed";
+      if (failedIndex >= 0 && i < failedIndex) return "completed";
       return "pending";
     });
   }
 
-  // queued or running
-  return PIPELINE_STAGES.map((_, i) => {
-    if (currentIndex < 0) return "pending";
-    if (i < currentIndex) return "completed";
+  // queued or running: reconstruct completed stages from checkpoint-backed
+  // state first, then overlay the currently active stage.
+  return PIPELINE_STAGES.map((stage, i) => {
     if (i === currentIndex) return "active";
+    if (completedKeys.has(stage.key)) return "completed";
+    if (currentIndex >= 0 && i < currentIndex) return "completed";
     return "pending";
   });
 }
