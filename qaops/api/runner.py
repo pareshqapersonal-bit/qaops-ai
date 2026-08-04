@@ -35,12 +35,16 @@ _SECRET_PATTERNS = (
 )
 
 
-def _safe_error(exc: Exception) -> str:
-    """A client-safe message: the exception text with any secrets redacted."""
-    message = str(exc) or exc.__class__.__name__
+def _redact(message: str) -> str:
+    """Redact any secrets from a message string (client-safe)."""
     for pattern in _SECRET_PATTERNS:
         message = pattern.sub("[redacted]", message)
     return message
+
+
+def _safe_error(exc: Exception) -> str:
+    """A client-safe message: the exception text with any secrets redacted."""
+    return _redact(str(exc) or exc.__class__.__name__)
 
 
 def _collect_partial_artifacts(output_dir: Path) -> list[ArtifactMeta]:
@@ -231,13 +235,16 @@ def execute_run(
         store.update(run_id, **updates)
 
     try:
-        outcome = service.run(input_path, run_settings, report=report, events=on_event)
+        _, outcome, loop_summary = agent.execute_until_goal(
+            input_path, run_settings, report=report, events=on_event
+        )
     except StageError as exc:
-        # A stage exhausted its bounded recovery. Partial artifacts (from
-        # completed stages) were written to the workspace by the service; expose
-        # them and mark the run resumable so completed work is never lost
-        # (ADR-040). Records the failed stage and sanitized attempt history so
-        # the API can show the full failover story (ADR-035, section 13).
+        # A stage exhausted its bounded recovery and the loop could not recover
+        # (e.g. nothing to resume). Partial artifacts (from completed stages)
+        # were written to the workspace by the service; expose them and mark the
+        # run resumable so completed work is never lost (ADR-040). Records the
+        # failed stage and sanitized attempt history so the API can show the full
+        # failover story (ADR-035, section 13).
         logger.info("api.run_failed run=%s stage=%s", run_id, exc.stage_name)
         partial = _collect_partial_artifacts(run_settings.output_dir)
         status = RunStatus.PARTIALLY_COMPLETED if partial else RunStatus.FAILED
@@ -271,15 +278,40 @@ def execute_run(
         store.update(run_id, status=RunStatus.FAILED, error=_safe_error(exc))
         return
 
-    # Phase 26 (ADR-041): produce a post-run reflection (reasoning only; never
-    # regenerates artifacts). Best-effort - a reflection failure must not turn a
-    # successful run into a failed one.
+    # Phase 27 (ADR-042): the goal-driven loop manages execution and returns a
+    # summary (iterations, decisions, terminal reason, cumulative reflection).
+    # The loop's reflection is authoritative; store it and the loop summary.
     reflection_payload: dict[str, object] | None = None
+    loop_payload: dict[str, object] | None = None
     try:
-        reflection = agent.reflect(outcome, run_settings)
-        reflection_payload = reflection.model_dump(mode="json")
-    except Exception:  # noqa: BLE001 - reflection is advisory
-        logger.info("api.reflection_failed run=%s", run_id)
+        loop_payload = loop_summary.model_dump(mode="json")
+        reflection_payload = loop_summary.reflection.model_dump(mode="json")
+    except Exception:  # noqa: BLE001 - advisory
+        logger.info("api.loop_summary_failed run=%s", run_id)
+
+    if outcome is None:
+        # The loop stopped without a complete result (max resume attempts, or
+        # manual review needed). Completed work is still available as partial
+        # artifacts; expose them and keep the run resumable. Surface the
+        # underlying stage error and attempt history, not just the terminal
+        # reason, so the failure detail (ADR-035) is preserved.
+        partial = _collect_partial_artifacts(run_settings.output_dir)
+        status = RunStatus.PARTIALLY_COMPLETED if partial else RunStatus.FAILED
+        store.update(
+            run_id,
+            status=status,
+            error=_redact(loop_summary.last_error)
+            if loop_summary.last_error
+            else f"Execution stopped: {loop_summary.terminal_reason}.",
+            failed_stage=loop_summary.last_failed_stage,
+            attempt_history=list(loop_summary.last_attempts),
+            artifacts=partial,
+            resumable=True,
+            reflection=reflection_payload,
+            loop_summary=loop_payload,
+            finished_at=datetime.now(UTC),
+        )
+        return
 
     store.update(
         run_id,
@@ -289,6 +321,7 @@ def execute_run(
         summary=summarize(outcome.result),
         finished_at=datetime.now(UTC),
         reflection=reflection_payload,
+        loop_summary=loop_payload,
         artifacts=[
             ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
         ],

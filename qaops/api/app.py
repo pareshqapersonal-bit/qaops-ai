@@ -28,6 +28,7 @@ from qaops.api.schemas import (
     AttemptSchema,
     ExecutionPlanSchema,
     HealthResponse,
+    LoopSummarySchema,
     ModelSchema,
     ModelsResponse,
     ProgressSchema,
@@ -395,6 +396,9 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             plan=(ExecutionPlanSchema.model_validate(run.plan) if run.plan else None),
             reflection=(
                 ReflectionSchema.model_validate(run.reflection) if run.reflection else None
+            ),
+            loop_summary=(
+                LoopSummarySchema.model_validate(run.loop_summary) if run.loop_summary else None
             ),
         )
 

@@ -149,6 +149,40 @@ class ReflectionSchema(BaseModel):
     lessons: list[str] = []
     recommendations: list[str] = []
     stage_outcomes: list[StageOutcomeSchema] = []
+    # Phase 27 (ADR-042) terminal signals, additive/defaulted.
+    goal_achieved: bool = False
+    needs_clarification: bool = False
+    needs_manual_review: bool = False
+
+
+class ObservationSchema(BaseModel):
+    iteration: int
+    resume_attempts: int
+    succeeded: bool
+    completed_stages: list[str] = []
+    failed_stage: str | None = None
+    repeated_failure: bool = False
+    unresolved_conditions: int = 0
+    total_conditions: int = 0
+    gap_count: int = 0
+
+
+class LoopIterationSchema(BaseModel):
+    iteration: int
+    observation: ObservationSchema
+    decision: DecisionSchema
+    acted: bool
+
+
+class LoopSummarySchema(BaseModel):
+    """The goal-driven loop's record: iterations, decisions, terminal reason
+    (ADR-042). Reasoning about execution only - never a pipeline artifact."""
+
+    goal: str
+    iterations: list[LoopIterationSchema] = []
+    terminal_reason: str
+    resume_attempts: int = 0
+    reflection: ReflectionSchema
 
 
 class RunStatusResponse(BaseModel):
@@ -173,6 +207,8 @@ class RunStatusResponse(BaseModel):
     # Phase 26 (ADR-041), additive: the orchestrator agent's plan and reflection.
     plan: ExecutionPlanSchema | None = None
     reflection: ReflectionSchema | None = None
+    # Phase 27 (ADR-042), additive: the goal-driven loop's summary.
+    loop_summary: LoopSummarySchema | None = None
 
 
 class ArtifactSchema(BaseModel):

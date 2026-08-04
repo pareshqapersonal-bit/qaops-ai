@@ -103,3 +103,76 @@ class Reflection(BaseModel):
     lessons: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     stage_outcomes: list[StageOutcome] = Field(default_factory=list)
+    # Phase 27 (ADR-042), additive terminal signals for the goal-driven loop.
+    # Defaulted so a Phase-26 single-shot reflection is unaffected.
+    goal_achieved: bool = False
+    needs_clarification: bool = False
+    needs_manual_review: bool = False
+
+
+class LoopDecision(StrEnum):
+    """The agent's decision after observing the outcome of one act (ADR-042)."""
+
+    CONTINUE = "continue"  # run/resume produced a complete result -> finish
+    RESUME = "resume"  # a stage failed with completed work behind it -> resume
+    STOP = "stop"  # give up (bound reached or nothing to resume)
+    RECOMMEND_CLARIFICATION = "recommend_clarification"
+    RECOMMEND_MANUAL_REVIEW = "recommend_manual_review"
+
+
+class TerminalReason(StrEnum):
+    """Why the goal-driven loop ended (ADR-042)."""
+
+    COMPLETED = "completed"  # pipeline finished successfully
+    MAX_RESUME_ATTEMPTS = "max_resume_attempts"  # bound reached
+    NEEDS_CLARIFICATION = "needs_clarification"  # ambiguity over threshold
+    NEEDS_MANUAL_REVIEW = "needs_manual_review"  # repeated failure at a stage
+
+
+class Observation(BaseModel):
+    """A read-only snapshot of execution state the loop decides on (ADR-042).
+
+    Purely observational: every field is read from existing surfaces
+    (CheckpointStore, the last outcome/error, coverage metrics). The agent never
+    mutates any of these; Observation is the input to a Decision, nothing more.
+    """
+
+    iteration: int
+    resume_attempts: int
+    succeeded: bool
+    completed_stages: list[str] = Field(default_factory=list)
+    failed_stage: str | None = None
+    repeated_failure: bool = False
+    unresolved_conditions: int = 0
+    total_conditions: int = 0
+    gap_count: int = 0
+
+
+class LoopIteration(BaseModel):
+    """One observe -> decide -> act cycle, recorded for transparency (ADR-042)."""
+
+    iteration: int
+    observation: Observation
+    decision: Decision
+    acted: bool  # whether an act (run/resume) followed this decision
+
+
+class LoopSummary(BaseModel):
+    """The full record of a goal-driven execution loop (ADR-042).
+
+    Additive transparency artifact: the ordered iterations, the terminal reason,
+    and the cumulative reflection. It contains reasoning about execution only -
+    never any pipeline artifact.
+    """
+
+    goal: str
+    iterations: list[LoopIteration] = Field(default_factory=list)
+    terminal_reason: str
+    resume_attempts: int = 0
+    reflection: Reflection
+    # When the loop ended without a complete result, these carry the underlying
+    # failure so the API can surface the real error/stage (not just the terminal
+    # reason). None on a successful run.
+    last_error: str | None = None
+    last_failed_stage: str | None = None
+    last_attempts: list[dict[str, object]] = Field(default_factory=list)

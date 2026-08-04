@@ -99,6 +99,9 @@ class Run:
     # surface them without the runs layer depending on the agent package.
     plan: dict[str, object] | None = None
     reflection: dict[str, object] | None = None
+    # Phase 27 (ADR-042), additive: the goal-driven loop's summary (iterations,
+    # decisions, terminal reason). Stored as a plain dict, like plan/reflection.
+    loop_summary: dict[str, object] | None = None
 
     @property
     def input_dir(self) -> Path:

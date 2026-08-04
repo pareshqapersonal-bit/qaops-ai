@@ -114,6 +114,36 @@ export interface ReflectionSchema {
   skipped_stages: string[];
   lessons: string[];
   recommendations: string[];
+  goal_achieved?: boolean;
+  needs_clarification?: boolean;
+  needs_manual_review?: boolean;
+}
+
+export interface ObservationSchema {
+  iteration: number;
+  resume_attempts: number;
+  succeeded: boolean;
+  completed_stages: string[];
+  failed_stage?: string | null;
+  repeated_failure: boolean;
+  unresolved_conditions: number;
+  total_conditions: number;
+  gap_count: number;
+}
+
+export interface LoopIterationSchema {
+  iteration: number;
+  observation: ObservationSchema;
+  decision: DecisionSchema;
+  acted: boolean;
+}
+
+export interface LoopSummarySchema {
+  goal: string;
+  iterations: LoopIterationSchema[];
+  terminal_reason: string;
+  resume_attempts: number;
+  reflection: ReflectionSchema;
 }
 
 export interface RunStatusResponse {
@@ -131,6 +161,7 @@ export interface RunStatusResponse {
   completed_stages?: string[] | null;
   plan?: ExecutionPlanSchema | null;
   reflection?: ReflectionSchema | null;
+  loop_summary?: LoopSummarySchema | null;
 }
 
 export interface ArtifactSchema {

@@ -12,6 +12,7 @@ import type {
   ArtifactSchema,
   DesignArtifact,
   ExecutionPlanSchema,
+  LoopSummarySchema,
   ReflectionSchema,
 } from "../api/types";
 import { useRun } from "../hooks/useRun";
@@ -88,7 +89,46 @@ export function RunPage() {
       )}
 
       {run.reflection && <ReflectionPanel reflection={run.reflection} />}
+
+      {run.loop_summary && <LoopSummaryPanel summary={run.loop_summary} />}
     </div>
+  );
+}
+
+// Phase 27 (ADR-042): the goal-driven loop's decision record - iterations,
+// each with its observation/decision, and the terminal reason. Additive
+// transparency; absent for runs created before the loop existed.
+function LoopSummaryPanel({ summary }: { summary: LoopSummarySchema }) {
+  const terminalLabel: Record<string, string> = {
+    completed: "Completed successfully",
+    max_resume_attempts: "Stopped: resume-attempt limit reached",
+    needs_clarification: "Completed, clarification recommended",
+    needs_manual_review: "Stopped: manual review recommended",
+  };
+  return (
+    <section className="card" style={{ marginTop: 16 }}>
+      <h2 style={{ marginTop: 0 }}>Execution loop</h2>
+      <p className="muted">
+        {terminalLabel[summary.terminal_reason] ?? summary.terminal_reason} ·{" "}
+        {summary.iterations.length} iteration
+        {summary.iterations.length === 1 ? "" : "s"}
+        {summary.resume_attempts > 0
+          ? ` · ${summary.resume_attempts} resume attempt(s)`
+          : ""}
+      </p>
+      {summary.iterations.length > 1 && (
+        <details>
+          <summary>Decisions ({summary.iterations.length})</summary>
+          <ol style={{ marginTop: 8 }}>
+            {summary.iterations.map((it) => (
+              <li key={it.iteration} style={{ marginBottom: 6 }}>
+                <strong>{it.decision.decision}</strong> — {it.decision.reason}
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </section>
   );
 }
 

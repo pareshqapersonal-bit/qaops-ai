@@ -135,6 +135,13 @@ describe("RunPage", () => {
     expect(screen.getByText(/ready for review/i)).toBeInTheDocument();
   });
 
+  it("renders the goal-driven loop summary when present", () => {
+    setRun({ run: completedRun });
+    renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");
+    expect(screen.getByText(/execution loop/i)).toBeInTheDocument();
+    expect(screen.getByText(/completed successfully/i)).toBeInTheDocument();
+  });
+
   it("shows the backend error text and recovery-action count on failure", () => {
     setRun({ run: failedRun });
     renderRoute(<RunPage />, "/runs/:runId", "/runs/run_1");

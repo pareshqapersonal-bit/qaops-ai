@@ -42,5 +42,6 @@
 | [039](039-docx-ingestion.md) | DOCX ingestion via the existing loader abstraction (python-docx, [docx] extra) | Accepted |
 | [040](040-execution-checkpointing-and-resume.md) | Execution checkpointing, partial artifacts, and in-process resume | Accepted |
 | [041](041-orchestrator-agent.md) | The Orchestrator Agent: QAOps' first agentic capability (plan / decide / reflect, artifacts stay pipeline-owned) | Accepted |
+| [042](042-goal-driven-agent-loop.md) | The goal-driven agent loop: observe → decide → act → reflect, bounded resume, artifacts stay pipeline-owned | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

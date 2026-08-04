@@ -176,6 +176,16 @@ class QAOpsSettings(BaseSettings):
         description="Absolute ceiling on generated test cases across the run, a "
         "backstop against runaway combinatorial expansion.",
     )
+    max_resume_attempts: int = Field(
+        default=2,
+        ge=0,
+        le=20,
+        description="Maximum times the orchestrator agent will resume a failed "
+        "run from its last checkpoint before stopping and recommending manual "
+        "review. 0 disables resume retries (a single attempt only). The agent "
+        "decides whether another resume is worthwhile; per-stage provider/model "
+        "retry remains owned by the executor.",
+    )
 
     # Input guardrails (chunking is a future milestone; V1 fails fast)
     max_input_chars: int = Field(

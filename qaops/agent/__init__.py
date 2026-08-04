@@ -8,14 +8,21 @@ contains one, the OrchestratorAgent.
 """
 
 from qaops.agent.base import Agent
+from qaops.agent.loop import GoalDrivenLoop, decide
 from qaops.agent.models import (
     Decision,
     ExecutionPlan,
+    LoopDecision,
+    LoopIteration,
+    LoopSummary,
+    Observation,
     PlanStep,
     PlanStepStatus,
     Reflection,
     StageOutcome,
+    TerminalReason,
 )
+from qaops.agent.observe import observe
 from qaops.agent.orchestrator import OrchestratorAgent
 from qaops.agent.planner import ExecutionPlanner
 from qaops.agent.reflection import Reflector
@@ -25,10 +32,18 @@ __all__ = [
     "Decision",
     "ExecutionPlan",
     "ExecutionPlanner",
+    "GoalDrivenLoop",
+    "LoopDecision",
+    "LoopIteration",
+    "LoopSummary",
+    "Observation",
     "OrchestratorAgent",
     "PlanStep",
     "PlanStepStatus",
     "Reflection",
     "Reflector",
     "StageOutcome",
+    "TerminalReason",
+    "decide",
+    "observe",
 ]

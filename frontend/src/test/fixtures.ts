@@ -166,6 +166,47 @@ export const completedRun: RunStatusResponse = {
     lessons: ["Execution was clean; no retries or failures to learn from."],
     recommendations: ["No blocking ambiguity detected; the pack is ready for review."],
   },
+  loop_summary: {
+    goal: "Generate a complete test-design pack.",
+    iterations: [
+      {
+        iteration: 1,
+        observation: {
+          iteration: 1,
+          resume_attempts: 0,
+          succeeded: true,
+          completed_stages: ["requirement_analyzer", "coverage_validator"],
+          failed_stage: null,
+          repeated_failure: false,
+          unresolved_conditions: 0,
+          total_conditions: 4,
+          gap_count: 0,
+        },
+        decision: {
+          decision: "Finish: the pipeline completed successfully.",
+          reason: "A run produced a complete result with acceptable ambiguity.",
+          alternative_considered: "Continue resuming.",
+          rejected_because: "There is nothing left to execute.",
+        },
+        acted: false,
+      },
+    ],
+    terminal_reason: "completed",
+    resume_attempts: 0,
+    reflection: {
+      summary: "Completed 7 stage(s).",
+      successes: ["requirement_analyzer", "coverage_validator"],
+      failures: [],
+      retries: [],
+      recovered_stages: [],
+      skipped_stages: [],
+      lessons: ["Execution was clean; no retries or failures to learn from."],
+      recommendations: ["No blocking ambiguity detected; the pack is ready for review."],
+      goal_achieved: true,
+      needs_clarification: false,
+      needs_manual_review: false,
+    },
+  },
 };
 
 export const failedRun: RunStatusResponse = {

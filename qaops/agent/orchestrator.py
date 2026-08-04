@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from qaops.agent.base import Agent
+from qaops.agent.loop import GoalDrivenLoop
 from qaops.agent.planner import ExecutionPlanner
 from qaops.agent.reflection import Reflector
 from qaops.execution.checkpoint import CheckpointStore
@@ -24,7 +25,7 @@ from qaops.execution.checkpoint import CheckpointStore
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from qaops.agent.models import ExecutionPlan, Reflection
+    from qaops.agent.models import ExecutionPlan, LoopSummary, Reflection
     from qaops.config import QAOpsSettings
     from qaops.llm import LLMClient, PromptLoader
     from qaops.services.design_service import DesignOutcome, DesignService
@@ -109,3 +110,35 @@ class OrchestratorAgent(Agent):
         skipped = [s.stage for s in plan.steps if s.status.value == "reuse"]
         reflection = self.reflect(outcome, settings, skipped_stages=skipped)
         return plan, outcome, reflection
+
+    def execute_until_goal(
+        self,
+        input_path: Path,
+        settings: QAOpsSettings,
+        *,
+        goal: str = "Generate a complete test-design pack.",
+        from_: str | None = None,
+        report: object | None = None,
+        events: object | None = None,
+    ) -> tuple[ExecutionPlan, DesignOutcome | None, LoopSummary]:
+        """Goal-driven execution (ADR-042): observe -> decide -> act -> reflect.
+
+        Manages execution across acts until a terminal condition (completed,
+        max resume attempts, clarification needed, or manual review needed),
+        delegating every act to DesignService.run()/.resume(). When the first act
+        succeeds - always the case with no checkpoints - this runs exactly one
+        iteration and returns the same outcome as Phase 26 (artifact-identical).
+        """
+        plan = self.plan(input_path, settings, goal=goal, from_=from_)
+        reporter = report if callable(report) else None
+        event_sink = events if callable(events) else None
+        loop = GoalDrivenLoop(self._service, self._reflector)
+        outcome, summary = loop.run(
+            input_path,
+            settings,
+            goal=goal,
+            from_=from_,
+            report=reporter,
+            events=event_sink,
+        )
+        return plan, outcome, summary

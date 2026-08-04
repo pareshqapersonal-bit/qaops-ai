@@ -68,6 +68,44 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 27: Goal-driven agent loop (observe → decide → act → reflect)
+
+Evolves the Phase-26 single-shot orchestrator into a bounded goal-driven loop
+that manages execution until a terminal condition, delegating every act to the
+unchanged deterministic pipeline. The agent gains a decision lifecycle; it still
+authors no QA artifact, executes no stage, and writes no checkpoint (ADR-042).
+
+- **Added** `qaops/agent/observe.py` (read-only `Observation`) and
+  `qaops/agent/loop.py` (`GoalDrivenLoop` + deterministic `decide()`): observe
+  execution state → decide continue/resume/stop/recommend → act via
+  `DesignService.run()`/`.resume()` → reflect, looping on resumable failures up
+  to a bound.
+- **Added** `OrchestratorAgent.execute_until_goal()`; the Phase-26 `execute()`,
+  `plan()`, `reflect()` are unchanged.
+- **The loop is now the default execution path** (API runner drives
+  `execute_until_goal`). Safe because the agent is a thin delegator: a no-op run
+  (no checkpoints, first act succeeds) runs one iteration and is
+  **byte-identical to Phase 26** — asserted by a direct-vs-agent test.
+- **Added** `max_resume_attempts` to `QAOpsSettings` (default 2). The agent
+  decides whether another resume is worthwhile; per-stage provider/model retry
+  and failover remain owned by `AdaptiveExecutor`, unchanged. `CheckpointStore`
+  is unchanged and only read.
+- **Terminal conditions**: completed, max resume attempts, clarification needed
+  (unresolved/gap thresholds), or manual review needed (repeated stage failure).
+  Each iteration records its observation + structured decision.
+- **Additive API/UI**: run status gains an optional `loop_summary` (iterations,
+  decisions, terminal reason, cumulative reflection); a new run-page panel shows
+  it. No existing endpoint, field, or workflow changed; pre-loop runs have a null
+  loop_summary. The underlying stage error, failed stage, and attempt history are
+  preserved on terminal failure (secret-redacted as before).
+- **Tests**: +19 backend (`tests/test_phase27_goal_driven_loop.py`) — observe,
+  all decide branches, resume-loop recovery across iterations, stop conditions,
+  clarification/manual-review, reflection accumulation, direct-vs-agent artifact
+  identity, and the cannot-execute-stages / cannot-generate-artifacts /
+  cannot-write-checkpoints invariants; +1 frontend (loop panel). Backend 780
+  passed; frontend 62 passed.
+- **ADR-042**. Version stays `0.18.0-dev`.
+
 ### Phase 26: The Orchestrator Agent (first agentic capability)
 
 Introduces QAOps' first agent. It reasons about HOW the deterministic pipeline
