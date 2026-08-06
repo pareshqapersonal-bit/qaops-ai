@@ -68,6 +68,33 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 29: Evidence-first unresolved classification (artifact quality)
+
+Reduces false-positive `unresolved` condition classifications — the cause of
+"confirm with the PO" placeholders appearing where the stated requirements and
+business rules actually supported a definitive expected result. Additive; no
+architectural change, no new capability, all Phase 25–28 guarantees preserved
+(ADR-044).
+
+- **Strengthened** the `TestConditionAnalyzer` prompt to be evidence-first: the
+  model must exhaust ALL requirements and business rules (not only the linked
+  ones) and default to `resolved` when the evidence supports a definitive
+  outcome, reaching for `unresolved` only when no combination of evidence yields
+  one. Every `unresolved` must carry a specific, substantive `gap_reference`.
+- **Preserved** the never-fabricate rule verbatim: genuinely unsupported
+  behaviour stays `unresolved` → tracked gap → provisional case; the model must
+  not invent an expected result.
+- **Added** a deterministic, report-only justification gate in `conditions.py`
+  (`_report_unjustified_unresolved`): for every `unresolved` condition it checks
+  the `gap_reference` is substantive (non-empty, specific, not a bare
+  "confirm with the PO"/`TBD`/`unknown` placeholder) and logs likely
+  false-positives by id/count (non-sensitive diagnostics only). It **never
+  reclassifies** — the model remains responsible for the classification.
+- **No interface change**: no API field, no schema change, no UI change.
+- **Tests**: backend 801 passed (+11 Phase 29: justification predicate, reporter
+  behaviour, and the report-only/no-mutation guarantee); frontend 62 unchanged.
+- **ADR-044**. Version stays `0.18.0-dev`.
+
 ### Phase 28: Multi-agent supervisor refactor (pure architectural evolution)
 
 Decomposes the monolithic `OrchestratorAgent` into a `SupervisorAgent`
