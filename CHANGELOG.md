@@ -68,6 +68,37 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 28: Multi-agent supervisor refactor (pure architectural evolution)
+
+Decomposes the monolithic `OrchestratorAgent` into a `SupervisorAgent`
+coordinating three specialized agents, with 100% identical external behaviour.
+Zero new QA functionality — the deliverable is a cleaner architecture that is
+open to future agents (ADR-043).
+
+- **Added** `qaops/agent/agents/` with `PlanningAgent` (wraps `ExecutionPlanner`),
+  `ExecutionAgent` (delegates only to `DesignService.run()`/`.resume()`, never
+  executes a stage), and `ReflectionAgent` (wraps `Reflector`).
+- **Added** `qaops/agent/supervisor.py` — `SupervisorAgent` composes the three
+  agents and drives the `GoalDrivenLoop`; it is the coordination layer the runner
+  now talks to.
+- **`GoalDrivenLoop` kept as a reusable engine** — its logic is unchanged; it now
+  drives acts through the `ExecutionAgent` (a pass-through to `DesignService`), so
+  behaviour is byte-identical.
+- **`OrchestratorAgent` kept as a thin backward-compatible facade** delegating to
+  the supervisor; existing callers and tests work unchanged.
+- **`observe()`/`decide()` stay utility functions** (not agents) — exactly three
+  specialized agents, no over-abstraction.
+- **Behavioural identity proven**: all 780 Phase 25–27 tests pass unchanged, plus
+  a Phase 28 suite (+10) asserting SupervisorAgent vs OrchestratorAgent-facade vs
+  direct `DesignService` produce byte-identical artifacts, identical checkpoints,
+  and identical loop summaries. No API/UI schema change; the frontend suite passes
+  untouched (identical API responses).
+- **Preserved**: pipeline sole artifact generator; `AdaptiveExecutor` retry/
+  failover; `CheckpointStore` checkpoint ownership; `DesignService` execution
+  ownership; deterministic execution; backward compatibility.
+- **Tests**: backend 790 passed (+10); frontend 62 passed (unchanged).
+- **ADR-043**. Version stays `0.18.0-dev`.
+
 ### Phase 27: Goal-driven agent loop (observe → decide → act → reflect)
 
 Evolves the Phase-26 single-shot orchestrator into a bounded goal-driven loop

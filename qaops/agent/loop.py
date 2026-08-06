@@ -41,9 +41,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from qaops.agent.agents.execution import ExecutionAgent
     from qaops.agent.reflection import Reflector
     from qaops.config import QAOpsSettings
-    from qaops.services.design_service import DesignOutcome, DesignService
+    from qaops.services.design_service import DesignOutcome
 
 
 def _clarification_needed(obs: Observation) -> bool:
@@ -130,8 +131,11 @@ def decide(obs: Observation, *, max_resume_attempts: int) -> tuple[LoopDecision,
 class GoalDrivenLoop:
     """Runs the observe->decide->act loop, delegating every act to DesignService."""
 
-    def __init__(self, service: DesignService, reflector: Reflector) -> None:
-        self._service = service
+    def __init__(self, executor: ExecutionAgent, reflector: Reflector) -> None:
+        # The loop drives acts through the ExecutionAgent (ADR-043), which
+        # delegates to DesignService.run()/.resume() exactly as before - a pure
+        # structural change, byte-identical behaviour.
+        self._executor = executor
         self._reflector = reflector
 
     def run(
@@ -164,11 +168,11 @@ class GoalDrivenLoop:
             attempts: list[dict[str, object]] = []
             try:
                 if act_is_resume:
-                    outcome = self._service.resume(
+                    outcome = self._executor.resume(
                         input_path, settings, from_=from_, report=report, events=events
                     )
                 else:
-                    outcome = self._service.run(
+                    outcome = self._executor.run(
                         input_path, settings, from_=from_, report=report, events=events
                     )
             except StageError as exc:

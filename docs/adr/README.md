@@ -43,5 +43,6 @@
 | [040](040-execution-checkpointing-and-resume.md) | Execution checkpointing, partial artifacts, and in-process resume | Accepted |
 | [041](041-orchestrator-agent.md) | The Orchestrator Agent: QAOps' first agentic capability (plan / decide / reflect, artifacts stay pipeline-owned) | Accepted |
 | [042](042-goal-driven-agent-loop.md) | The goal-driven agent loop: observe → decide → act → reflect, bounded resume, artifacts stay pipeline-owned | Accepted |
+| [043](043-multi-agent-supervisor-refactor.md) | Multi-agent supervisor refactor: OrchestratorAgent decomposed into a supervisor coordinating PlanningAgent/ExecutionAgent/ReflectionAgent, byte-identical behaviour | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

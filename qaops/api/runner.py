@@ -16,7 +16,7 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
-from qaops.agent import OrchestratorAgent
+from qaops.agent import SupervisorAgent
 from qaops.api.runs import ArtifactMeta, RunProgress, RunStatus, RunStore
 from qaops.config import QAOpsSettings
 from qaops.core.errors import QAOpsError, StageError
@@ -161,11 +161,13 @@ def execute_run(
     store.update(run_id, status=RunStatus.RUNNING, started_at=datetime.now(UTC))
     run_settings = settings.model_copy(update={"output_dir": run.output_dir})
 
-    # Phase 26 (ADR-041): the orchestrator agent builds an execution plan before
-    # running. This is reasoning ABOUT execution - the deterministic pipeline
-    # still performs the run below. Plan generation is best-effort; a failure
-    # here must never block the actual run.
-    agent = OrchestratorAgent(service)
+    # Phase 28 (ADR-043): the SupervisorAgent coordinates the specialized
+    # planning/execution/reflection agents. It builds an execution plan before
+    # running - reasoning ABOUT execution; the deterministic pipeline still
+    # performs the run below. Plan generation is best-effort; a failure here must
+    # never block the actual run. Behaviour is identical to the Phase-27
+    # OrchestratorAgent, which now delegates to this same supervisor.
+    agent = SupervisorAgent(service)
     try:
         plan = agent.plan(input_path, run_settings)
         store.update(run_id, plan=plan.model_dump(mode="json"))
