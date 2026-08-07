@@ -1,110 +1,117 @@
-# ADR-044: Evidence-first unresolved classification and justification gate
+# ADR-044: Narrow gap propagation in unresolved classification
 
-**Status:** Accepted · **Date:** 2026-08-06 · **Relates to:** ADR-036 (exhaustive test design), ADR-037 (condition expansion & ambiguity integrity)
+**Status:** Accepted · **Date:** 2026-08-07 · **Relates to:** ADR-036 (exhaustive test design), ADR-037 (condition expansion & ambiguity integrity)
 
 ## Context
 
 When the pipeline cannot determine a condition's expected outcome from the
-available evidence, it correctly refuses to fabricate one: the condition is
-marked `unresolved`, becomes a tracked gap (ADR-036/037), and the corresponding
-test case's `expected_result` states that the behaviour must be confirmed with
-the product owner. This is intended, evidence-honest behaviour — fabricating a
-pass/fail assertion for undocumented behaviour would be worse.
+evidence, it correctly marks the condition `unresolved`, tracks it as a gap, and
+the test case's `expected_result` says the behaviour must be confirmed. This is
+intended, evidence-honest behaviour.
 
-The observed quality problem is not the placeholders themselves but
-**false-positive unresolved classifications**: the `TestConditionAnalyzer`
-sometimes marks a condition `unresolved` even though the stated requirements and
-business rules *do* support a definitive expected result. The model reaches for
-`unresolved` conservatively instead of exhausting the evidence first. The result
-is a "confirm with the PO" placeholder where a determinate, evidence-based answer
-was derivable.
+A real failing run exposed a defect: the "Auto-Delete Test Customer Mobile
+Numbers" PRD produced **20 of 22 conditions unresolved**, and nearly every test
+case carried a "confirm with the product owner" placeholder - even for conditions
+whose expected behaviour was fully specified (an admin adding a number, numbers
+persisting across sessions, the cron running nightly, deletion targeting only
+Eyewear data). A healthy baseline run (the "BOGO Offer" PRD) produced a correct
+4 of 11 unresolved.
 
-Phase 29's objective is to reduce those false positives while preserving the
-evidence-first philosophy — recommend clarification only when the available
-requirements genuinely do not support a definitive conclusion.
+## Root cause (proven from run artifacts)
+
+Tracing the failing run's artifacts (requirements -> business rules -> gaps ->
+conditions -> `gap_reference`) showed the mechanism precisely:
+
+- The GapAnalyzer produced 7 legitimate but **requirement-level** gaps (mobile
+  number format undefined, deletion strategy undefined, cron timezone undefined,
+  etc.).
+- The TestConditionAnalyzer's rule was effectively "if a gap exists on this
+  condition's requirement, the condition is unresolved." So each gap fanned out
+  across **every** condition sharing its requirement - including conditions that
+  verify a **different, fully-specified aspect** of that requirement. A gap about
+  mobile-number *format* unresolved the conditions for *adding*, *persisting*,
+  and *removing* a number; a gap about the cron *timezone* unresolved the
+  conditions for the job running *nightly* and *excluding unconfigured numbers*.
+
+The 20/22 was the model's direct output, driven by the over-broad prompt rule.
+The deterministic gap-linkage backstop (`_apply_gap_linkage`) shared the same
+flaw: its subject-overlap test matched on generic domain nouns
+("mobile"/"number"/"customer") that appear in nearly every condition, so it too
+would re-block specified conditions.
+
+This refuted the earlier hypotheses: it is **not** a single SSO gap propagating,
+**not** backend actions being inherently unresolved (backend/derived conditions
+resolve fine when no gap touches their subject), but **over-broad gap
+propagation** - a gap poisoning a whole requirement rather than the specific
+aspect it concerns.
 
 ## Decision
 
-Two additive changes, no architectural redesign. Every Phase 25–28 guarantee is
-preserved: the pipeline remains the sole artifact generator, `AdaptiveExecutor`
-owns retry/failover, `CheckpointStore` owns checkpoints, `DesignService` owns
-execution, and the SupervisorAgent architecture is untouched.
+Narrow gap propagation to **subject-matter overlap** in the analyzer **prompt
+only**, keeping the change to the smallest surface supported by production
+evidence. The 20/22 failure was the LLM's direct classification output, so the
+prompt is where the fix belongs.
 
-### 1. Evidence-first prompt (TestConditionAnalyzer)
+### Prompt (the fix)
 
-The "Resolved vs unresolved" section of `test_condition_analyzer_v1.md` is
-strengthened to require the model to exhaust the evidence before classifying a
-condition as `unresolved`:
+The TestConditionAnalyzer prompt now instructs: a listed gap makes a condition
+`unresolved` **only when the gap's missing information is the very thing that
+condition verifies**. Sharing a requirement with a gap is explicitly not
+sufficient; a condition verifying a different, fully-specified aspect stays
+`resolved`. Worked examples cover tag-copy vs tag-visibility, number-format vs
+add/persist/remove, and cron-timezone vs runs-nightly. A guard rail is added so
+narrowing does not become ignoring: if the missing information directly affects
+the expected result the condition verifies, it MUST stay `unresolved` - narrowing
+must never fabricate an unsupported outcome.
 
-- Before marking `unresolved`, the model must actively search ALL analyzed
-  requirements AND all business rules — not only those linked to the scenario —
-  for a stated outcome, limit, rule, or transition that determines the expected
-  behaviour, including legitimately derived boundaries/equivalences/combinations/
-  transitions.
-- Default to `resolved` whenever the evidence supports a definitive outcome;
-  reach for `unresolved` only after that search genuinely yields nothing.
-  Conservatism is explicitly not a reason to mark `unresolved`.
-- Every `unresolved` condition must carry a specific, substantive `gap_reference`
-  naming the exact missing information. A vague or empty gap_reference is a signal
-  the condition was probably resolvable.
+### Deterministic backstop: deliberately unchanged (for now)
 
-The pre-existing never-fabricate rule is kept verbatim: genuinely unsupported
-behaviour must remain `unresolved`, and the model must not invent an expected
-result or write "confirm with the product owner" as though it were real product
-behaviour.
+`_apply_gap_linkage` / `_blocking_gap` are left exactly as they were. The
+production failure originated in the LLM's classification, not the deterministic
+backstop (which only ever *adds* unresolved to conditions the model marked
+resolved). Changing it now would be speculative. The correct next step is to
+re-run the Auto-Delete PRD with the prompt fix and observe the real output; only
+if the backstop is then shown to still propagate gaps incorrectly will a targeted
+change to it be considered. This keeps the change minimal and evidence-driven.
 
-### 2. Deterministic justification gate (report-only)
+## Verification
 
-A deterministic check in `conditions.py` (`_report_unjustified_unresolved`) runs
-after the existing gap→unresolved linkage. For every condition marked
-`unresolved`, it verifies the `gap_reference` is a substantive justification —
-non-empty, long enough to state a specific open question, and not a bare
-"confirm with the PO/BA/client" (or `TBD`/`unknown`/`n/a`) placeholder that names
-who to ask but not what is missing.
-
-Crucially, the gate **detects and reports only** — it never reclassifies. The
-model remains responsible for the classification; the gate surfaces likely
-false-positive `unresolved` conditions (by id and count, via the module logger,
-using non-sensitive diagnostics only). This keeps the pipeline the sole author of
-the classification and makes the "unresolved" state auditable rather than an
-unchecked model assertion.
-
-## Why report-only, not auto-reclassify
-
-Automatically flipping an `unresolved` condition to `resolved` during validation
-would require the pipeline to deterministically judge that the evidence supports a
-specific expected outcome — a judgement that belongs to the model reasoning over
-the evidence, not to a keyword rule. Reclassifying risks fabricating a resolution
-the evidence may not actually support, the exact harm ADR-036 prevents. Detection
-plus the strengthened prompt raises quality without that risk; the gate is the
-backstop that surfaces residual false positives for review.
+- Root cause traced from the two real run artifacts (checked into
+  `tests/fixtures/phase29`): the failing Auto-Delete result (20/22 unresolved)
+  and the healthy BOGO result (4/11).
+- The prompt fix is a reasoning change; its effect is validated by **re-running
+  the Auto-Delete PRD on the live LLM** and observing that fully-specified
+  conditions now resolve while genuinely gap-affected ones (number format, cron
+  timezone) stay unresolved, with BOGO unchanged.
+- Unit tests pin the prompt contract (the narrowing instruction, the anti-ignore
+  guard rail, never-fabricate, and evidence-first are all present) and retain the
+  two artifacts as the baseline for that re-run comparison.
 
 ## Consequences
 
-- Fewer false-positive `unresolved` classifications, so fewer "confirm with the
-  PO" placeholders where the evidence actually supported a determinate answer.
-- Genuinely unsupported behaviour still becomes `unresolved` → gap →
-  provisional case, unchanged.
-- `unresolved` is now evidence-bound and auditable: unjustified classifications
-  are logged for observability.
-- No interface change: no new API field, no schema change, no UI change; the
-  deterministic pipeline's external behaviour for well-formed inputs is unchanged
-  except for the intended quality improvement in classification.
+- Fewer false-positive `unresolved` classifications: a gap no longer poisons
+  fully-specified sibling conditions.
+- Genuinely ambiguous conditions still become `unresolved` -> gap -> provisional
+  case, unchanged.
+- No interface change: no new API field, no schema change, no UI change.
 
 ## Alternatives considered
 
-- **Auto-reclassify unjustified unresolveds:** rejected — see above; risks
-  fabricated resolutions.
-- **New API/schema field to surface the report:** rejected for Phase 29 — the
-  objective is artifact quality, and the log-based report satisfies "detect and
-  report" without a schema change. A structured surface can be added later if
-  needed.
-- **Canonicalizing the placeholder text:** deferred to a later
-  presentation-polish release; it is cosmetic, not a correctness improvement.
+- **Downstream reclassification of unresolved conditions:** rejected - would risk
+  fabricating expected results the evidence does not support, violating the
+  evidence-first philosophy. The fix improves the analyzer's reasoning instead of
+  repairing its output.
+- **Tuning the lexical overlap threshold further:** rejected as overfitting - the
+  failing PRD's gaps and conditions share genuine vocabulary that no token
+  threshold cleanly separates. Semantic discrimination is the prompt's job.
+- **Placeholder-text canonicalization:** deferred; cosmetic, not correctness.
 
 ## Limitations / future work
 
-The justification gate is a conservative textual check; it flags obviously
-unjustified classifications, not every questionable one. Placeholder-text
-canonicalization and a structured (non-log) surface for the report remain
-candidate future work.
+The deterministic backstop (`_blocking_gap`) is unchanged and remains lexical: in
+principle it could still re-block a resolved condition on coarse token overlap. It
+is left as-is deliberately - the production evidence points at the LLM, and we
+change the smallest surface. If a post-fix re-run shows the backstop still
+propagating gaps incorrectly, a targeted change to it (e.g. excluding
+domain-ubiquitous tokens from the overlap) becomes the evidence-supported next
+step. Placeholder-text canonicalization remains candidate future work.

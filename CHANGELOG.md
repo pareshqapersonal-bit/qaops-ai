@@ -68,31 +68,31 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
-### Phase 29: Evidence-first unresolved classification (artifact quality)
+### Phase 29: Narrow gap propagation in unresolved classification (artifact quality)
 
-Reduces false-positive `unresolved` condition classifications — the cause of
-"confirm with the PO" placeholders appearing where the stated requirements and
-business rules actually supported a definitive expected result. Additive; no
-architectural change, no new capability, all Phase 25–28 guarantees preserved
-(ADR-044).
+Fixes a defect where a well-specified PRD produced 20/22 conditions `unresolved`
+(nearly every test case carried a "confirm with the product owner" placeholder).
+Root cause, proven from the failing run's artifacts: each requirement-level gap
+was propagating to **every** condition on that requirement, including conditions
+verifying a different, fully-specified aspect. The fix narrows propagation to
+subject-matter overlap without eliminating it (ADR-044).
 
-- **Strengthened** the `TestConditionAnalyzer` prompt to be evidence-first: the
-  model must exhaust ALL requirements and business rules (not only the linked
-  ones) and default to `resolved` when the evidence supports a definitive
-  outcome, reaching for `unresolved` only when no combination of evidence yields
-  one. Every `unresolved` must carry a specific, substantive `gap_reference`.
-- **Preserved** the never-fabricate rule verbatim: genuinely unsupported
-  behaviour stays `unresolved` → tracked gap → provisional case; the model must
-  not invent an expected result.
-- **Added** a deterministic, report-only justification gate in `conditions.py`
-  (`_report_unjustified_unresolved`): for every `unresolved` condition it checks
-  the `gap_reference` is substantive (non-empty, specific, not a bare
-  "confirm with the PO"/`TBD`/`unknown` placeholder) and logs likely
-  false-positives by id/count (non-sensitive diagnostics only). It **never
-  reclassifies** — the model remains responsible for the classification.
+- **Strengthened** the `TestConditionAnalyzer` prompt (the fix): a gap makes a
+  condition `unresolved` only when the gap's missing information is the very thing
+  that condition verifies; sharing a requirement is not sufficient. A guard rail
+  keeps genuinely gap-affected conditions unresolved (narrowing must not become
+  ignoring or fabrication).
+- **Deterministic backstop unchanged**: `_apply_gap_linkage`/`_blocking_gap` are
+  left as-is. The production failure originated in the LLM's classification, so
+  the change is confined to the prompt - the smallest surface supported by
+  evidence. A targeted backstop change will be considered only if a post-fix
+  re-run of the PRD shows it still propagating gaps incorrectly.
+- **Fixtures**: the two real run artifacts are checked into
+  `tests/fixtures/phase29` (failing Auto-Delete 20/22, healthy BOGO 4/11) as the
+  baseline for validating the prompt fix by re-running the pipeline.
 - **No interface change**: no API field, no schema change, no UI change.
-- **Tests**: backend 801 passed (+11 Phase 29: justification predicate, reporter
-  behaviour, and the report-only/no-mutation guarantee); frontend 62 unchanged.
+- **Tests**: backend 796 passed (+6 Phase 29: prompt contract + fixture
+  baselines); frontend 62 unchanged.
 - **ADR-044**. Version stays `0.18.0-dev`.
 
 ### Phase 28: Multi-agent supervisor refactor (pure architectural evolution)

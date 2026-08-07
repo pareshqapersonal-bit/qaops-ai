@@ -1,0 +1,2168 @@
+{
+  "source_name": "PRD_Auto_Delete_Test_Customer_Mobile_Numbers_Final.docx",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Admin Configuration for Test Mobile Numbers",
+      "description": "The system must allow an Admin to add one or more test mobile numbers via a configuration named 'Auto Delete Customer Mobile Numbers'.",
+      "source_excerpt": "Admin can add one or more test mobile numbers.",
+      "actors": [
+        "Admin"
+      ],
+      "inputs": [
+        "test mobile numbers"
+      ],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "Once saved, the numbers remain configured until manually removed."
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-002",
+      "title": "Automated Customer Deletion Script",
+      "description": "A shell script must be developed to delete Eyewear customer records for the configured mobile numbers and generate success/failure logs.",
+      "source_excerpt": "Develop a shell script to delete Eyewear customer records for the configured mobile numbers. Generate success/failure logs.",
+      "actors": [],
+      "inputs": [
+        "configured mobile numbers"
+      ],
+      "outputs": [
+        "success/failure logs"
+      ],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-003",
+      "title": "Scheduled Cron Job Execution",
+      "description": "A daily Cron job must execute at 12:30 AM to read configured mobile numbers and delete matching Eyewear customer records.",
+      "source_excerpt": "Execute daily at 12:30 AM. Read configured mobile numbers from Admin. Delete matching Eyewear customer records.",
+      "actors": [],
+      "inputs": [
+        "configured mobile numbers from Admin"
+      ],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "Execute daily at 12:30 AM"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-004",
+      "title": "Cron Job Error Handling",
+      "description": "The Cron job must continue processing the remaining mobile numbers even if a single deletion fails.",
+      "source_excerpt": "Continue processing remaining numbers even if one deletion fails.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-005",
+      "title": "SSO Data Isolation",
+      "description": "The solution must only delete customer records from the Eyewear application, leaving Tata SSO identities and other Tata application data unchanged.",
+      "source_excerpt": "This solution deletes customer records only from the Eyewear application. SSO identities and accounts in other Tata applications remain unchanged.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [
+        "Tata Single Sign-On (SSO)"
+      ],
+      "constraints": [
+        "SSO identities and accounts in other Tata applications remain unchanged."
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-006",
+      "title": "Usage Restriction",
+      "description": "The feature is intended only for QA/testing and mobile numbers must be used only for login/signup testing.",
+      "source_excerpt": "Feature is intended only for QA/testing. These numbers must be used only for login/signup testing.",
+      "actors": [
+        "QA"
+      ],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "Feature is intended only for QA/testing.",
+        "These numbers must be used only for login/signup testing."
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-007",
+      "title": "Order Placement Restriction",
+      "description": "No orders should be placed using the configured test mobile numbers to avoid data discrepancies.",
+      "source_excerpt": "No orders should be placed using these numbers to avoid data discrepancies.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "No orders should be placed using these numbers"
+      ],
+      "assumptions": []
+    }
+  ],
+  "business_rules": [
+    {
+      "id": "BR-001",
+      "requirement_id": "REQ-001",
+      "rule": "The configuration for test mobile numbers must be named 'Auto Delete Customer Mobile Numbers'.",
+      "source_excerpt": "Add a configuration named 'Auto Delete Customer Mobile Numbers'."
+    },
+    {
+      "id": "BR-002",
+      "requirement_id": "REQ-001",
+      "rule": "Configured test mobile numbers must remain saved until manually removed.",
+      "source_excerpt": "Once saved, the numbers remain configured until manually removed."
+    },
+    {
+      "id": "BR-003",
+      "requirement_id": "REQ-002",
+      "rule": "The shell script must delete Eyewear customer records associated with configured mobile numbers.",
+      "source_excerpt": "Develop a shell script to delete Eyewear customer records for the configured mobile numbers."
+    },
+    {
+      "id": "BR-004",
+      "requirement_id": "REQ-002",
+      "rule": "The customer deletion script must generate success and failure logs.",
+      "source_excerpt": "Generate success/failure logs."
+    },
+    {
+      "id": "BR-005",
+      "requirement_id": "REQ-003",
+      "rule": "The scheduled Cron job must execute daily at 12:30 AM.",
+      "source_excerpt": "Execute daily at 12:30 AM."
+    },
+    {
+      "id": "BR-006",
+      "requirement_id": "REQ-003",
+      "rule": "Only configured test mobile numbers are eligible to be deleted.",
+      "source_excerpt": "Only configured mobile numbers are deleted."
+    },
+    {
+      "id": "BR-007",
+      "requirement_id": "REQ-003",
+      "rule": "Configured mobile numbers must be processed during every nightly Cron execution until removed from the Admin configuration.",
+      "source_excerpt": "Configured numbers are processed during every nightly Cron execution until removed from the Admin configuration."
+    },
+    {
+      "id": "BR-008",
+      "requirement_id": "REQ-004",
+      "rule": "The Cron job must continue processing remaining configured mobile numbers even if a deletion fails for one number.",
+      "source_excerpt": "Continue processing remaining numbers even if one deletion fails."
+    },
+    {
+      "id": "BR-009",
+      "requirement_id": "REQ-005",
+      "rule": "Customer record deletion must only affect data within the Eyewear application.",
+      "source_excerpt": "This solution deletes customer records only from the Eyewear application."
+    },
+    {
+      "id": "BR-010",
+      "requirement_id": "REQ-005",
+      "rule": "Tata SSO identities and accounts in other Tata applications must remain unchanged during customer deletion.",
+      "source_excerpt": "SSO identities and accounts in other Tata applications remain unchanged."
+    },
+    {
+      "id": "BR-011",
+      "requirement_id": "REQ-006",
+      "rule": "The test mobile cleanup feature must be used exclusively for QA and testing purposes.",
+      "source_excerpt": "Feature is intended only for QA/testing."
+    },
+    {
+      "id": "BR-012",
+      "requirement_id": "REQ-006",
+      "rule": "Configured test mobile numbers must be used exclusively for login and signup testing.",
+      "source_excerpt": "These numbers must be used only for login/signup testing."
+    },
+    {
+      "id": "BR-013",
+      "requirement_id": "REQ-007",
+      "rule": "No orders must be placed using configured test mobile numbers.",
+      "source_excerpt": "No orders should be placed using these numbers to avoid data discrepancies."
+    }
+  ],
+  "gap_report": {
+    "gaps": [
+      {
+        "description": "Validation rules for mobile numbers (such as accepted length, country code formatting, allowed character sets, and duplicate checking) are not defined.",
+        "severity": "blocker",
+        "requirement_id": "REQ-001",
+        "suggested_question": "What are the precise format, length, country code, and duplicate validation rules for test mobile numbers in the Admin UI?"
+      },
+      {
+        "description": "The exact scope and strategy for customer record deletion (hard delete vs. soft delete, and treatment of child/linked records like carts, addresses, and auth tokens) are unspecified.",
+        "severity": "blocker",
+        "requirement_id": "REQ-002",
+        "suggested_question": "Is the deletion a hard database delete or soft delete, and what linked customer tables or entities must be cleaned up?"
+      },
+      {
+        "description": "The timezone for the 12:30 AM scheduled Cron job execution is not specified.",
+        "severity": "major",
+        "requirement_id": "REQ-003",
+        "suggested_question": "Which specific timezone (e.g., UTC, IST) should be used to schedule the daily 12:30 AM Cron job execution?"
+      },
+      {
+        "description": "Log storage location, log level details, retention policy, and accessibility for QA/Dev teams are not defined.",
+        "severity": "major",
+        "requirement_id": "REQ-002",
+        "suggested_question": "Where will the success/failure logs be stored, what information will each log entry contain, and how will QA access them?"
+      },
+      {
+        "description": "Script behavior and error handling are undefined if a configured test mobile number has associated order records.",
+        "severity": "blocker",
+        "requirement_id": "REQ-007",
+        "suggested_question": "How should the script behave if an order was accidentally placed using a test mobile number: should deletion proceed, skip, or raise an error?"
+      },
+      {
+        "description": "Notification mechanisms and failure alerting (e.g., email alerts, Slack webhooks, retry attempts) for failed deletions are unspecified.",
+        "severity": "major",
+        "requirement_id": "REQ-004",
+        "suggested_question": "Will there be any alerts generated or automatic retries attempted when a mobile number deletion fails during the Cron job run?"
+      },
+      {
+        "description": "Dependency on SSO validation is left open and unresolved in the requirements text.",
+        "severity": "blocker",
+        "requirement_id": "REQ-005",
+        "suggested_question": "Has Engineering confirmed whether deleting only the Eyewear customer record successfully allows the mobile number to re-enter the signup flow without modifying Tata SSO?"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "SC-001",
+      "title": "Admin Configuration of Test Mobile Numbers Persistence and Removal",
+      "description": "Verifies that an Admin can add one or more test mobile numbers under the 'Auto Delete Customer Mobile Numbers' configuration and that configured numbers persist until manually removed.",
+      "category": "crud",
+      "requirement_ids": [
+        "REQ-001"
+      ]
+    },
+    {
+      "id": "SC-002",
+      "title": "Shell Script Execution and Customer Deletion Logging",
+      "description": "Verifies that the shell script deletes Eyewear customer records associated with configured mobile numbers and generates corresponding success and failure execution logs.",
+      "category": "functional",
+      "requirement_ids": [
+        "REQ-002"
+      ]
+    },
+    {
+      "id": "SC-003",
+      "title": "Scheduled Nightly Cron Job Deletion Execution",
+      "description": "Verifies that the daily Cron job executes automatically at 12:30 AM to read configured test mobile numbers, delete matching Eyewear customer records, and process configured numbers nightly until they are removed.",
+      "category": "functional",
+      "requirement_ids": [
+        "REQ-003"
+      ]
+    },
+    {
+      "id": "SC-004",
+      "title": "Cron Job Fault Tolerance on Record Deletion Failure",
+      "description": "Verifies that if deleting an Eyewear customer record fails for one mobile number, the Cron job logs the error and continues processing all remaining configured mobile numbers.",
+      "category": "error_handling",
+      "requirement_ids": [
+        "REQ-004"
+      ]
+    },
+    {
+      "id": "SC-005",
+      "title": "Data Isolation between Eyewear Customer Records and Tata SSO Systems",
+      "description": "Verifies that customer deletion strictly targets data within the Eyewear application, leaving Tata SSO identities and accounts across other Tata applications unchanged.",
+      "category": "integration",
+      "requirement_ids": [
+        "REQ-005"
+      ]
+    },
+    {
+      "id": "SC-006",
+      "title": "Validation of QA Login and Signup Usage for Test Mobile Numbers",
+      "description": "Verifies that configured test mobile numbers are used exclusively for QA login and signup testing, ensuring the cleanup workflow supports test account lifecycles.",
+      "category": "functional",
+      "requirement_ids": [
+        "REQ-006"
+      ]
+    },
+    {
+      "id": "SC-007",
+      "title": "Restriction on Order Placement for Configured Test Mobile Numbers",
+      "description": "Verifies that no orders can be placed or exist for configured test mobile numbers to prevent data discrepancies in operational records.",
+      "category": "negative",
+      "requirement_ids": [
+        "REQ-007"
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "id": "COND-001",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "business_rule_ids": [
+        "BR-001"
+      ],
+      "category": "positive",
+      "description": "Admin adds test mobile numbers under the configuration named 'Auto Delete Customer Mobile Numbers'.",
+      "rationale": "REQ-001 and BR-001 explicitly state that an Admin can add test mobile numbers under a configuration named 'Auto Delete Customer Mobile Numbers'.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "config_name": "Auto Delete Customer Mobile Numbers",
+        "action": "add"
+      },
+      "gap_reference": "Validation rules for mobile numbers (such as accepted length, country code formatting, allowed character sets, and duplicate checking) are not defined."
+    },
+    {
+      "id": "COND-002",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "business_rule_ids": [
+        "BR-002"
+      ],
+      "category": "business_rule",
+      "description": "Configured test mobile numbers persist in system configuration across sessions until manually removed.",
+      "rationale": "REQ-001 and BR-002 specify that once saved, configured numbers remain saved until manually removed.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "persistence": "persisted",
+        "action": "retain"
+      },
+      "gap_reference": "Validation rules for mobile numbers (such as accepted length, country code formatting, allowed character sets, and duplicate checking) are not defined."
+    },
+    {
+      "id": "COND-003",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "business_rule_ids": [
+        "BR-002"
+      ],
+      "category": "state_transition",
+      "description": "Admin manually removes a configured test mobile number, deleting it from the configuration.",
+      "rationale": "BR-002 states that configured numbers remain saved until manually removed, defining a state transition from configured to unconfigured.",
+      "source_basis": "documented_state_transition",
+      "status": "unresolved",
+      "parameters": {
+        "initial_state": "configured",
+        "action": "manual_remove",
+        "resulting_state": "unconfigured"
+      },
+      "gap_reference": "Validation rules for mobile numbers (such as accepted length, country code formatting, allowed character sets, and duplicate checking) are not defined."
+    },
+    {
+      "id": "COND-004",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "business_rule_ids": [],
+      "category": "validation",
+      "description": "Validation of mobile number length, format, country code, allowed characters, and duplicates upon input.",
+      "rationale": "Requirements state that numbers are added in configuration, but formatting, duplicate checking, and length validation rules are undefined.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "input_validation": "mobile_number_format_and_duplicates"
+      },
+      "gap_reference": "Validation rules for mobile numbers (such as accepted length, country code formatting, allowed character sets, and duplicate checking) are not defined."
+    },
+    {
+      "id": "COND-005",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "business_rule_ids": [
+        "BR-003"
+      ],
+      "category": "positive",
+      "description": "Shell script executes and deletes Eyewear customer records for configured mobile numbers.",
+      "rationale": "REQ-002 and BR-003 explicitly require the shell script to delete Eyewear customer records associated with configured mobile numbers.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "execution_trigger": "shell_script",
+        "target": "configured_mobile_number"
+      },
+      "gap_reference": "The exact scope and strategy for customer record deletion (hard delete vs. soft delete, and treatment of child/linked records like carts, addresses, and auth tokens) are unspecified."
+    },
+    {
+      "id": "COND-006",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "business_rule_ids": [
+        "BR-004"
+      ],
+      "category": "positive",
+      "description": "Shell script generates a success log entry when customer record deletion succeeds.",
+      "rationale": "BR-004 mandates that the customer deletion script generates success logs upon execution.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "execution_result": "success",
+        "log_generated": "success_log"
+      },
+      "gap_reference": "The exact scope and strategy for customer record deletion (hard delete vs. soft delete, and treatment of child/linked records like carts, addresses, and auth tokens) are unspecified."
+    },
+    {
+      "id": "COND-007",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "business_rule_ids": [
+        "BR-004"
+      ],
+      "category": "error_handling",
+      "description": "Shell script generates a failure log entry when customer record deletion fails.",
+      "rationale": "BR-004 mandates that the customer deletion script generates failure logs when errors occur during execution.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "execution_result": "failure",
+        "log_generated": "failure_log"
+      },
+      "gap_reference": "The exact scope and strategy for customer record deletion (hard delete vs. soft delete, and treatment of child/linked records like carts, addresses, and auth tokens) are unspecified."
+    },
+    {
+      "id": "COND-008",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "business_rule_ids": [
+        "BR-003"
+      ],
+      "category": "business_rule",
+      "description": "Deletion scope and strategy (hard delete vs. soft delete) and treatment of linked customer tables during script execution.",
+      "rationale": "The script is required to delete customer records, but whether it executes a hard or soft delete and how linked entities (carts, addresses) are handled is unspecified.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "deletion_strategy": "hard_or_soft_delete"
+      },
+      "gap_reference": "The exact scope and strategy for customer record deletion (hard delete vs. soft delete, and treatment of child/linked records like carts, addresses, and auth tokens) are unspecified."
+    },
+    {
+      "id": "COND-009",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "business_rule_ids": [
+        "BR-004"
+      ],
+      "category": "business_rule",
+      "description": "Log storage location, formatting details, level details, and retention policy for execution logs.",
+      "rationale": "Logging is required by BR-004, but log storage location, retention, and content formatting are undefined in the requirements.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "log_specification": "storage_location_and_retention"
+      },
+      "gap_reference": "Log storage location, log level details, retention policy, and accessibility for QA/Dev teams are not defined."
+    },
+    {
+      "id": "COND-010",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "business_rule_ids": [
+        "BR-005",
+        "BR-006"
+      ],
+      "category": "combination",
+      "description": "Daily scheduled Cron job executes at 12:30 AM to read configured test mobile numbers and delete matching Eyewear customer records.",
+      "rationale": "REQ-003, BR-005, and BR-006 state that the daily Cron job executes automatically at 12:30 AM to process configured mobile numbers.",
+      "source_basis": "documented_combination",
+      "status": "unresolved",
+      "parameters": {
+        "schedule": "12:30 AM daily",
+        "number_status": "configured"
+      },
+      "gap_reference": "The timezone for the 12:30 AM scheduled Cron job execution is not specified."
+    },
+    {
+      "id": "COND-011",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "business_rule_ids": [
+        "BR-006"
+      ],
+      "category": "eligibility",
+      "description": "Mobile numbers that are not present in Admin configuration are excluded from deletion during Cron job execution.",
+      "rationale": "BR-006 explicitly restricts deletion eligibility to configured test mobile numbers only.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "number_status": "unconfigured",
+        "deletion_eligibility": "ineligible"
+      },
+      "gap_reference": "The timezone for the 12:30 AM scheduled Cron job execution is not specified."
+    },
+    {
+      "id": "COND-012",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "business_rule_ids": [
+        "BR-007"
+      ],
+      "category": "positive",
+      "description": "Configured test mobile numbers are processed repeatedly during every nightly Cron execution until manually removed from configuration.",
+      "rationale": "BR-007 explicitly mandates that configured numbers must be processed during every nightly Cron execution until removed from Admin.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "execution_frequency": "nightly",
+        "config_status": "retained"
+      },
+      "gap_reference": "The timezone for the 12:30 AM scheduled Cron job execution is not specified."
+    },
+    {
+      "id": "COND-013",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "business_rule_ids": [
+        "BR-005"
+      ],
+      "category": "business_rule",
+      "description": "Timezone specification for the daily 12:30 AM Cron job execution schedule.",
+      "rationale": "BR-005 specifies 12:30 AM execution time but does not designate the target timezone.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "schedule_time": "12:30 AM",
+        "timezone": "unspecified"
+      },
+      "gap_reference": "The timezone for the 12:30 AM scheduled Cron job execution is not specified."
+    },
+    {
+      "id": "COND-014",
+      "scenario_id": "SC-004",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "business_rule_ids": [
+        "BR-008"
+      ],
+      "category": "error_handling",
+      "description": "Cron job logs the error and continues processing all remaining configured mobile numbers when deletion fails for one number.",
+      "rationale": "REQ-004 and BR-008 explicitly require the Cron job to log errors and continue processing remaining numbers if a single record deletion fails.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "current_number_result": "deletion_failed",
+        "cron_job_action": "log_error_and_continue"
+      },
+      "gap_reference": "Notification mechanisms and failure alerting (e.g., email alerts, Slack webhooks, retry attempts) for failed deletions are unspecified."
+    },
+    {
+      "id": "COND-015",
+      "scenario_id": "SC-004",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "business_rule_ids": [
+        "BR-008"
+      ],
+      "category": "error_handling",
+      "description": "Alerting mechanisms and retry policies when a mobile number deletion fails during Cron job execution.",
+      "rationale": "Requirements specify error logging and continuation, but alerting mechanisms (e.g. email alerts, Slack webhooks) or retry attempts are unspecified.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "failure_handling": "alerting_and_retries"
+      },
+      "gap_reference": "Notification mechanisms and failure alerting (e.g., email alerts, Slack webhooks, retry attempts) for failed deletions are unspecified."
+    },
+    {
+      "id": "COND-016",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "business_rule_ids": [
+        "BR-009"
+      ],
+      "category": "data_variation",
+      "description": "Customer record deletion strictly targets and affects data within the Eyewear application.",
+      "rationale": "REQ-005 and BR-009 specify that customer record deletion must only affect data within the Eyewear application.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "target_scope": "Eyewear application",
+        "effect": "record_deleted"
+      },
+      "gap_reference": "Dependency on SSO validation is left open and unresolved in the requirements text."
+    },
+    {
+      "id": "COND-017",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "business_rule_ids": [
+        "BR-010"
+      ],
+      "category": "business_rule",
+      "description": "Tata SSO identities and user accounts across other Tata applications remain unchanged during customer record deletion.",
+      "rationale": "REQ-005 and BR-010 state that SSO identities and accounts in other Tata applications must remain unchanged during customer deletion.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "external_system": "Tata SSO and other Tata apps",
+        "effect": "unchanged"
+      },
+      "gap_reference": "Dependency on SSO validation is left open and unresolved in the requirements text."
+    },
+    {
+      "id": "COND-018",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "business_rule_ids": [
+        "BR-009",
+        "BR-010"
+      ],
+      "category": "business_rule",
+      "description": "Ability for a mobile number with deleted Eyewear records to re-enter the signup flow without modifying Tata SSO.",
+      "rationale": "The requirement text leaves open whether deleting only the Eyewear record successfully permits re-signup given unmodified Tata SSO state.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "flow": "re_signup_flow",
+        "sso_state": "unmodified"
+      },
+      "gap_reference": "Dependency on SSO validation is left open and unresolved in the requirements text."
+    },
+    {
+      "id": "COND-019",
+      "scenario_id": "SC-006",
+      "requirement_ids": [
+        "REQ-006"
+      ],
+      "business_rule_ids": [
+        "BR-011",
+        "BR-012"
+      ],
+      "category": "role_variation",
+      "description": "Configured test mobile numbers are used by QA for login testing in the Eyewear application.",
+      "rationale": "REQ-006, BR-011, and BR-012 mandate that test mobile numbers are intended exclusively for QA and login/signup testing.",
+      "source_basis": "documented_combination",
+      "status": "resolved",
+      "parameters": {
+        "test_activity": "login_testing",
+        "actor": "QA"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-020",
+      "scenario_id": "SC-006",
+      "requirement_ids": [
+        "REQ-006"
+      ],
+      "business_rule_ids": [
+        "BR-011",
+        "BR-012"
+      ],
+      "category": "role_variation",
+      "description": "Configured test mobile numbers are used by QA for signup testing in the Eyewear application.",
+      "rationale": "REQ-006, BR-011, and BR-012 mandate that test mobile numbers are intended exclusively for QA and login/signup testing.",
+      "source_basis": "documented_combination",
+      "status": "resolved",
+      "parameters": {
+        "test_activity": "signup_testing",
+        "actor": "QA"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-021",
+      "scenario_id": "SC-007",
+      "requirement_ids": [
+        "REQ-007"
+      ],
+      "business_rule_ids": [
+        "BR-013"
+      ],
+      "category": "negative",
+      "description": "Order placement using configured test mobile numbers is disallowed to prevent operational data discrepancies.",
+      "rationale": "REQ-007 and BR-013 explicitly mandate that no orders should be placed using configured test mobile numbers.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "configured_mobile_number": "true",
+        "order_placement": "disallowed"
+      },
+      "gap_reference": "Script behavior and error handling are undefined if a configured test mobile number has associated order records."
+    },
+    {
+      "id": "COND-022",
+      "scenario_id": "SC-007",
+      "requirement_ids": [
+        "REQ-007"
+      ],
+      "business_rule_ids": [
+        "BR-013"
+      ],
+      "category": "error_handling",
+      "description": "Script execution behavior when attempting to delete a configured test mobile number that has an existing associated order record.",
+      "rationale": "Order placement is restricted, but the script's behavior (whether to proceed, skip, or fail) if an order accidentally exists is undefined.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "associated_orders": "present",
+        "script_action": "undefined"
+      },
+      "gap_reference": "Script behavior and error handling are undefined if a configured test mobile number has associated order records."
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "TC-001",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "condition_id": "COND-001",
+      "slot_id": "COND-001-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Admin Portal",
+      "feature": "Test Mobile Number Configuration",
+      "title": "Provisional: Verify Admin configuration setup for adding test mobile numbers under Auto Delete Customer Mobile Numbers",
+      "objective": "Verify that an Admin user can access the 'Auto Delete Customer Mobile Numbers' configuration section and add a test mobile number.",
+      "preconditions": [
+        "Admin user is authenticated and logged into the Admin Portal.",
+        "System configuration page for customer mobile number deletion is accessible."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Navigate to System Configuration -> 'Auto Delete Customer Mobile Numbers' section.",
+          "expected": "The 'Auto Delete Customer Mobile Numbers' configuration panel is displayed."
+        },
+        {
+          "number": 2,
+          "action": "Enter test mobile number '9876543210' into the mobile number input field and click 'Save'.",
+          "expected": "The input is accepted and saved in the configuration list."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner exact field validation criteria (allowed length, accepted country codes, character set restrictions, and duplicate number handling).",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "admin",
+        "configuration"
+      ]
+    },
+    {
+      "id": "TC-002",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "condition_id": "COND-002",
+      "slot_id": "COND-002-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Admin Portal",
+      "feature": "Test Mobile Number Persistence",
+      "title": "Provisional: Verify persistence of configured test mobile numbers across Admin sessions",
+      "objective": "Verify that configured test mobile numbers remain saved in system configuration across user sessions.",
+      "preconditions": [
+        "A test mobile number '9876543210' has been previously saved under 'Auto Delete Customer Mobile Numbers'."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Log out of the Admin Portal.",
+          "expected": "Admin session is successfully terminated."
+        },
+        {
+          "number": 2,
+          "action": "Log back into the Admin Portal as Admin and navigate to 'Auto Delete Customer Mobile Numbers'.",
+          "expected": "The configuration page loads successfully."
+        },
+        {
+          "number": 3,
+          "action": "Observe the list of configured test mobile numbers.",
+          "expected": "The number '9876543210' remains listed."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner whether mobile number validation and formatting persist uniformly without truncation or transformation across sessions.",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "persistence",
+        "configuration"
+      ]
+    },
+    {
+      "id": "TC-003",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "condition_id": "COND-003",
+      "slot_id": "COND-003-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Admin Portal",
+      "feature": "Test Mobile Number Removal",
+      "title": "Provisional: Verify state transition upon manual removal of configured test mobile number",
+      "objective": "Verify that manually removing a configured test mobile number transitions its state from configured to unconfigured.",
+      "preconditions": [
+        "Test mobile number '9876543210' exists in 'Auto Delete Customer Mobile Numbers' configuration."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Navigate to Admin Portal -> 'Auto Delete Customer Mobile Numbers'.",
+          "expected": "The configured list showing '9876543210' is displayed."
+        },
+        {
+          "number": 2,
+          "action": "Click 'Remove' next to mobile number '9876543210' and confirm deletion.",
+          "expected": "The mobile number is removed from the UI list."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner if removing a number immediately halts background batch processing eligibility and whether audit history of removal is required.",
+      "priority": "high",
+      "test_type": "state_transition",
+      "tags": [
+        "provisional",
+        "state_transition",
+        "admin"
+      ]
+    },
+    {
+      "id": "TC-004",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001"
+      ],
+      "condition_id": "COND-004",
+      "slot_id": "COND-004-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Admin Portal",
+      "feature": "Input Validation for Test Mobile Numbers",
+      "title": "Provisional: Verify input validation rules for mobile number formatting and duplicates",
+      "objective": "Verify input validation for length, country code formatting, character sets, and duplicate entry prevention when adding test mobile numbers.",
+      "preconditions": [
+        "Admin user is on 'Auto Delete Customer Mobile Numbers' configuration page."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Attempt to enter invalid inputs (e.g. short digits '123', special characters 'abc#', duplicate number) into the configuration input field and submit.",
+          "expected": "System processes the input attempt."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner the missing explicit validation rules including min/max length, accepted country prefixes, and error messages for duplicate numbers.",
+      "priority": "medium",
+      "test_type": "validation",
+      "tags": [
+        "provisional",
+        "validation",
+        "input_validation"
+      ]
+    },
+    {
+      "id": "TC-005",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "condition_id": "COND-005",
+      "slot_id": "COND-005-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Batch Processing",
+      "feature": "Shell Script Deletion Execution",
+      "title": "Provisional: Execute customer record deletion shell script for configured mobile numbers",
+      "objective": "Verify that the shell script executes and processes deletion for customer records matching configured mobile numbers.",
+      "preconditions": [
+        "Eyewear customer record exists for test mobile number '9876543210'.",
+        "Mobile number '9876543210' is listed in Admin configuration."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Trigger execution of the customer deletion shell script from server command line interface.",
+          "expected": "Shell script initiates and completes execution."
+        },
+        {
+          "number": 2,
+          "action": "Query Eyewear database for customer record associated with '9876543210'.",
+          "expected": "Database query completes."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner whether record deletion is a hard database delete or soft delete, and how child entities (e.g. active carts, saved addresses, auth tokens) are purged.",
+      "priority": "critical",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "shell_script",
+        "data_deletion"
+      ]
+    },
+    {
+      "id": "TC-006",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "condition_id": "COND-006",
+      "slot_id": "COND-006-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Batch Processing",
+      "feature": "Shell Script Success Logging",
+      "title": "Provisional: Verify success log generation upon successful shell script customer record deletion",
+      "objective": "Verify that the deletion shell script generates a success log entry when customer record deletion completes successfully.",
+      "preconditions": [
+        "Customer record exists for configured mobile number '9876543210'.",
+        "Shell script has permissions to write to execution log directory."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Execute customer deletion shell script for configured mobile number '9876543210'.",
+          "expected": "Script completes execution without process errors."
+        },
+        {
+          "number": 2,
+          "action": "Open and inspect the script log output file.",
+          "expected": "Log entry for mobile number '9876543210' is present."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner the exact log file location, output log schema, level (INFO/SUCCESS), and log retention policy.",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "logging",
+        "shell_script"
+      ]
+    },
+    {
+      "id": "TC-007",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "condition_id": "COND-007",
+      "slot_id": "COND-007-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Batch Processing",
+      "feature": "Shell Script Error Logging",
+      "title": "Provisional: Verify failure log generation when shell script customer deletion encounters error",
+      "objective": "Verify that the customer deletion script generates a failure log entry when an error occurs during execution.",
+      "preconditions": [
+        "Database connectivity error or foreign key violation is simulated for customer deletion process."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Trigger execution of customer deletion shell script under simulated database failure condition.",
+          "expected": "Script encounters error condition during execution."
+        },
+        {
+          "number": 2,
+          "action": "Inspect execution log file.",
+          "expected": "Failure log entry is recorded."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner failure log detail formatting, error code standard, and target log path/alerting destination.",
+      "priority": "high",
+      "test_type": "error_handling",
+      "tags": [
+        "provisional",
+        "error_handling",
+        "logging"
+      ]
+    },
+    {
+      "id": "TC-008",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "condition_id": "COND-008",
+      "slot_id": "COND-008-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Batch Processing",
+      "feature": "Deletion Scope Strategy",
+      "title": "Provisional: Verify scope and strategy of customer deletion on linked database tables",
+      "objective": "Verify whether customer record deletion uses hard delete or soft delete strategy across linked customer tables.",
+      "preconditions": [
+        "Customer profile with linked records (wishlist, cart, addresses) exists for configured test mobile number."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Execute customer deletion script.",
+          "expected": "Script finishes execution."
+        },
+        {
+          "number": 2,
+          "action": "Inspect database tables (customers, carts, user_addresses, auth_tokens) for test mobile number.",
+          "expected": "Database state reflects deletion action."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner whether relational customer records are hard deleted or soft deleted (is_deleted flag) and if cascading deletes apply to all child entities.",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "database",
+        "deletion_strategy"
+      ]
+    },
+    {
+      "id": "TC-009",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002"
+      ],
+      "condition_id": "COND-009",
+      "slot_id": "COND-009-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Batch Processing",
+      "feature": "Log Storage and Retention Specification",
+      "title": "Provisional: Verify log storage location, formatting details, and retention policy",
+      "objective": "Verify log storage location, retention duration, log levels, and access controls for customer deletion execution logs.",
+      "preconditions": [
+        "Customer deletion script has completed execution."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Check default log destination directory and inspect log file properties.",
+          "expected": "Log file exists in destination folder."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner designated log file storage path, file naming conventions, rotation/retention period, and access permission requirements.",
+      "priority": "medium",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "logging",
+        "retention"
+      ]
+    },
+    {
+      "id": "TC-010",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "condition_id": "COND-010",
+      "slot_id": "COND-010-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Scheduler",
+      "feature": "Nightly Cron Job Execution",
+      "title": "Provisional: Verify daily Cron job execution schedule at 12:30 AM for customer record cleanup",
+      "objective": "Verify that the scheduled Cron job executes automatically at 12:30 AM to delete Eyewear customer records matching configured test mobile numbers.",
+      "preconditions": [
+        "Cron job schedule is configured on server.",
+        "Mobile number '9876543210' with existing customer record is present in Admin configuration."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Wait for system clock to reach 12:30 AM or trigger system scheduler mock.",
+          "expected": "Cron job triggers at 12:30 AM."
+        },
+        {
+          "number": 2,
+          "action": "Check database for customer record associated with '9876543210'.",
+          "expected": "Cron job executes deletion logic."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner target server timezone (e.g. IST, UTC, EST) for the 12:30 AM schedule execution.",
+      "priority": "critical",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "cron_job",
+        "scheduler"
+      ]
+    },
+    {
+      "id": "TC-011",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "condition_id": "COND-011",
+      "slot_id": "COND-011-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Scheduler",
+      "feature": "Unconfigured Number Exclusion",
+      "title": "Provisional: Verify unconfigured mobile numbers are excluded from deletion during Cron job execution",
+      "objective": "Verify that customer records with mobile numbers not present in Admin configuration are untouched during Cron execution.",
+      "preconditions": [
+        "Customer record exists for unconfigured mobile number '9123456789'.",
+        "Mobile number '9123456789' is NOT in 'Auto Delete Customer Mobile Numbers' Admin configuration."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Execute scheduled Cron job at 12:30 AM.",
+          "expected": "Cron job completes execution."
+        },
+        {
+          "number": 2,
+          "action": "Query database for customer record associated with '9123456789'.",
+          "expected": "Customer record remains unchanged in database."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner timezone details and verify if unconfigured customer accounts are explicitly ignored without generating log warnings.",
+      "priority": "critical",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "cron_job",
+        "eligibility"
+      ]
+    },
+    {
+      "id": "TC-012",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "condition_id": "COND-012",
+      "slot_id": "COND-012-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Scheduler",
+      "feature": "Repeated Nightly Processing",
+      "title": "Provisional: Verify retained configured test mobile numbers are processed repeatedly across consecutive nightly Cron runs",
+      "objective": "Verify that test mobile numbers remaining in configuration are processed on each nightly Cron job execution until manually removed.",
+      "preconditions": [
+        "Mobile number '9876543210' is retained in Admin configuration.",
+        "A new customer record is created for '9876543210' after initial cleanup."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Allow Cron job to execute on consecutive Night 1 and Night 2 at 12:30 AM.",
+          "expected": "Cron job runs on both scheduled nights."
+        },
+        {
+          "number": 2,
+          "action": "Verify database state after each run.",
+          "expected": "Customer record for '9876543210' is processed on each run."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner execution behavior and timezone handling for repeated nightly cleanups on persistent test accounts.",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "cron_job",
+        "repeatability"
+      ]
+    },
+    {
+      "id": "TC-013",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-003"
+      ],
+      "condition_id": "COND-013",
+      "slot_id": "COND-013-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Scheduler",
+      "feature": "Cron Schedule Timezone Specification",
+      "title": "Provisional: Verify timezone specification for 12:30 AM scheduled Cron job execution",
+      "objective": "Verify which specific timezone governs the daily 12:30 AM Cron job execution schedule.",
+      "preconditions": [
+        "Cron job daemon is active on application server."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Inspect crontab schedule definition and system timezone configuration.",
+          "expected": "Cron schedule expression is displayed."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner the exact target timezone (e.g., IST vs UTC vs server local time) for 12:30 AM Cron trigger.",
+      "priority": "medium",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "timezone",
+        "cron_job"
+      ]
+    },
+    {
+      "id": "TC-014",
+      "scenario_id": "SC-004",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "condition_id": "COND-014",
+      "slot_id": "COND-014-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Scheduler",
+      "feature": "Cron Fault Tolerance",
+      "title": "Provisional: Verify Cron job logs error and continues batch processing when one record deletion fails",
+      "objective": "Verify fault tolerance of Cron job such that failure in deleting one customer record logs error and continues processing remaining numbers.",
+      "preconditions": [
+        "Multiple mobile numbers ('9876543210', '9876543211', '9876543212') are configured in Admin.",
+        "Deletion for '9876543211' is forced to fail (e.g. via mock DB lock/error)."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Execute scheduled Cron job.",
+          "expected": "Cron job processes batch."
+        },
+        {
+          "number": 2,
+          "action": "Inspect execution log file.",
+          "expected": "Error logged for '9876543211'."
+        },
+        {
+          "number": 3,
+          "action": "Verify deletion status of '9876543210' and '9876543212' in database.",
+          "expected": "Deletion attempted/completed for remaining numbers."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner whether failure notification alerts (email, Slack, webhook) or automatic retry attempts are required for failed records.",
+      "priority": "critical",
+      "test_type": "error_handling",
+      "tags": [
+        "provisional",
+        "error_handling",
+        "fault_tolerance"
+      ]
+    },
+    {
+      "id": "TC-015",
+      "scenario_id": "SC-004",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "condition_id": "COND-015",
+      "slot_id": "COND-015-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Scheduler",
+      "feature": "Failure Alerting and Retry Mechanisms",
+      "title": "Provisional: Verify alerting mechanisms and retry policies on Cron job deletion failure",
+      "objective": "Verify system notification behavior and retry logic when mobile number deletion fails during Cron execution.",
+      "preconditions": [
+        "Cron job experiences execution failure for a configured test mobile number."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Trigger Cron job execution under partial failure scenario.",
+          "expected": "Deletion fails for target test number."
+        },
+        {
+          "number": 2,
+          "action": "Check alert channels (monitoring dashboard, email notification, retry queues).",
+          "expected": "System records failure."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner specific failure alerting mechanisms (e.g. SMTP email alerts, PagerDuty/Slack webhooks) and immediate/next-run retry policies.",
+      "priority": "medium",
+      "test_type": "error_handling",
+      "tags": [
+        "provisional",
+        "alerting",
+        "retry_policy"
+      ]
+    },
+    {
+      "id": "TC-016",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "condition_id": "COND-016",
+      "slot_id": "COND-016-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Integrations",
+      "feature": "Eyewear Application Scope Isolation",
+      "title": "Provisional: Verify customer record deletion strictly targets and affects Eyewear application database",
+      "objective": "Verify that customer record deletion is strictly contained within Eyewear application databases.",
+      "preconditions": [
+        "Test user exists in Eyewear application database with configured test mobile number '9876543210'."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Execute customer deletion workflow for '9876543210'.",
+          "expected": "Deletion workflow completes."
+        },
+        {
+          "number": 2,
+          "action": "Query Eyewear database for '9876543210'.",
+          "expected": "Eyewear customer record is deleted."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner if SSO token revocation within Eyewear app session storage is required upon deletion.",
+      "priority": "high",
+      "test_type": "integration",
+      "tags": [
+        "provisional",
+        "data_isolation",
+        "eyewear"
+      ]
+    },
+    {
+      "id": "TC-017",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "condition_id": "COND-017",
+      "slot_id": "COND-017-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Integrations",
+      "feature": "Tata SSO Identity Preservation",
+      "title": "Provisional: Verify Tata SSO identities and accounts in other Tata applications remain unchanged during deletion",
+      "objective": "Verify that deleting Eyewear customer records does not alter or delete corresponding Tata SSO identities or accounts in other Tata ecosystem applications.",
+      "preconditions": [
+        "User account exists in Tata SSO and linked to Eyewear app as well as another Tata application (e.g. Tata Neu / NeuPass) for number '9876543210'."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Execute customer deletion script for '9876543210' in Eyewear system.",
+          "expected": "Eyewear deletion completes."
+        },
+        {
+          "number": 2,
+          "action": "Query Tata SSO identity provider directory and other Tata application databases for '9876543210'.",
+          "expected": "Identity data in SSO and external applications remains present."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner how SSO authentication behavior interacts with an account deleted in Eyewear but active in Tata SSO.",
+      "priority": "critical",
+      "test_type": "integration",
+      "tags": [
+        "provisional",
+        "sso",
+        "integration"
+      ]
+    },
+    {
+      "id": "TC-018",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "condition_id": "COND-018",
+      "slot_id": "COND-018-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Integrations",
+      "feature": "Re-signup Flow with Existing SSO Identity",
+      "title": "Provisional: Verify re-signup flow for mobile number after Eyewear record deletion with unmodified Tata SSO state",
+      "objective": "Verify whether a mobile number with deleted Eyewear records can re-register/signup on Eyewear when Tata SSO identity remains intact.",
+      "preconditions": [
+        "Eyewear record for '9876543210' was deleted by cleanup script.",
+        "Tata SSO account for '9876543210' remains active."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Open Eyewear application and initiate Signup/Login using mobile number '9876543210'.",
+          "expected": "Application prompts user for authentication/registration steps."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner explicit expected flow (automatic account re-creation, profile prompt, or error handling) during re-signup with existing Tata SSO credentials.",
+      "priority": "high",
+      "test_type": "integration",
+      "tags": [
+        "provisional",
+        "re_signup",
+        "sso"
+      ]
+    },
+    {
+      "id": "TC-019",
+      "scenario_id": "SC-006",
+      "requirement_ids": [
+        "REQ-006"
+      ],
+      "condition_id": "COND-019",
+      "slot_id": "COND-019-S1",
+      "technique": "role_variation",
+      "provisional": false,
+      "module": "QA Testing",
+      "feature": "QA Test Activity Usage",
+      "title": "Verify QA engineer can use configured test mobile number for login testing in Eyewear application",
+      "objective": "Verify that configured test mobile numbers are usable by QA for executing login testing in the Eyewear application.",
+      "preconditions": [
+        "Mobile number '9876543210' is configured in Admin under 'Auto Delete Customer Mobile Numbers'.",
+        "A test user profile is registered with '9876543210'."
+      ],
+      "test_data": {
+        "actor": "QA",
+        "test_activity": "login_testing"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "As actor 'QA', open the Eyewear login screen.",
+          "expected": "Login screen is displayed with mobile number entry field."
+        },
+        {
+          "number": 2,
+          "action": "Enter configured test mobile number '9876543210' and request OTP for 'login_testing'.",
+          "expected": "OTP is generated and sent successfully."
+        },
+        {
+          "number": 3,
+          "action": "Enter valid OTP and submit login form.",
+          "expected": "QA user is successfully logged into Eyewear application."
+        }
+      ],
+      "expected_result": "QA user successfully completes login testing in Eyewear application using configured test mobile number '9876543210'.",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "role_variation",
+        "qa_testing",
+        "login"
+      ]
+    },
+    {
+      "id": "TC-020",
+      "scenario_id": "SC-006",
+      "requirement_ids": [
+        "REQ-006"
+      ],
+      "condition_id": "COND-020",
+      "slot_id": "COND-020-S1",
+      "technique": "role_variation",
+      "provisional": false,
+      "module": "QA Testing",
+      "feature": "QA Test Activity Usage",
+      "title": "Verify QA engineer can use configured test mobile number for signup testing in Eyewear application",
+      "objective": "Verify that configured test mobile numbers are usable by QA for executing signup testing in the Eyewear application.",
+      "preconditions": [
+        "Mobile number '9876543210' is configured in Admin under 'Auto Delete Customer Mobile Numbers'.",
+        "No active Eyewear customer profile exists for '9876543210' (e.g. post cleanup)."
+      ],
+      "test_data": {
+        "actor": "QA",
+        "test_activity": "signup_testing"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "As actor 'QA', open the Eyewear registration/signup screen.",
+          "expected": "Signup screen is displayed."
+        },
+        {
+          "number": 2,
+          "action": "Enter configured test mobile number '9876543210', user details, and request OTP for 'signup_testing'.",
+          "expected": "OTP is generated and sent successfully."
+        },
+        {
+          "number": 3,
+          "action": "Enter valid OTP and complete registration.",
+          "expected": "New customer account is created successfully in Eyewear application."
+        }
+      ],
+      "expected_result": "QA user successfully completes signup testing in Eyewear application using configured test mobile number '9876543210'.",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "role_variation",
+        "qa_testing",
+        "signup"
+      ]
+    },
+    {
+      "id": "TC-021",
+      "scenario_id": "SC-007",
+      "requirement_ids": [
+        "REQ-007"
+      ],
+      "condition_id": "COND-021",
+      "slot_id": "COND-021-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Order Management",
+      "feature": "Order Placement Restriction",
+      "title": "Provisional: Verify restriction on placing orders using configured test mobile numbers",
+      "objective": "Verify that order placement is disallowed for configured test mobile numbers to prevent operational data discrepancies.",
+      "preconditions": [
+        "Mobile number '9876543210' is listed in 'Auto Delete Customer Mobile Numbers' configuration.",
+        "User is logged into Eyewear application with number '9876543210' and has items in cart."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Navigate to Checkout screen and attempt to place an order using configured test mobile number '9876543210'.",
+          "expected": "System checks order placement eligibility."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner exact enforcement mechanism (UI block, checkout validation error message, or server-side API rejection) preventing order placement.",
+      "priority": "critical",
+      "test_type": "negative",
+      "tags": [
+        "provisional",
+        "order_restriction",
+        "negative"
+      ]
+    },
+    {
+      "id": "TC-022",
+      "scenario_id": "SC-007",
+      "requirement_ids": [
+        "REQ-007"
+      ],
+      "condition_id": "COND-022",
+      "slot_id": "COND-022-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Batch Processing",
+      "feature": "Order Data Handling during Script Execution",
+      "title": "Provisional: Verify script execution behavior when attempting deletion of configured mobile number with existing orders",
+      "objective": "Verify how the customer deletion script behaves if a configured test mobile number has an existing order record in the system.",
+      "preconditions": [
+        "Mobile number '9876543210' is present in Admin configuration.",
+        "An existing order record is present in database for '9876543210'."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Trigger customer deletion script for mobile number '9876543210'.",
+          "expected": "Script detects existing order records during processing."
+        }
+      ],
+      "expected_result": "REQUIRE SPECIFICATION: Confirm with Product Owner script behavior (whether it skips customer deletion, throws foreign key constraint error, logs warning, or soft-deletes customer while retaining orders).",
+      "priority": "high",
+      "test_type": "error_handling",
+      "tags": [
+        "provisional",
+        "error_handling",
+        "order_integrity"
+      ]
+    }
+  ],
+  "coverage": {
+    "per_requirement": [
+      {
+        "requirement_id": "REQ-001",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001",
+          "TC-002",
+          "TC-003",
+          "TC-004"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-002",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-010",
+          "TC-011",
+          "TC-012",
+          "TC-013"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-004",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-014",
+          "TC-015"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-005",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-016",
+          "TC-017",
+          "TC-018"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-006",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-019",
+          "TC-020"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-007",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-021",
+          "TC-022"
+        ],
+        "missing_categories": []
+      }
+    ],
+    "per_business_rule": [
+      {
+        "rule_id": "BR-001",
+        "requirement_id": "REQ-001",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001",
+          "TC-002",
+          "TC-003",
+          "TC-004"
+        ]
+      },
+      {
+        "rule_id": "BR-002",
+        "requirement_id": "REQ-001",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001",
+          "TC-002",
+          "TC-003",
+          "TC-004"
+        ]
+      },
+      {
+        "rule_id": "BR-003",
+        "requirement_id": "REQ-002",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009"
+        ]
+      },
+      {
+        "rule_id": "BR-004",
+        "requirement_id": "REQ-002",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009"
+        ]
+      },
+      {
+        "rule_id": "BR-005",
+        "requirement_id": "REQ-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-010",
+          "TC-011",
+          "TC-012",
+          "TC-013"
+        ]
+      },
+      {
+        "rule_id": "BR-006",
+        "requirement_id": "REQ-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-010",
+          "TC-011",
+          "TC-012",
+          "TC-013"
+        ]
+      },
+      {
+        "rule_id": "BR-007",
+        "requirement_id": "REQ-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-010",
+          "TC-011",
+          "TC-012",
+          "TC-013"
+        ]
+      },
+      {
+        "rule_id": "BR-008",
+        "requirement_id": "REQ-004",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-014",
+          "TC-015"
+        ]
+      },
+      {
+        "rule_id": "BR-009",
+        "requirement_id": "REQ-005",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-016",
+          "TC-017",
+          "TC-018"
+        ]
+      },
+      {
+        "rule_id": "BR-010",
+        "requirement_id": "REQ-005",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-016",
+          "TC-017",
+          "TC-018"
+        ]
+      },
+      {
+        "rule_id": "BR-011",
+        "requirement_id": "REQ-006",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-019",
+          "TC-020"
+        ]
+      },
+      {
+        "rule_id": "BR-012",
+        "requirement_id": "REQ-006",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-019",
+          "TC-020"
+        ]
+      },
+      {
+        "rule_id": "BR-013",
+        "requirement_id": "REQ-007",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-021",
+          "TC-022"
+        ]
+      }
+    ],
+    "per_scenario": [
+      {
+        "scenario_id": "SC-001",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001",
+          "TC-002",
+          "TC-003",
+          "TC-004"
+        ]
+      },
+      {
+        "scenario_id": "SC-002",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009"
+        ]
+      },
+      {
+        "scenario_id": "SC-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-010",
+          "TC-011",
+          "TC-012",
+          "TC-013"
+        ]
+      },
+      {
+        "scenario_id": "SC-004",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-014",
+          "TC-015"
+        ]
+      },
+      {
+        "scenario_id": "SC-005",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-016",
+          "TC-017",
+          "TC-018"
+        ]
+      },
+      {
+        "scenario_id": "SC-006",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-019",
+          "TC-020"
+        ]
+      },
+      {
+        "scenario_id": "SC-007",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-021",
+          "TC-022"
+        ]
+      }
+    ],
+    "per_condition": [
+      {
+        "condition_id": "COND-001",
+        "scenario_id": "SC-001",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-001"
+        ]
+      },
+      {
+        "condition_id": "COND-002",
+        "scenario_id": "SC-001",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-002"
+        ]
+      },
+      {
+        "condition_id": "COND-003",
+        "scenario_id": "SC-001",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-003"
+        ]
+      },
+      {
+        "condition_id": "COND-004",
+        "scenario_id": "SC-001",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-004"
+        ]
+      },
+      {
+        "condition_id": "COND-005",
+        "scenario_id": "SC-002",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-005"
+        ]
+      },
+      {
+        "condition_id": "COND-006",
+        "scenario_id": "SC-002",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-006"
+        ]
+      },
+      {
+        "condition_id": "COND-007",
+        "scenario_id": "SC-002",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-007"
+        ]
+      },
+      {
+        "condition_id": "COND-008",
+        "scenario_id": "SC-002",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-008"
+        ]
+      },
+      {
+        "condition_id": "COND-009",
+        "scenario_id": "SC-002",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-009"
+        ]
+      },
+      {
+        "condition_id": "COND-010",
+        "scenario_id": "SC-003",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-010"
+        ]
+      },
+      {
+        "condition_id": "COND-011",
+        "scenario_id": "SC-003",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-011"
+        ]
+      },
+      {
+        "condition_id": "COND-012",
+        "scenario_id": "SC-003",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-012"
+        ]
+      },
+      {
+        "condition_id": "COND-013",
+        "scenario_id": "SC-003",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-013"
+        ]
+      },
+      {
+        "condition_id": "COND-014",
+        "scenario_id": "SC-004",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-014"
+        ]
+      },
+      {
+        "condition_id": "COND-015",
+        "scenario_id": "SC-004",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-015"
+        ]
+      },
+      {
+        "condition_id": "COND-016",
+        "scenario_id": "SC-005",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-016"
+        ]
+      },
+      {
+        "condition_id": "COND-017",
+        "scenario_id": "SC-005",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-017"
+        ]
+      },
+      {
+        "condition_id": "COND-018",
+        "scenario_id": "SC-005",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-018"
+        ]
+      },
+      {
+        "condition_id": "COND-019",
+        "scenario_id": "SC-006",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-019"
+        ]
+      },
+      {
+        "condition_id": "COND-020",
+        "scenario_id": "SC-006",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-020"
+        ]
+      },
+      {
+        "condition_id": "COND-021",
+        "scenario_id": "SC-007",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-021"
+        ]
+      },
+      {
+        "condition_id": "COND-022",
+        "scenario_id": "SC-007",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-022"
+        ]
+      }
+    ],
+    "traceability": {
+      "entries": {
+        "REQ-001": [
+          "TC-001",
+          "TC-002",
+          "TC-003",
+          "TC-004"
+        ],
+        "REQ-002": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009"
+        ],
+        "REQ-003": [
+          "TC-010",
+          "TC-011",
+          "TC-012",
+          "TC-013"
+        ],
+        "REQ-004": [
+          "TC-014",
+          "TC-015"
+        ],
+        "REQ-005": [
+          "TC-016",
+          "TC-017",
+          "TC-018"
+        ],
+        "REQ-006": [
+          "TC-019",
+          "TC-020"
+        ],
+        "REQ-007": [
+          "TC-021",
+          "TC-022"
+        ]
+      }
+    },
+    "metrics": {
+      "total_requirements": 7,
+      "covered_requirements": 7,
+      "total_business_rules": 13,
+      "covered_business_rules": 13,
+      "total_scenarios": 7,
+      "covered_scenarios": 7,
+      "total_test_cases": 22,
+      "total_conditions": 22,
+      "covered_conditions": 2,
+      "unresolved_conditions": 20,
+      "expansion_truncated": false
+    },
+    "duplicate_pairs": [
+      {
+        "test_case_id_a": "TC-019",
+        "test_case_id_b": "TC-020",
+        "reason": "same scenario and requirements; title overlap 88%"
+      }
+    ],
+    "invalid_references": [],
+    "suspected_duplicates": [
+      [
+        "TC-019",
+        "TC-020"
+      ]
+    ]
+  },
+  "expansion_truncated": false,
+  "truncation_note": ""
+}

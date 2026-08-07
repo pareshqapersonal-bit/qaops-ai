@@ -63,27 +63,6 @@ _DERIVED_BASES = frozenset(
     }
 )
 
-# Phase 29: minimum length for a gap_reference to count as a substantive
-# justification for an unresolved condition, and the bare confirm-with-someone
-# phrases that name WHO to ask but not WHAT is missing (so they are not, on their
-# own, a justification). Detection is deterministic and report-only.
-_MIN_JUSTIFICATION_CHARS = 12
-_BARE_CONFIRM_PHRASES = frozenset(
-    {
-        "confirm with the po",
-        "confirm with po",
-        "confirm with the product owner",
-        "confirm with the client",
-        "confirm with client",
-        "confirm with the ba",
-        "confirm with ba",
-        "confirm with the business analyst",
-        "tbd",
-        "unknown",
-        "n/a",
-    }
-)
-
 
 def _canonical_signature(wire: ExtractedTestCondition) -> tuple[str, ...]:
     """Deterministic semantic signature for dedup (ADR-036).
@@ -175,14 +154,6 @@ class TestConditionAnalyzer:
         # the gap, so a known ambiguity cannot coexist with 100% condition
         # coverage. Runs BEFORE gap synthesis so we do not duplicate gaps.
         conditions = self._apply_gap_linkage(conditions, analysis.gap_report.gaps)
-
-        # Phase 29: deterministic justification check. Every unresolved condition
-        # must be backed by a real gap and a substantive gap_reference. This
-        # DETECTS AND REPORTS unjustified unresolved classifications; it never
-        # reclassifies - the model remains responsible for the classification
-        # (evidence-first is enforced by the prompt). Reporting only, so the
-        # pipeline stays the sole author and behaviour is unchanged for callers.
-        self._report_unjustified_unresolved(conditions, analysis.gap_report.gaps)
 
         # Ambiguity handling (ADR-036): every unresolved condition becomes a gap
         # so the missing behaviour is tracked, without inventing an answer and
@@ -306,58 +277,6 @@ class TestConditionAnalyzer:
             if len(t) >= 4
         }
         return tokens - stop
-
-    def _report_unjustified_unresolved(
-        self, conditions: list[TestCondition], gaps: list[Gap]
-    ) -> list[str]:
-        """Detect and report unresolved conditions lacking a real justification.
-
-        Phase 29 (detect-and-report only; never reclassifies). An unresolved
-        condition is JUSTIFIED when it carries a substantive gap_reference - a
-        specific statement of the missing information. It is UNJUSTIFIED when the
-        gap_reference is missing, empty, or too trivial to name what is missing
-        (e.g. a bare "confirm with the PO" with no stated open question). Such a
-        classification is likely a false-positive unresolved that the evidence-
-        first prompt should have resolved.
-
-        Returns the list of offending condition ids (also logged as counts). The
-        model remains responsible for classification; this only surfaces
-        suspects for observability. It does not mutate conditions or gaps.
-        """
-        unjustified: list[str] = []
-        for cond in conditions:
-            if cond.status is not ConditionStatus.UNRESOLVED:
-                continue
-            reference = " ".join((cond.gap_reference or "").split())
-            if not self._is_substantive_justification(reference):
-                unjustified.append(cond.id)
-
-        if unjustified:
-            # Counts and ids only - never prompts, secrets, or document content.
-            logger.warning(
-                "test_condition_analyzer.unjustified_unresolved count=%d of unresolved=%d ids=%s",
-                len(unjustified),
-                sum(1 for c in conditions if c.status is ConditionStatus.UNRESOLVED),
-                sorted(unjustified),
-            )
-        return unjustified
-
-    @staticmethod
-    def _is_substantive_justification(reference: str) -> bool:
-        """True when a gap_reference genuinely names missing information.
-
-        Deterministic and conservative: a justification is substantive when it is
-        non-empty, long enough to state a specific open question, and not merely a
-        bare confirm-with-someone placeholder carrying no actual open question.
-        """
-        if len(reference) < _MIN_JUSTIFICATION_CHARS:
-            return False
-        folded = reference.casefold()
-        # A bare "confirm with the PO/client/BA" with nothing else stated is not a
-        # justification - it names who to ask but not what is missing.
-        return not any(
-            folded == phrase or folded == phrase + "." for phrase in _BARE_CONFIRM_PHRASES
-        )
 
     def _log_expansion(
         self, data: ScenarioDesignResult, conditions: list[TestCondition], truncated: bool

@@ -1,0 +1,1801 @@
+{
+  "source_name": "BOGO_Offer_PRD_QAOps_Test.pdf",
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Apply BOGO on two units",
+      "description": "Apply BOGO when 2 units of the same BOGO-eligible SKU are added to cart.",
+      "source_excerpt": "Apply BOGO when 2 units of the same BOGO-eligible SKU are added to cart.",
+      "actors": [
+        "customer"
+      ],
+      "inputs": [
+        "2 units of the same BOGO-eligible SKU"
+      ],
+      "outputs": [
+        "one free item"
+      ],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-002",
+      "title": "Charge and free unit pricing",
+      "description": "For every eligible pair, charge 1 unit at the regular selling price and make 1 unit free.",
+      "source_excerpt": "For every eligible pair, charge 1 unit at the regular selling price and make 1 unit free.",
+      "actors": [],
+      "inputs": [
+        "eligible pair"
+      ],
+      "outputs": [
+        "1 unit at regular selling price",
+        "1 unit free"
+      ],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-003",
+      "title": "Automatic promotion application",
+      "description": "Apply the promotion automatically without a coupon code.",
+      "source_excerpt": "Apply the promotion automatically without a coupon code.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "without a coupon code"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-004",
+      "title": "Display promotion text",
+      "description": "Display 'Buy 1 Get 1 Free' for an item receiving the offer.",
+      "source_excerpt": "Display 'Buy 1 Get 1 Free' for an item receiving the offer.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [
+        "'Buy 1 Get 1 Free' display"
+      ],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-005",
+      "title": "Remove free-item on quantity reduction",
+      "description": "If eligible quantity is reduced below 2, remove the free-item benefit immediately.",
+      "source_excerpt": "If eligible quantity is reduced below 2, remove the free-item benefit immediately.",
+      "actors": [],
+      "inputs": [
+        "eligible quantity reduced below 2"
+      ],
+      "outputs": [
+        "free-item benefit removed"
+      ],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "remove immediately"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-006",
+      "title": "Scaling for quantities 3 and 4",
+      "description": "For 4 eligible units, 2 units are free; for 3 units, only 1 unit is free.",
+      "source_excerpt": "For 4 eligible units, 2 units are free; for 3 units, only 1 unit is free.",
+      "actors": [],
+      "inputs": [
+        "3 eligible units",
+        "4 eligible units"
+      ],
+      "outputs": [
+        "1 free unit for 3 units",
+        "2 free units for 4 units"
+      ],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-007",
+      "title": "Exclude non-BOGO products",
+      "description": "Do not apply BOGO to products that are not marked BOGO eligible.",
+      "source_excerpt": "Do not apply BOGO to products that are not marked BOGO eligible.",
+      "actors": [],
+      "inputs": [
+        "products not marked BOGO eligible"
+      ],
+      "outputs": [],
+      "validations": [
+        "Do not apply BOGO"
+      ],
+      "dependencies": [],
+      "constraints": [],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-008",
+      "title": "Revalidate eligibility at checkout",
+      "description": "Revalidate BOGO eligibility at checkout before order placement.",
+      "source_excerpt": "Revalidate BOGO eligibility at checkout before order placement.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [
+        "Revalidate BOGO eligibility"
+      ],
+      "dependencies": [
+        "checkout"
+      ],
+      "constraints": [
+        "before order placement"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-009",
+      "title": "Identical SKUs requirement",
+      "description": "Only identical SKUs can form a BOGO pair; different eligible SKUs cannot be combined.",
+      "source_excerpt": "Only identical SKUs can form a BOGO pair; different eligible SKUs cannot be combined.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [
+        "Only identical SKUs can form a BOGO pair"
+      ],
+      "dependencies": [],
+      "constraints": [
+        "different eligible SKUs cannot be combined"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-010",
+      "title": "Free unit SKU match",
+      "description": "The free unit must be the same SKU as the paid unit.",
+      "source_excerpt": "The free unit must be the same SKU as the paid unit.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "free unit must be the same SKU as the paid unit"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-011",
+      "title": "Free quantity calculation formula",
+      "description": "Free quantity equals the floor of eligible quantity divided by 2.",
+      "source_excerpt": "Free quantity = floor(eligible quantity / 2).",
+      "actors": [],
+      "inputs": [
+        "eligible quantity"
+      ],
+      "outputs": [
+        "free quantity"
+      ],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "Free quantity = floor(eligible quantity / 2)"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-012",
+      "title": "Promotion combination restriction",
+      "description": "BOGO cannot be combined with another product-level promotion on the same unit.",
+      "source_excerpt": "BOGO cannot be combined with another product-level promotion on the same unit.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [],
+      "validations": [],
+      "dependencies": [],
+      "constraints": [
+        "cannot be combined with another product-level promotion on the same unit"
+      ],
+      "assumptions": []
+    },
+    {
+      "id": "REQ-013",
+      "title": "Promotion expiration handling",
+      "description": "If the promotion expires before order placement, checkout removes the BOGO benefit and recalculates the total.",
+      "source_excerpt": "If the promotion expires before order placement, checkout removes the BOGO benefit and recalculates the total.",
+      "actors": [],
+      "inputs": [],
+      "outputs": [
+        "removes the BOGO benefit",
+        "recalculates the total"
+      ],
+      "validations": [],
+      "dependencies": [
+        "checkout"
+      ],
+      "constraints": [
+        "if the promotion expires before order placement"
+      ],
+      "assumptions": []
+    }
+  ],
+  "business_rules": [
+    {
+      "id": "BR-001",
+      "requirement_id": "REQ-001",
+      "rule": "BOGO must be applied when 2 units of the same BOGO-eligible SKU are added to the cart",
+      "source_excerpt": "Apply BOGO when 2 units of the same BOGO-eligible SKU are added to cart."
+    },
+    {
+      "id": "BR-002",
+      "requirement_id": "REQ-002",
+      "rule": "For every eligible pair, exactly 1 unit must be charged at the regular selling price and 1 unit must be made free",
+      "source_excerpt": "For every eligible pair, charge 1 unit at the regular selling price and make 1 unit free."
+    },
+    {
+      "id": "BR-003",
+      "requirement_id": "REQ-003",
+      "rule": "The promotion must be applied automatically without requiring a coupon code",
+      "source_excerpt": "Apply the promotion automatically without a coupon code."
+    },
+    {
+      "id": "BR-004",
+      "requirement_id": "REQ-004",
+      "rule": "The text 'Buy 1 Get 1 Free' must be displayed for any item receiving the offer",
+      "source_excerpt": "Display 'Buy 1 Get 1 Free' for an item receiving the offer."
+    },
+    {
+      "id": "BR-005",
+      "requirement_id": "REQ-005",
+      "rule": "If the eligible quantity is reduced below 2, the free-item benefit must be removed immediately",
+      "source_excerpt": "If eligible quantity is reduced below 2, remove the free-item benefit immediately."
+    },
+    {
+      "id": "BR-006",
+      "requirement_id": "REQ-006",
+      "rule": "For 4 eligible units, 2 units are free, and for 3 eligible units, only 1 unit is free",
+      "source_excerpt": "For 4 eligible units, 2 units are free; for 3 units, only 1 unit is free."
+    },
+    {
+      "id": "BR-007",
+      "requirement_id": "REQ-007",
+      "rule": "BOGO must not be applied to products that are not marked BOGO eligible",
+      "source_excerpt": "Do not apply BOGO to products that are not marked BOGO eligible."
+    },
+    {
+      "id": "BR-008",
+      "requirement_id": "REQ-008",
+      "rule": "BOGO eligibility must be revalidated at checkout before order placement",
+      "source_excerpt": "Revalidate BOGO eligibility at checkout before order placement."
+    },
+    {
+      "id": "BR-009",
+      "requirement_id": "REQ-009",
+      "rule": "Only identical SKUs can form a BOGO pair and different eligible SKUs cannot be combined",
+      "source_excerpt": "Only identical SKUs can form a BOGO pair; different eligible SKUs cannot be combined."
+    },
+    {
+      "id": "BR-010",
+      "requirement_id": "REQ-010",
+      "rule": "The free unit must be the same SKU as the paid unit",
+      "source_excerpt": "The free unit must be the same SKU as the paid unit."
+    },
+    {
+      "id": "BR-011",
+      "requirement_id": "REQ-011",
+      "rule": "Free quantity must equal the floor of the eligible quantity divided by 2",
+      "source_excerpt": "Free quantity = floor(eligible quantity / 2)."
+    },
+    {
+      "id": "BR-012",
+      "requirement_id": "REQ-012",
+      "rule": "BOGO cannot be combined with another product-level promotion on the same unit",
+      "source_excerpt": "BOGO cannot be combined with another product-level promotion on the same unit."
+    },
+    {
+      "id": "BR-013",
+      "requirement_id": "REQ-013",
+      "rule": "If the promotion expires before order placement, checkout must remove the BOGO benefit and recalculate the total",
+      "source_excerpt": "If the promotion expires before order placement, checkout removes the BOGO benefit and recalculates the total."
+    }
+  ],
+  "gap_report": {
+    "gaps": [
+      {
+        "description": "It is not specified how the system handles the selection of which unit is free and which is paid when multiple items or batches are added at different times or prices (e.g., if a customer adds an item at regular price, then adds another later, or if prices change).",
+        "severity": "major",
+        "requirement_id": "REQ-002",
+        "suggested_question": "When units of the same SKU have different prices (e.g. due to price updates or markdowns), how does the system determine which specific unit is designated as the free unit?"
+      },
+      {
+        "description": "The requirements do not specify where in the UI/UX the 'Buy 1 Get 1 Free' text must be displayed (e.g., next to the line item, in a summary banner, or on the receipt) or how free units are represented in the line item breakdown.",
+        "severity": "minor",
+        "requirement_id": "REQ-004",
+        "suggested_question": "What are the exact UI placement and formatting requirements for displaying 'Buy 1 Get 1 Free' on the cart and checkout screens?"
+      },
+      {
+        "description": "The behavior when revalidating BOGO eligibility fails at checkout (e.g., product becomes out of stock, promotion expires, or SKU loses eligibility between cart and checkout) is missing, specifically regarding user notification and blocking order placement.",
+        "severity": "blocker",
+        "requirement_id": "REQ-008",
+        "suggested_question": "What specific error message or user feedback must be displayed, and should the checkout process be blocked, if BOGO eligibility validation fails during checkout before order placement?"
+      },
+      {
+        "description": "It is not specified how precedence or conflict resolution is handled when multiple promotions exist and BOGO cannot be combined with another product-level promotion (REQ-012 / BR-004). Which promotion takes priority?",
+        "severity": "major",
+        "requirement_id": null,
+        "suggested_question": "If a BOGO-eligible item is also eligible for another product-level promotion, how does the system decide which promotion takes precedence when they cannot be combined?"
+      },
+      {
+        "description": "The exact user notification or messaging required when a promotion expires during checkout and the total is recalculated (REQ-013 / BR-005) is undefined.",
+        "severity": "minor",
+        "requirement_id": "REQ-013",
+        "suggested_question": "What message or notification should be presented to the user if the BOGO promotion expires during checkout and the cart total is recalculated?"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "SC-001",
+      "title": "Automatic BOGO Application for Two Units",
+      "description": "Verifies that the BOGO promotion is applied automatically without a coupon code when exactly two units of the same BOGO-eligible SKU are added to the cart.",
+      "category": "functional",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-003"
+      ]
+    },
+    {
+      "id": "SC-002",
+      "title": "Correct Pricing for BOGO Eligible Pair",
+      "description": "Verifies that for every eligible pair, exactly one unit is charged at the regular selling price and the second unit is made free using the matching SKU.",
+      "category": "positive",
+      "requirement_ids": [
+        "REQ-002",
+        "REQ-010"
+      ]
+    },
+    {
+      "id": "SC-003",
+      "title": "Promotion Text Display for BOGO Items",
+      "description": "Verifies that the text 'Buy 1 Get 1 Free' is correctly displayed for any item receiving the offer.",
+      "category": "ui",
+      "requirement_ids": [
+        "REQ-004"
+      ]
+    },
+    {
+      "id": "SC-004",
+      "title": "Removal of Free-Item Benefit on Quantity Reduction Below Minimum",
+      "description": "Verifies that reducing the eligible quantity below two immediately removes the free-item benefit.",
+      "category": "state_transition",
+      "requirement_ids": [
+        "REQ-005"
+      ]
+    },
+    {
+      "id": "SC-005",
+      "title": "Scaling BOGO Free Units for Odd and Even Quantities",
+      "description": "Verifies that free unit scaling applies correctly, providing one free unit for three eligible units and two free units for four eligible units based on the floor formula.",
+      "category": "boundary_value",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ]
+    },
+    {
+      "id": "SC-006",
+      "title": "Exclusion of Non-BOGO Products",
+      "description": "Verifies that products not marked as BOGO eligible do not receive the BOGO promotion.",
+      "category": "negative",
+      "requirement_ids": [
+        "REQ-007"
+      ]
+    },
+    {
+      "id": "SC-007",
+      "title": "Checkout Revalidation of BOGO Eligibility",
+      "description": "Verifies that BOGO eligibility is revalidated at checkout before order placement.",
+      "category": "integration",
+      "requirement_ids": [
+        "REQ-008"
+      ]
+    },
+    {
+      "id": "SC-008",
+      "title": "SKU Matching Restriction for BOGO Pairs",
+      "description": "Verifies that only identical SKUs can form a BOGO pair and different eligible SKUs cannot be combined.",
+      "category": "equivalence_partition",
+      "requirement_ids": [
+        "REQ-009"
+      ]
+    },
+    {
+      "id": "SC-009",
+      "title": "Restriction on Combining BOGO with Other Product-Level Promotions",
+      "description": "Verifies that BOGO cannot be combined with another product-level promotion on the same unit.",
+      "category": "error_handling",
+      "requirement_ids": [
+        "REQ-012"
+      ]
+    },
+    {
+      "id": "SC-010",
+      "title": "Checkout Handling for Expired Promotion",
+      "description": "Verifies that if the promotion expires before order placement, checkout removes the BOGO benefit and recalculates the total.",
+      "category": "error_handling",
+      "requirement_ids": [
+        "REQ-013"
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "id": "COND-001",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-003"
+      ],
+      "business_rule_ids": [
+        "BR-001",
+        "BR-003"
+      ],
+      "category": "positive",
+      "description": "Adding exactly two units of the same BOGO-eligible SKU to the cart applies the BOGO promotion automatically without requiring a coupon code.",
+      "rationale": "Evidence explicitly states that BOGO is applied automatically when 2 units of the same BOGO-eligible SKU are added without a coupon code.",
+      "source_basis": "explicit_rule",
+      "status": "resolved",
+      "parameters": {
+        "quantity": "2",
+        "sku_type": "same BOGO-eligible SKU",
+        "coupon": "absent"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-002",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002",
+        "REQ-010"
+      ],
+      "business_rule_ids": [
+        "BR-002",
+        "BR-010"
+      ],
+      "category": "business_rule",
+      "description": "For every eligible pair, exactly one unit is charged at the regular selling price and the second unit is made free using the matching SKU.",
+      "rationale": "Business rules dictate that every eligible pair charges 1 unit at regular price and makes 1 unit free using the same SKU.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "eligible_pair": "present",
+        "free_unit_sku": "matching"
+      },
+      "gap_reference": "It is not specified how the system handles the selection of which unit is free and which is paid when multiple items or batches are added at different times or prices (e.g., if a customer adds an item at regular price, then adds another later, or if prices change)."
+    },
+    {
+      "id": "COND-003",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "business_rule_ids": [
+        "BR-004"
+      ],
+      "category": "positive",
+      "description": "The text 'Buy 1 Get 1 Free' is correctly displayed for any item receiving the offer.",
+      "rationale": "Requirement mandates displaying 'Buy 1 Get 1 Free' for items receiving the offer.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "promotion_status": "received",
+        "display_text": "Buy 1 Get 1 Free"
+      },
+      "gap_reference": "The requirements do not specify where in the UI/UX the 'Buy 1 Get 1 Free' text must be displayed (e.g., next to the line item, in a summary banner, or on the receipt) or how free units are represented in the line item breakdown."
+    },
+    {
+      "id": "COND-004",
+      "scenario_id": "SC-004",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "business_rule_ids": [
+        "BR-005"
+      ],
+      "category": "state_transition",
+      "description": "Reducing the eligible quantity below two immediately removes the free-item benefit.",
+      "rationale": "Business rule states that if eligible quantity is reduced below 2, the free-item benefit must be removed immediately.",
+      "source_basis": "explicit_rule",
+      "status": "resolved",
+      "parameters": {
+        "eligible_quantity": "1",
+        "benefit_state": "removed"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-005",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "business_rule_ids": [
+        "BR-006",
+        "BR-011"
+      ],
+      "category": "boundary",
+      "description": "For 3 eligible units, exactly 1 unit is free based on the floor formula.",
+      "rationale": "Boundary and rule specifications define free quantity as floor of eligible quantity divided by 2, resulting in 1 free unit for 3 units.",
+      "source_basis": "derived_boundary",
+      "status": "resolved",
+      "parameters": {
+        "eligible_quantity": "3",
+        "free_quantity": "1"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-006",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "business_rule_ids": [
+        "BR-006",
+        "BR-011"
+      ],
+      "category": "boundary",
+      "description": "For 4 eligible units, exactly 2 units are free based on the floor formula.",
+      "rationale": "Boundary and rule specifications define free quantity as floor of eligible quantity divided by 2, resulting in 2 free units for 4 units.",
+      "source_basis": "derived_boundary",
+      "status": "resolved",
+      "parameters": {
+        "eligible_quantity": "4",
+        "free_quantity": "2"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-007",
+      "scenario_id": "SC-006",
+      "requirement_ids": [
+        "REQ-007"
+      ],
+      "business_rule_ids": [
+        "BR-007"
+      ],
+      "category": "negative",
+      "description": "Products not marked as BOGO eligible do not receive the BOGO promotion.",
+      "rationale": "Business rule explicitly prohibits applying BOGO to products not marked BOGO eligible.",
+      "source_basis": "explicit_rule",
+      "status": "resolved",
+      "parameters": {
+        "product_eligibility": "not marked"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-008",
+      "scenario_id": "SC-007",
+      "requirement_ids": [
+        "REQ-008"
+      ],
+      "business_rule_ids": [
+        "BR-008"
+      ],
+      "category": "business_rule",
+      "description": "BOGO eligibility is revalidated at checkout before order placement.",
+      "rationale": "Requirement states BOGO eligibility must be revalidated at checkout before order placement.",
+      "source_basis": "explicit_requirement",
+      "status": "unresolved",
+      "parameters": {
+        "checkout_stage": "before order placement",
+        "action": "revalidate"
+      },
+      "gap_reference": "The behavior when revalidating BOGO eligibility fails at checkout (e.g., product becomes out of stock, promotion expires, or SKU loses eligibility between cart and checkout) is missing, specifically regarding user notification and blocking order placement."
+    },
+    {
+      "id": "COND-009",
+      "scenario_id": "SC-008",
+      "requirement_ids": [
+        "REQ-009"
+      ],
+      "business_rule_ids": [
+        "BR-009"
+      ],
+      "category": "equivalence",
+      "description": "Only identical SKUs can form a BOGO pair and different eligible SKUs cannot be combined.",
+      "rationale": "Equivalence partitioning rule specifies that different eligible SKUs cannot form a BOGO pair.",
+      "source_basis": "explicit_rule",
+      "status": "resolved",
+      "parameters": {
+        "sku_combination": "different eligible SKUs"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-010",
+      "scenario_id": "SC-009",
+      "requirement_ids": [
+        "REQ-012"
+      ],
+      "business_rule_ids": [
+        "BR-012"
+      ],
+      "category": "error_handling",
+      "description": "BOGO cannot be combined with another product-level promotion on the same unit.",
+      "rationale": "Business rule explicitly restricts combining BOGO with another product-level promotion on the same unit.",
+      "source_basis": "explicit_rule",
+      "status": "resolved",
+      "parameters": {
+        "promotion_type": "product-level promotion",
+        "unit_combination": "same unit"
+      },
+      "gap_reference": ""
+    },
+    {
+      "id": "COND-011",
+      "scenario_id": "SC-010",
+      "requirement_ids": [
+        "REQ-013"
+      ],
+      "business_rule_ids": [
+        "BR-013"
+      ],
+      "category": "error_handling",
+      "description": "If the promotion expires before order placement, checkout removes the BOGO benefit and recalculates the total.",
+      "rationale": "Business rule mandates that checkout removes the BOGO benefit and recalculates the total if the promotion expires before order placement.",
+      "source_basis": "explicit_rule",
+      "status": "unresolved",
+      "parameters": {
+        "promotion_state": "expired",
+        "checkout_action": "remove benefit and recalculate total"
+      },
+      "gap_reference": "The exact user notification or messaging required when a promotion expires during checkout and the total is recalculated (REQ-013 / BR-005) is undefined."
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "TC-001",
+      "scenario_id": "SC-001",
+      "requirement_ids": [
+        "REQ-001",
+        "REQ-003"
+      ],
+      "condition_id": "COND-001",
+      "slot_id": "COND-001-S1",
+      "technique": "positive",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify automatic BOGO application with quantity 2 of same BOGO-eligible SKU and no coupon",
+      "objective": "Proves that adding exactly two units of the same BOGO-eligible SKU to the cart applies the BOGO promotion automatically without a coupon code.",
+      "preconditions": [
+        "The user is logged into the shopping cart application.",
+        "A BOGO-eligible SKU is available in the catalog."
+      ],
+      "test_data": {
+        "quantity": "2",
+        "sku_type": "same BOGO-eligible SKU",
+        "coupon": "absent"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Navigate to the product catalog and select a product with same BOGO-eligible SKU.",
+          "expected": "Product details page is displayed."
+        },
+        {
+          "number": 2,
+          "action": "Set the quantity to 2 and add the items to the cart without entering any coupon code.",
+          "expected": "Items are added to the cart."
+        },
+        {
+          "number": 3,
+          "action": "Open the Cart screen and view the line items.",
+          "expected": "The cart displays the items with the BOGO promotion applied automatically."
+        }
+      ],
+      "expected_result": "The cart automatically applies the BOGO promotion for 2 units of the same BOGO-eligible SKU without requiring a coupon code, resulting in one free item.",
+      "priority": "high",
+      "test_type": "functional",
+      "tags": [
+        "positive",
+        "functional"
+      ]
+    },
+    {
+      "id": "TC-002",
+      "scenario_id": "SC-002",
+      "requirement_ids": [
+        "REQ-002",
+        "REQ-010"
+      ],
+      "condition_id": "COND-002",
+      "slot_id": "COND-002-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify free unit pricing and matching SKU assignment for eligible pair",
+      "objective": "Proves the intent of charging regular price for one unit and making the second unit free using the matching SKU for every eligible pair.",
+      "preconditions": [
+        "The shopping cart contains an eligible pair of BOGO items."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Open the Cart screen and review the itemized price breakdown for the BOGO eligible pair.",
+          "expected": "The pricing details for the eligible pair are displayed."
+        }
+      ],
+      "expected_result": "Confirm with the product owner how the system handles the selection of which unit is free and which is paid when multiple items or batches are added at different times or prices.",
+      "priority": "medium",
+      "test_type": "functional",
+      "tags": [
+        "provisional",
+        "functional"
+      ]
+    },
+    {
+      "id": "TC-003",
+      "scenario_id": "SC-003",
+      "requirement_ids": [
+        "REQ-004"
+      ],
+      "condition_id": "COND-003",
+      "slot_id": "COND-003-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify promotion text display for items receiving the BOGO offer",
+      "objective": "Proves the intent of displaying 'Buy 1 Get 1 Free' for any item receiving the offer.",
+      "preconditions": [
+        "An item in the cart has successfully received the BOGO promotion."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Open the Cart screen and inspect the line item receiving the BOGO offer.",
+          "expected": "Line item details are displayed."
+        }
+      ],
+      "expected_result": "Confirm with the product owner where in the UI/UX the 'Buy 1 Get 1 Free' text must be displayed (e.g., next to the line item, in a summary banner, or on the receipt) and how free units are represented.",
+      "priority": "medium",
+      "test_type": "ui",
+      "tags": [
+        "provisional",
+        "ui"
+      ]
+    },
+    {
+      "id": "TC-004",
+      "scenario_id": "SC-004",
+      "requirement_ids": [
+        "REQ-005"
+      ],
+      "condition_id": "COND-004",
+      "slot_id": "COND-004-S1",
+      "technique": "state_transition",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify immediate removal of free-item benefit when eligible quantity is reduced below two",
+      "objective": "Proves that reducing the eligible quantity below two immediately removes the free-item benefit.",
+      "preconditions": [
+        "The cart contains 2 units of a BOGO-eligible SKU with the BOGO benefit active."
+      ],
+      "test_data": {
+        "eligible_quantity": "1",
+        "benefit_state": "removed"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Open the Cart screen and update the quantity of the BOGO-eligible SKU from 2 to eligible_quantity (1).",
+          "expected": "Cart quantity updates to 1."
+        },
+        {
+          "number": 2,
+          "action": "Review the cart summary and line item details.",
+          "expected": "The free-item benefit is removed immediately and the total recalculates to the regular price for 1 unit."
+        }
+      ],
+      "expected_result": "Reducing the eligible quantity to 1 immediately removes the free-item benefit.",
+      "priority": "high",
+      "test_type": "state_transition",
+      "tags": [
+        "state_transition"
+      ]
+    },
+    {
+      "id": "TC-005",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "condition_id": "COND-005",
+      "slot_id": "COND-005-S1",
+      "technique": "boundary",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify free unit scaling below boundary with eligible quantity 2",
+      "objective": "Proves free unit calculation for an eligible quantity just below the threshold of 3.",
+      "preconditions": [
+        "The shopping cart is empty."
+      ],
+      "test_data": {
+        "eligible_quantity": "2"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add eligible_quantity (2) units of a BOGO-eligible SKU to the cart.",
+          "expected": "2 units are added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "View the cart summary.",
+          "expected": "Exactly 1 free unit is applied based on floor(2 / 2)."
+        }
+      ],
+      "expected_result": "For 2 eligible units, exactly 1 free unit is allocated.",
+      "priority": "medium",
+      "test_type": "boundary",
+      "tags": [
+        "boundary"
+      ]
+    },
+    {
+      "id": "TC-006",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "condition_id": "COND-005",
+      "slot_id": "COND-005-S2",
+      "technique": "boundary",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify free unit scaling at boundary with eligible quantity 3",
+      "objective": "Proves that for 3 eligible units, exactly 1 unit is free based on the floor formula.",
+      "preconditions": [
+        "The shopping cart is empty."
+      ],
+      "test_data": {
+        "eligible_quantity": "3"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add eligible_quantity (3) units of a BOGO-eligible SKU to the cart.",
+          "expected": "3 units are added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "View the cart summary.",
+          "expected": "Exactly 1 free unit is applied based on floor(3 / 2)."
+        }
+      ],
+      "expected_result": "For 3 eligible units, exactly 1 unit is free.",
+      "priority": "high",
+      "test_type": "boundary",
+      "tags": [
+        "boundary"
+      ]
+    },
+    {
+      "id": "TC-007",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "condition_id": "COND-005",
+      "slot_id": "COND-005-S3",
+      "technique": "boundary",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify free unit scaling above boundary with eligible quantity 4",
+      "objective": "Proves that for 4 eligible units, exactly 2 units are free based on the floor formula.",
+      "preconditions": [
+        "The shopping cart is empty."
+      ],
+      "test_data": {
+        "eligible_quantity": "4"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add eligible_quantity (4) units of a BOGO-eligible SKU to the cart.",
+          "expected": "4 units are added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "View the cart summary.",
+          "expected": "Exactly 2 free units are applied based on floor(4 / 2)."
+        }
+      ],
+      "expected_result": "For 4 eligible units, exactly 2 units are free.",
+      "priority": "high",
+      "test_type": "boundary",
+      "tags": [
+        "boundary"
+      ]
+    },
+    {
+      "id": "TC-008",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "condition_id": "COND-006",
+      "slot_id": "COND-006-S1",
+      "technique": "boundary",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify free unit scaling below boundary with eligible quantity 3",
+      "objective": "Proves free unit calculation for eligible quantity 3 when evaluating the 4-unit threshold.",
+      "preconditions": [
+        "The shopping cart is empty."
+      ],
+      "test_data": {
+        "eligible_quantity": "3"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add eligible_quantity (3) units of a BOGO-eligible SKU to the cart.",
+          "expected": "3 units are added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "View the cart summary.",
+          "expected": "1 free unit is allocated based on floor(3 / 2)."
+        }
+      ],
+      "expected_result": "For 3 eligible units, exactly 1 unit is free.",
+      "priority": "medium",
+      "test_type": "boundary",
+      "tags": [
+        "boundary"
+      ]
+    },
+    {
+      "id": "TC-009",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "condition_id": "COND-006",
+      "slot_id": "COND-006-S2",
+      "technique": "boundary",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify free unit scaling at boundary with eligible quantity 4",
+      "objective": "Proves that for 4 eligible units, exactly 2 units are free based on the floor formula.",
+      "preconditions": [
+        "The shopping cart is empty."
+      ],
+      "test_data": {
+        "eligible_quantity": "4"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add eligible_quantity (4) units of a BOGO-eligible SKU to the cart.",
+          "expected": "4 units are added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "View the cart summary.",
+          "expected": "2 free units are allocated based on floor(4 / 2)."
+        }
+      ],
+      "expected_result": "For 4 eligible units, exactly 2 units are free.",
+      "priority": "high",
+      "test_type": "boundary",
+      "tags": [
+        "boundary"
+      ]
+    },
+    {
+      "id": "TC-010",
+      "scenario_id": "SC-005",
+      "requirement_ids": [
+        "REQ-006",
+        "REQ-011"
+      ],
+      "condition_id": "COND-006",
+      "slot_id": "COND-006-S3",
+      "technique": "boundary",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify free unit scaling above boundary with eligible quantity 5",
+      "objective": "Proves free unit calculation for an eligible quantity just above the threshold of 4.",
+      "preconditions": [
+        "The shopping cart is empty."
+      ],
+      "test_data": {
+        "eligible_quantity": "5"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add eligible_quantity (5) units of a BOGO-eligible SKU to the cart.",
+          "expected": "5 units are added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "View the cart summary.",
+          "expected": "2 free units are allocated based on floor(5 / 2)."
+        }
+      ],
+      "expected_result": "For 5 eligible units, exactly 2 units are free.",
+      "priority": "medium",
+      "test_type": "boundary",
+      "tags": [
+        "boundary"
+      ]
+    },
+    {
+      "id": "TC-011",
+      "scenario_id": "SC-006",
+      "requirement_ids": [
+        "REQ-007"
+      ],
+      "condition_id": "COND-007",
+      "slot_id": "COND-007-S1",
+      "technique": "negative",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify exclusion of products not marked as BOGO eligible",
+      "objective": "Proves that products not marked as BOGO eligible do not receive the BOGO promotion.",
+      "preconditions": [
+        "The shopping cart is empty.",
+        "A product exists in the catalog that is product_eligibility: not marked."
+      ],
+      "test_data": {
+        "product_eligibility": "not marked"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Navigate to the product catalog and select a product that is not marked BOGO eligible.",
+          "expected": "Product details page is displayed."
+        },
+        {
+          "number": 2,
+          "action": "Add 2 units of the non-eligible product to the cart.",
+          "expected": "2 units are added to the cart."
+        },
+        {
+          "number": 3,
+          "action": "Open the Cart screen and review the promotion status.",
+          "expected": "No BOGO promotion is applied, and both units are charged at regular price."
+        }
+      ],
+      "expected_result": "Products not marked as BOGO eligible do not receive the BOGO promotion.",
+      "priority": "high",
+      "test_type": "negative",
+      "tags": [
+        "negative"
+      ]
+    },
+    {
+      "id": "TC-012",
+      "scenario_id": "SC-007",
+      "requirement_ids": [
+        "REQ-008"
+      ],
+      "condition_id": "COND-008",
+      "slot_id": "COND-008-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Checkout",
+      "feature": "BOGO Revalidation",
+      "title": "Verify BOGO eligibility revalidation at checkout before order placement",
+      "objective": "Proves the intent of revalidating BOGO eligibility at checkout before order placement.",
+      "preconditions": [
+        "The cart contains items with an applied BOGO promotion.",
+        "The user proceeds to the checkout stage before order placement."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Navigate to the checkout screen.",
+          "expected": "Checkout screen is displayed."
+        }
+      ],
+      "expected_result": "Confirm with the product owner the behavior when revalidating BOGO eligibility fails at checkout (e.g., product becomes out of stock, promotion expires, or SKU loses eligibility between cart and checkout), specifically regarding user notification and blocking order placement.",
+      "priority": "medium",
+      "test_type": "integration",
+      "tags": [
+        "provisional",
+        "integration"
+      ]
+    },
+    {
+      "id": "TC-013",
+      "scenario_id": "SC-008",
+      "requirement_ids": [
+        "REQ-009"
+      ],
+      "condition_id": "COND-009",
+      "slot_id": "COND-009-S1",
+      "technique": "equivalence",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "BOGO Promotion",
+      "title": "Verify restriction against combining different eligible SKUs into a BOGO pair",
+      "objective": "Proves that only identical SKUs can form a BOGO pair and different eligible SKUs cannot be combined.",
+      "preconditions": [
+        "The shopping cart is empty.",
+        "Two different BOGO-eligible SKUs exist in the catalog."
+      ],
+      "test_data": {
+        "sku_combination": "different eligible SKUs"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add 1 unit of the first BOGO-eligible SKU to the cart.",
+          "expected": "1 unit is added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "Add 1 unit of a different BOGO-eligible SKU to the cart (sku_combination).",
+          "expected": "Second unit is added to the cart."
+        },
+        {
+          "number": 3,
+          "action": "Open the Cart screen and check for BOGO promotion application.",
+          "expected": "No BOGO promotion is applied because the SKUs are different."
+        }
+      ],
+      "expected_result": "Different eligible SKUs cannot be combined to form a BOGO pair; only identical SKUs form a BOGO pair.",
+      "priority": "high",
+      "test_type": "validation",
+      "tags": [
+        "equivalence",
+        "validation"
+      ]
+    },
+    {
+      "id": "TC-014",
+      "scenario_id": "SC-009",
+      "requirement_ids": [
+        "REQ-012"
+      ],
+      "condition_id": "COND-010",
+      "slot_id": "COND-010-S1",
+      "technique": "error_handling",
+      "provisional": false,
+      "module": "Promotions",
+      "feature": "Promotion Combination",
+      "title": "Verify restriction on combining BOGO with another product-level promotion on the same unit",
+      "objective": "Proves that BOGO cannot be combined with another product-level promotion on the same unit.",
+      "preconditions": [
+        "A BOGO-eligible SKU also has another product-level promotion applicable to it."
+      ],
+      "test_data": {
+        "promotion_type": "product-level promotion",
+        "unit_combination": "same unit"
+      },
+      "steps": [
+        {
+          "number": 1,
+          "action": "Add 2 units of the SKU with both BOGO and another product_type promotion to the cart (unit_combination).",
+          "expected": "2 units are added to the cart."
+        },
+        {
+          "number": 2,
+          "action": "Open the Cart screen and check the applied promotions.",
+          "expected": "The system prevents combining BOGO with the other product-level promotion on the same unit, applying only one or displaying an error/restriction."
+        }
+      ],
+      "expected_result": "BOGO cannot be combined with another product-level promotion on the same unit.",
+      "priority": "high",
+      "test_type": "error_handling",
+      "tags": [
+        "error_handling"
+      ]
+    },
+    {
+      "id": "TC-015",
+      "scenario_id": "SC-010",
+      "requirement_ids": [
+        "REQ-013"
+      ],
+      "condition_id": "COND-011",
+      "slot_id": "COND-011-S1",
+      "technique": "provisional",
+      "provisional": true,
+      "module": "Checkout",
+      "feature": "Promotion Expiration",
+      "title": "Verify checkout handling when promotion expires before order placement",
+      "objective": "Proves the intent of removing the BOGO benefit and recalculating the total if the promotion expires before order placement.",
+      "preconditions": [
+        "Items with an applied BOGO promotion are in the cart.",
+        "The promotion state is promotion_state: expired."
+      ],
+      "test_data": {},
+      "steps": [
+        {
+          "number": 1,
+          "action": "Proceed to checkout with items where the promotion has expired.",
+          "expected": "Checkout process is initiated."
+        }
+      ],
+      "expected_result": "Confirm with the product owner the exact user notification or messaging required when a promotion expires during checkout and the total is recalculated.",
+      "priority": "medium",
+      "test_type": "error_handling",
+      "tags": [
+        "provisional",
+        "error_handling"
+      ]
+    }
+  ],
+  "coverage": {
+    "per_requirement": [
+      {
+        "requirement_id": "REQ-001",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-002",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-002"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-004",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-003"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-005",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-004"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-006",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-007",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-011"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-008",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-012"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-009",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-013"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-010",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-002"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-011",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-012",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-014"
+        ],
+        "missing_categories": []
+      },
+      {
+        "requirement_id": "REQ-013",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-015"
+        ],
+        "missing_categories": []
+      }
+    ],
+    "per_business_rule": [
+      {
+        "rule_id": "BR-001",
+        "requirement_id": "REQ-001",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001"
+        ]
+      },
+      {
+        "rule_id": "BR-002",
+        "requirement_id": "REQ-002",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-002"
+        ]
+      },
+      {
+        "rule_id": "BR-003",
+        "requirement_id": "REQ-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001"
+        ]
+      },
+      {
+        "rule_id": "BR-004",
+        "requirement_id": "REQ-004",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-003"
+        ]
+      },
+      {
+        "rule_id": "BR-005",
+        "requirement_id": "REQ-005",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-004"
+        ]
+      },
+      {
+        "rule_id": "BR-006",
+        "requirement_id": "REQ-006",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ]
+      },
+      {
+        "rule_id": "BR-007",
+        "requirement_id": "REQ-007",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-011"
+        ]
+      },
+      {
+        "rule_id": "BR-008",
+        "requirement_id": "REQ-008",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-012"
+        ]
+      },
+      {
+        "rule_id": "BR-009",
+        "requirement_id": "REQ-009",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-013"
+        ]
+      },
+      {
+        "rule_id": "BR-010",
+        "requirement_id": "REQ-010",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-002"
+        ]
+      },
+      {
+        "rule_id": "BR-011",
+        "requirement_id": "REQ-011",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ]
+      },
+      {
+        "rule_id": "BR-012",
+        "requirement_id": "REQ-012",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-014"
+        ]
+      },
+      {
+        "rule_id": "BR-013",
+        "requirement_id": "REQ-013",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-015"
+        ]
+      }
+    ],
+    "per_scenario": [
+      {
+        "scenario_id": "SC-001",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-001"
+        ]
+      },
+      {
+        "scenario_id": "SC-002",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-002"
+        ]
+      },
+      {
+        "scenario_id": "SC-003",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-003"
+        ]
+      },
+      {
+        "scenario_id": "SC-004",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-004"
+        ]
+      },
+      {
+        "scenario_id": "SC-005",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ]
+      },
+      {
+        "scenario_id": "SC-006",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-011"
+        ]
+      },
+      {
+        "scenario_id": "SC-007",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-012"
+        ]
+      },
+      {
+        "scenario_id": "SC-008",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-013"
+        ]
+      },
+      {
+        "scenario_id": "SC-009",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-014"
+        ]
+      },
+      {
+        "scenario_id": "SC-010",
+        "status": "covered",
+        "test_case_ids": [
+          "TC-015"
+        ]
+      }
+    ],
+    "per_condition": [
+      {
+        "condition_id": "COND-001",
+        "scenario_id": "SC-001",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-001"
+        ]
+      },
+      {
+        "condition_id": "COND-002",
+        "scenario_id": "SC-002",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-002"
+        ]
+      },
+      {
+        "condition_id": "COND-003",
+        "scenario_id": "SC-003",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-003"
+        ]
+      },
+      {
+        "condition_id": "COND-004",
+        "scenario_id": "SC-004",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-004"
+        ]
+      },
+      {
+        "condition_id": "COND-005",
+        "scenario_id": "SC-005",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-005",
+          "TC-006",
+          "TC-007"
+        ]
+      },
+      {
+        "condition_id": "COND-006",
+        "scenario_id": "SC-005",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ]
+      },
+      {
+        "condition_id": "COND-007",
+        "scenario_id": "SC-006",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-011"
+        ]
+      },
+      {
+        "condition_id": "COND-008",
+        "scenario_id": "SC-007",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-012"
+        ]
+      },
+      {
+        "condition_id": "COND-009",
+        "scenario_id": "SC-008",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-013"
+        ]
+      },
+      {
+        "condition_id": "COND-010",
+        "scenario_id": "SC-009",
+        "status": "covered",
+        "unresolved": false,
+        "test_case_ids": [
+          "TC-014"
+        ]
+      },
+      {
+        "condition_id": "COND-011",
+        "scenario_id": "SC-010",
+        "status": "uncovered",
+        "unresolved": true,
+        "test_case_ids": [
+          "TC-015"
+        ]
+      }
+    ],
+    "traceability": {
+      "entries": {
+        "REQ-001": [
+          "TC-001"
+        ],
+        "REQ-002": [
+          "TC-002"
+        ],
+        "REQ-003": [
+          "TC-001"
+        ],
+        "REQ-004": [
+          "TC-003"
+        ],
+        "REQ-005": [
+          "TC-004"
+        ],
+        "REQ-006": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ],
+        "REQ-007": [
+          "TC-011"
+        ],
+        "REQ-008": [
+          "TC-012"
+        ],
+        "REQ-009": [
+          "TC-013"
+        ],
+        "REQ-010": [
+          "TC-002"
+        ],
+        "REQ-011": [
+          "TC-005",
+          "TC-006",
+          "TC-007",
+          "TC-008",
+          "TC-009",
+          "TC-010"
+        ],
+        "REQ-012": [
+          "TC-014"
+        ],
+        "REQ-013": [
+          "TC-015"
+        ]
+      }
+    },
+    "metrics": {
+      "total_requirements": 13,
+      "covered_requirements": 13,
+      "total_business_rules": 13,
+      "covered_business_rules": 13,
+      "total_scenarios": 10,
+      "covered_scenarios": 10,
+      "total_test_cases": 15,
+      "total_conditions": 11,
+      "covered_conditions": 7,
+      "unresolved_conditions": 4,
+      "expansion_truncated": false
+    },
+    "duplicate_pairs": [
+      {
+        "test_case_id_a": "TC-005",
+        "test_case_id_b": "TC-008",
+        "reason": "same scenario and requirements; title overlap 82%"
+      },
+      {
+        "test_case_id_a": "TC-006",
+        "test_case_id_b": "TC-008",
+        "reason": "same scenario and requirements; title overlap 82%"
+      },
+      {
+        "test_case_id_a": "TC-006",
+        "test_case_id_b": "TC-009",
+        "reason": "same scenario and requirements; title overlap 82%"
+      },
+      {
+        "test_case_id_a": "TC-007",
+        "test_case_id_b": "TC-009",
+        "reason": "same scenario and requirements; title overlap 82%"
+      },
+      {
+        "test_case_id_a": "TC-007",
+        "test_case_id_b": "TC-010",
+        "reason": "same scenario and requirements; title overlap 82%"
+      }
+    ],
+    "invalid_references": [],
+    "suspected_duplicates": [
+      [
+        "TC-005",
+        "TC-008"
+      ],
+      [
+        "TC-006",
+        "TC-008"
+      ],
+      [
+        "TC-006",
+        "TC-009"
+      ],
+      [
+        "TC-007",
+        "TC-009"
+      ],
+      [
+        "TC-007",
+        "TC-010"
+      ]
+    ]
+  },
+  "expansion_truncated": false,
+  "truncation_note": ""
+}

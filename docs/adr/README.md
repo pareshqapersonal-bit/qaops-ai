@@ -44,6 +44,6 @@
 | [041](041-orchestrator-agent.md) | The Orchestrator Agent: QAOps' first agentic capability (plan / decide / reflect, artifacts stay pipeline-owned) | Accepted |
 | [042](042-goal-driven-agent-loop.md) | The goal-driven agent loop: observe → decide → act → reflect, bounded resume, artifacts stay pipeline-owned | Accepted |
 | [043](043-multi-agent-supervisor-refactor.md) | Multi-agent supervisor refactor: OrchestratorAgent decomposed into a supervisor coordinating PlanningAgent/ExecutionAgent/ReflectionAgent, byte-identical behaviour | Accepted |
-| [044](044-evidence-first-unresolved-classification.md) | Evidence-first unresolved classification + deterministic report-only justification gate to reduce false-positive "confirm with PO" placeholders | Accepted |
+| [044](044-evidence-first-unresolved-classification.md) | Narrow gap propagation: a gap unresolves a condition only on subject-matter overlap, not shared requirement — fixes false-positive "confirm with PO" placeholders | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.
