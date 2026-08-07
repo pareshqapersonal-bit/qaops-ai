@@ -153,6 +153,7 @@ class TestConditionAnalyzer:
         # behaviour unknowable; such conditions must be UNRESOLVED and linked to
         # the gap, so a known ambiguity cannot coexist with 100% condition
         # coverage. Runs BEFORE gap synthesis so we do not duplicate gaps.
+        self._trace_pre_linkage(conditions)
         conditions = self._apply_gap_linkage(conditions, analysis.gap_report.gaps)
 
         # Ambiguity handling (ADR-036): every unresolved condition becomes a gap
@@ -166,6 +167,53 @@ class TestConditionAnalyzer:
             expansion_truncated=truncated,
             truncation_note=note,
         )
+
+    def _trace_pre_linkage(self, conditions: list[TestCondition]) -> None:
+        """Diagnostic: capture each condition's status BEFORE gap linkage.
+
+        Gated on the QAOPS_PRELINKAGE_TRACE env var (a file path). When set, the
+        model's raw classification - exactly as it came out of the LLM, before
+        the deterministic `_apply_gap_linkage` can flip anything - is written to
+        that path as JSON, plus a one-line summary to the logger. Default: no-op
+        (the var is unset in normal runs), so this has zero effect on behaviour.
+
+        This exists to answer, from a real live run, whether specific conditions
+        were resolved by the model and only later flipped to unresolved by the
+        deterministic backstop. It writes counts and per-condition status only -
+        no prompts, no document text beyond the condition descriptions the run
+        already produced.
+        """
+        import json
+        import os
+
+        path = os.environ.get("QAOPS_PRELINKAGE_TRACE")
+        if not path:
+            return
+        snapshot = [
+            {
+                "id": c.id,
+                "status": c.status.value,
+                "source_basis": c.source_basis.value,
+                "requirement_ids": list(c.requirement_ids),
+                "business_rule_ids": list(c.business_rule_ids),
+                "description": c.description,
+                "gap_reference": c.gap_reference,
+            }
+            for c in conditions
+        ]
+        resolved = sum(1 for c in conditions if c.status is ConditionStatus.RESOLVED)
+        unresolved = len(conditions) - resolved
+        logger.warning(
+            "test_condition_analyzer.pre_linkage_snapshot total=%d resolved=%d unresolved=%d",
+            len(conditions),
+            resolved,
+            unresolved,
+        )
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(snapshot, handle, indent=2)
+        except OSError as exc:  # pragma: no cover - diagnostic best-effort
+            logger.warning("test_condition_analyzer.pre_linkage_snapshot write failed: %s", exc)
 
     def _apply_gap_linkage(
         self, conditions: list[TestCondition], gaps: list[Gap]

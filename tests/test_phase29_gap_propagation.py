@@ -76,3 +76,67 @@ class TestRealArtifactFixtures:
         m = d["coverage"]["metrics"]
         assert m["total_conditions"] == 11
         assert m["unresolved_conditions"] == 4  # correct, must not regress
+
+
+class TestPreLinkageTrace:
+    """The pre-linkage diagnostic captures the model's raw status on demand.
+
+    Gated on QAOPS_PRELINKAGE_TRACE (a file path). Unset -> no-op. Set -> writes
+    each condition's status BEFORE _apply_gap_linkage, so a live run can prove
+    whether the deterministic backstop flipped any resolved condition.
+    """
+
+    def _analyzer(self):
+        from qaops.pipelines.test_design.conditions import TestConditionAnalyzer
+
+        return TestConditionAnalyzer.__new__(TestConditionAnalyzer)
+
+    def test_trace_is_noop_when_env_unset(self, monkeypatch) -> None:
+        from qaops.models import TestCondition
+        from qaops.models.enums import ConditionCategory, ConditionStatus, SourceBasis
+
+        monkeypatch.delenv("QAOPS_PRELINKAGE_TRACE", raising=False)
+        cond = TestCondition(
+            id="COND-001",
+            scenario_id="SC-001",
+            requirement_ids=["REQ-001"],
+            business_rule_ids=["BR-001"],
+            category=ConditionCategory.POSITIVE,
+            description="x",
+            rationale="y",
+            source_basis=SourceBasis.EXPLICIT_RULE,
+            status=ConditionStatus.RESOLVED,
+            parameters={},
+            gap_reference="",
+        )
+        # Must simply return without error and without writing anything.
+        self._analyzer()._trace_pre_linkage([cond])
+
+    def test_trace_writes_snapshot_when_env_set(self, monkeypatch, tmp_path) -> None:
+        import json as _json
+
+        from qaops.models import TestCondition
+        from qaops.models.enums import ConditionCategory, ConditionStatus, SourceBasis
+
+        out = tmp_path / "prelink.json"
+        monkeypatch.setenv("QAOPS_PRELINKAGE_TRACE", str(out))
+        conds = [
+            TestCondition(
+                id="COND-001",
+                scenario_id="SC-001",
+                requirement_ids=["REQ-001"],
+                business_rule_ids=["BR-001"],
+                category=ConditionCategory.POSITIVE,
+                description="resolved one",
+                rationale="y",
+                source_basis=SourceBasis.EXPLICIT_RULE,
+                status=ConditionStatus.RESOLVED,
+                parameters={},
+                gap_reference="",
+            ),
+        ]
+        self._analyzer()._trace_pre_linkage(conds)
+        data = _json.loads(out.read_text())
+        assert data[0]["id"] == "COND-001"
+        assert data[0]["status"] == "resolved"
+        assert data[0]["source_basis"] == "explicit_rule"
