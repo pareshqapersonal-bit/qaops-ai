@@ -47,6 +47,44 @@ def _safe_error(exc: Exception) -> str:
     return _redact(str(exc) or exc.__class__.__name__)
 
 
+def _build_review(
+    result: object, output_dir: Path
+) -> tuple[dict[str, object] | None, ArtifactMeta | None]:
+    """Run the deterministic QualityReviewer and export its ReviewReport.
+
+    Phase 30 (ADR-045). Invoked by the runner ONLY on a COMPLETED run, AFTER the
+    supervisor returns, so the Phase 28 supervisor architecture is unchanged. The
+    reviewer is read-only and advisory: it consumes the finished result (and its
+    CoverageReport) and never mutates it, invokes no stage, and writes no
+    checkpoint. Its output is surfaced additively - a plain-dict payload for the
+    run status plus a standalone JSON export - and any failure here degrades to
+    "no review" without affecting the COMPLETED status (mirrors how reflection and
+    loop_summary serialization already degrade).
+
+    Returns (review_payload, review_artifact_meta); either may be None on failure.
+    """
+    from qaops.models import TestDesignResult
+    from qaops.review import QualityReviewer
+
+    if not isinstance(result, TestDesignResult):
+        return None, None
+    try:
+        report = QualityReviewer().review(result)
+    except Exception:  # pragma: no cover - advisory; never fail the run
+        logger.info("api.quality_review_failed")
+        return None, None
+
+    payload = report.model_dump(mode="json")
+    artifact: ArtifactMeta | None = None
+    try:
+        target = output_dir / "review_report.json"
+        target.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+        artifact = ArtifactMeta(name=target.name, format="JSON (review)", path=target)
+    except OSError:  # pragma: no cover - export is best-effort
+        logger.info("api.quality_review_export_failed")
+    return payload, artifact
+
+
 def _collect_partial_artifacts(output_dir: Path) -> list[ArtifactMeta]:
     """Gather report files a failed run left in its workspace (ADR-040).
 
@@ -315,6 +353,15 @@ def execute_run(
         )
         return
 
+    # Phase 30 (ADR-045): deterministic quality review, COMPLETED runs only,
+    # after the supervisor has finished. Advisory and read-only; never gates.
+    review_payload, review_artifact = _build_review(outcome.result, run_settings.output_dir)
+    run_artifacts = [
+        ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
+    ]
+    if review_artifact is not None:
+        run_artifacts.append(review_artifact)
+
     store.update(
         run_id,
         status=RunStatus.COMPLETED,
@@ -324,7 +371,6 @@ def execute_run(
         finished_at=datetime.now(UTC),
         reflection=reflection_payload,
         loop_summary=loop_payload,
-        artifacts=[
-            ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
-        ],
+        review=review_payload,
+        artifacts=run_artifacts,
     )

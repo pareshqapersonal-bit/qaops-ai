@@ -68,6 +68,39 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 30: Deterministic Quality Review layer (QualityReviewer)
+
+Introduces an independent, deterministic quality review of a completed run's
+artifacts. Advisory only, read-only, and outside the pipeline and the supervisor;
+all Phase 25-29 guarantees preserved (ADR-045).
+
+- **New `QualityReviewer`** (`qaops/review/`): a deterministic, LLM-free, non-Agent
+  analyzer. `review(TestDesignResult) -> ReviewReport`. It **consumes** the
+  existing `CoverageReport` (metrics, `uncovered_*`, `duplicate_pairs`,
+  `invalid_references`) and adds only net-new checks (empty scenarios, provisional
+  cases, truncation, unresolved-ratio thresholds). Same input -> same output;
+  never mutates the result, generates no artifact, invokes no stage/loop, writes
+  no checkpoint.
+- **New models**: `ReviewReport`, `ReviewFinding`, and `ReviewSeverity` /
+  `ReviewCategory` enums. Findings carry severity/category/message and reference
+  artifact ids (never copy artifact content).
+- **Advisory only**: findings never gate, fail, or downgrade a run. A run with
+  CRITICAL findings is still COMPLETED. Verified: Auto-Delete baseline flags
+  CRITICAL (20/22 unresolved), BOGO baseline stays INFO (4/11).
+- **Runner-invoked, COMPLETED only**, after the SupervisorAgent returns - the
+  Phase 28 supervisor architecture is unchanged. Any review failure degrades to
+  "no review" without affecting run status.
+- **Additive surfacing**: optional `review` field on the run-status response
+  (defaulted `None`, backward compatible) and a standalone `review_report.json`
+  export listed among run artifacts. Never merged into `TestDesignResult` or
+  `CoverageReport`.
+- **Future**: an LLM `ReviewAgent` will consume this `ReviewReport` to generate
+  explanations/recommendations - it will read findings, never recompute them.
+- **Tests**: backend 814 passed (+16 Phase 30: reviewer determinism/non-mutation,
+  per-check findings, two-fixture baselines, API surfacing + backward compat);
+  frontend 62 unchanged.
+- **ADR-045**. Version stays `0.18.0-dev`.
+
 ### Phase 29: Narrow gap propagation in unresolved classification (artifact quality)
 
 Fixes a defect where a well-specified PRD produced 20/22 conditions `unresolved`

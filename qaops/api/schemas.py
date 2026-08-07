@@ -185,6 +185,30 @@ class LoopSummarySchema(BaseModel):
     reflection: ReflectionSchema
 
 
+class ReviewFindingSchema(BaseModel):
+    """One deterministic quality-review finding (ADR-045, advisory)."""
+
+    code: str
+    severity: str
+    category: str
+    message: str
+    references: list[str] = []
+    recommendation: str = ""
+
+
+class ReviewReportSchema(BaseModel):
+    """The QualityReviewer's advisory report (ADR-045, Phase 30).
+
+    Deterministic and read-only; present on COMPLETED runs only. Its presence or
+    contents never change the run status - it is advisory.
+    """
+
+    source_name: str = ""
+    findings: list[ReviewFindingSchema] = []
+    observations: list[str] = []
+    recommendations: list[str] = []
+
+
 class RunStatusResponse(BaseModel):
     run_id: str
     status: str
@@ -209,6 +233,9 @@ class RunStatusResponse(BaseModel):
     reflection: ReflectionSchema | None = None
     # Phase 27 (ADR-042), additive: the goal-driven loop's summary.
     loop_summary: LoopSummarySchema | None = None
+    # Phase 30 (ADR-045), additive: the deterministic quality review (COMPLETED
+    # runs only). Advisory - defaulted to None so existing clients are unaffected.
+    review: ReviewReportSchema | None = None
 
 
 class ArtifactSchema(BaseModel):

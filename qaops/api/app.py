@@ -34,6 +34,7 @@ from qaops.api.schemas import (
     ProgressSchema,
     ProviderModelsSchema,
     ReflectionSchema,
+    ReviewReportSchema,
     RunCreatedResponse,
     RunStatusResponse,
     StageStatusSchema,
@@ -400,6 +401,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             loop_summary=(
                 LoopSummarySchema.model_validate(run.loop_summary) if run.loop_summary else None
             ),
+            review=(ReviewReportSchema.model_validate(run.review) if run.review else None),
         )
 
     @app.get("/api/v1/runs/{run_id}/artifacts", response_model=ArtifactsResponse, tags=["design"])

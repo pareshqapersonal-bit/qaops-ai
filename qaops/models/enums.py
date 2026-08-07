@@ -111,3 +111,26 @@ class ConditionStatus(StrEnum):
 
     RESOLVED = "resolved"
     UNRESOLVED = "unresolved"
+
+
+class ReviewSeverity(StrEnum):
+    """Severity of a quality-review finding (ADR-045, Phase 30).
+
+    Advisory only: severity communicates how much attention a finding warrants,
+    never whether the run succeeded. A run with CRITICAL review findings is still
+    a COMPLETED run - the QualityReviewer never gates execution.
+    """
+
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+class ReviewCategory(StrEnum):
+    """Category of a quality-review finding (ADR-045, Phase 30)."""
+
+    COVERAGE = "coverage"
+    AMBIGUITY = "ambiguity"
+    DUPLICATION = "duplication"
+    REFERENCES = "references"
+    COMPLETENESS = "completeness"

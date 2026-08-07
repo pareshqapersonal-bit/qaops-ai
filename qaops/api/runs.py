@@ -102,6 +102,10 @@ class Run:
     # Phase 27 (ADR-042), additive: the goal-driven loop's summary (iterations,
     # decisions, terminal reason). Stored as a plain dict, like plan/reflection.
     loop_summary: dict[str, object] | None = None
+    # Phase 30 (ADR-045), additive: the deterministic QualityReviewer's advisory
+    # ReviewReport for a COMPLETED run. Plain dict, like plan/reflection/loop.
+    # Advisory only - its presence never changes run status.
+    review: dict[str, object] | None = None
 
     @property
     def input_dir(self) -> Path:

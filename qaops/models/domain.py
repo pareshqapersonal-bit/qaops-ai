@@ -17,6 +17,8 @@ from qaops.models.enums import (
     CoverageStatus,
     GapSeverity,
     Priority,
+    ReviewCategory,
+    ReviewSeverity,
     ScenarioCategory,
     SourceBasis,
     TestType,
@@ -506,3 +508,56 @@ class TestDesignResult(_StrictModel):
     # is reported as non-exhaustive.
     expansion_truncated: bool = False
     truncation_note: str = ""
+
+
+class ReviewFinding(_StrictModel):
+    """One deterministic quality-review observation (ADR-045, Phase 30).
+
+    Produced by the QualityReviewer, which reads the completed TestDesignResult
+    and its CoverageReport and never mutates them. A finding is advisory: it
+    references the artifact ids it concerns (never copies their content) and
+    states an observation plus an optional recommendation. Findings are fully
+    reproducible from the same result.
+    """
+
+    code: NonEmptyStr  # stable machine id, e.g. "high_unresolved_ratio"
+    severity: ReviewSeverity
+    category: ReviewCategory
+    message: NonEmptyStr
+    # Ids of the artifacts this finding concerns (requirement/scenario/condition/
+    # test-case ids). References only - never the artifacts themselves.
+    references: list[str] = Field(default_factory=list)
+    recommendation: str = ""
+
+
+class ReviewReport(_StrictModel):
+    """Deterministic, advisory quality review of a completed run (ADR-045).
+
+    The QualityReviewer's output. It is NOT part of artifact generation: it is
+    computed after the pipeline completes, from the immutable TestDesignResult
+    (consuming its CoverageReport rather than recomputing coverage), and it never
+    feeds back into generation. Surfaced additively (optional API field + a
+    standalone export); never merged into TestDesignResult or CoverageReport.
+
+    The future LLM ReviewAgent will consume this report to generate explanations
+    and recommendations - it will read these findings, never recompute them.
+    """
+
+    source_name: str = ""
+    findings: list[ReviewFinding] = Field(default_factory=list)
+    observations: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+    @property
+    def has_findings(self) -> bool:
+        return bool(self.findings)
+
+    def findings_by_severity(self, severity: ReviewSeverity) -> list[ReviewFinding]:
+        return [f for f in self.findings if f.severity is severity]
+
+    @property
+    def is_clean(self) -> bool:
+        """True when no WARNING or CRITICAL finding is present (INFO is fine)."""
+        return not any(
+            f.severity in (ReviewSeverity.WARNING, ReviewSeverity.CRITICAL) for f in self.findings
+        )
