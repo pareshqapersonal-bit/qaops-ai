@@ -561,3 +561,40 @@ class ReviewReport(_StrictModel):
         return not any(
             f.severity in (ReviewSeverity.WARNING, ReviewSeverity.CRITICAL) for f in self.findings
         )
+
+
+class ReviewAdviceItem(_StrictModel):
+    """One prioritized explanation of a ReviewReport finding (ADR-046, Phase 31).
+
+    Produced by the advisory ReviewAgent. It ECHOES a finding's code, severity,
+    and references (the ReviewAgent may never change these) and adds an advisory
+    `explanation`. The explanation is deterministic by default and may be refined
+    into more readable prose by an optional LLM pass - but the code, severity, and
+    references remain exactly those of the underlying finding.
+    """
+
+    code: NonEmptyStr  # echoes the ReviewFinding.code (traceability)
+    severity: ReviewSeverity  # echoes the finding severity - never re-severitised
+    explanation: NonEmptyStr  # advisory prose; deterministic default, LLM may refine
+    references: list[str] = Field(default_factory=list)  # echoes finding references
+
+
+class ReviewAdvice(_StrictModel):
+    """Advisory narrative over a ReviewReport (ADR-046, Phase 31).
+
+    The ReviewAgent's output. It CONSUMES a ReviewReport and produces prioritized
+    explanations plus consolidated recommendations for a QA Lead. It never creates
+    findings, recomputes metrics, changes severity/references, mutates artifacts,
+    or feeds back into generation - the ReviewReport remains authoritative.
+
+    Deterministic by default (a roll-up of the report's own findings and
+    recommendations); an optional LLM pass may refine only the free-text prose
+    (`headline`, item `explanation`). `generated_by` records which path produced
+    it, for trust calibration.
+    """
+
+    source_name: str = ""
+    headline: str = ""  # deterministic roll-up of severities; LLM may refine
+    items: list[ReviewAdviceItem] = Field(default_factory=list)  # prioritized
+    recommendations: list[str] = Field(default_factory=list)  # consolidated, deduped
+    generated_by: str = "deterministic"  # "deterministic" | "llm"

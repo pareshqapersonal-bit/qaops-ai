@@ -10,5 +10,6 @@ delegation, Reflector), so behaviour is byte-identical to Phase 27.
 from qaops.agent.agents.execution import ExecutionAgent
 from qaops.agent.agents.planning import PlanningAgent
 from qaops.agent.agents.reflection import ReflectionAgent
+from qaops.agent.agents.review import ReviewAgent
 
-__all__ = ["ExecutionAgent", "PlanningAgent", "ReflectionAgent"]
+__all__ = ["ExecutionAgent", "PlanningAgent", "ReflectionAgent", "ReviewAgent"]

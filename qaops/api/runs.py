@@ -106,6 +106,10 @@ class Run:
     # ReviewReport for a COMPLETED run. Plain dict, like plan/reflection/loop.
     # Advisory only - its presence never changes run status.
     review: dict[str, object] | None = None
+    # Phase 31 (ADR-046), additive: the advisory ReviewAgent's ReviewAdvice
+    # (prioritized explanations + consolidated recommendations). Present only when
+    # review_advice_enabled and the run COMPLETED. Advisory - never gates.
+    review_advice: dict[str, object] | None = None
 
     @property
     def input_dir(self) -> Path:

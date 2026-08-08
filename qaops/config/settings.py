@@ -186,6 +186,15 @@ class QAOpsSettings(BaseSettings):
         "decides whether another resume is worthwhile; per-stage provider/model "
         "retry remains owned by the executor.",
     )
+    review_advice_enabled: bool = Field(
+        default=False,
+        description="When true, the advisory ReviewAgent produces a narrative "
+        "(review_advice) explaining the deterministic ReviewReport for a completed "
+        "run. Off by default: the narrative may use an LLM and is non-deterministic, "
+        "so runs stay byte-identical unless explicitly enabled. The deterministic "
+        "ReviewReport is always produced regardless of this flag; the ReviewAgent "
+        "never creates findings or recomputes metrics.",
+    )
 
     # Input guardrails (chunking is a future milestone; V1 fails fast)
     max_input_chars: int = Field(

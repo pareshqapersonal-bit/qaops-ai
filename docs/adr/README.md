@@ -46,5 +46,6 @@
 | [043](043-multi-agent-supervisor-refactor.md) | Multi-agent supervisor refactor: OrchestratorAgent decomposed into a supervisor coordinating PlanningAgent/ExecutionAgent/ReflectionAgent, byte-identical behaviour | Accepted |
 | [044](044-evidence-first-unresolved-classification.md) | Narrow gap propagation: a gap unresolves a condition only on subject-matter overlap, not shared requirement — fixes false-positive "confirm with PO" placeholders | Accepted |
 | [045](045-deterministic-quality-review.md) | Deterministic QualityReviewer (not an Agent) consuming CoverageReport to produce an advisory ReviewReport; LLM ReviewAgent deferred | Accepted |
+| [046](046-review-agent-advisory-narrative.md) | Advisory ReviewAgent consuming ReviewReport to produce ReviewAdvice (prioritized explanations + recommendations); Runner-invoked, gated OFF by default, deterministic fallback | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

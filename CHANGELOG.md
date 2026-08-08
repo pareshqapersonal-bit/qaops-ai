@@ -68,6 +68,37 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 31: Advisory ReviewAgent (ReviewAdvice over ReviewReport)
+
+Introduces the LLM-optional `ReviewAgent` reserved by ADR-045. It consumes the
+deterministic `ReviewReport` and produces advisory `ReviewAdvice` (prioritized
+explanations + consolidated recommendations) for a QA lead. First deliberately
+non-deterministic output in the product, so it is strictly opt-in (ADR-046).
+
+- **`ReviewAgent`** (`qaops/agent/agents/review.py`, subclass of the `Agent` ABC):
+  consumes the `ReviewReport` and NOTHING else, so it structurally cannot
+  recompute anything. Never creates findings, changes severity/references, mutates
+  artifacts, affects execution or loop decisions, or feeds back into generation.
+- **Deterministic by default**: `advise()` always builds a complete `ReviewAdvice`
+  from the report (findings prioritized critical -> warning -> info, consolidated
+  de-duplicated recommendations, severity-count headline). An optional best-effort
+  LLM pass refines ONLY prose (headline, per-item explanation), mapped back by
+  finding `code`; unknown codes ignored; severity/references never change; any
+  failure falls back to deterministic. `generated_by` records provenance.
+- **New models** `ReviewAdvice` / `ReviewAdviceItem`; new prompt
+  `agent_review_advice_v1.md`.
+- **Setting-gated, OFF by default** (`review_advice_enabled=False`): with it
+  disabled, no `review_advice` field and no export - runs are byte-identical to
+  Phase 30. Verified.
+- **Runner-invoked**, COMPLETED runs only, after the `QualityReviewer`, on both
+  fresh and resume-completed paths. `SupervisorAgent` unchanged.
+- **Additive surfacing**: optional `review_advice` field on the run-status
+  response (defaulted `None`) and standalone `review_advice.json` export.
+- **Tests**: backend 844 passed (+13 Phase 31: deterministic advice, prioritization,
+  LLM enrichment + immutability guarantees, fallback, gating OFF/ON, report
+  non-mutation); frontend 62 unchanged; Phase 30 tests unchanged (backward compat).
+- **ADR-046**. Version stays `0.18.0-dev`.
+
 ### Phase 30: Deterministic Quality Review layer (QualityReviewer)
 
 Introduces an independent, deterministic quality review of a completed run's

@@ -85,6 +85,57 @@ def _build_review(
     return payload, artifact
 
 
+def _build_review_advice(
+    result: object, output_dir: Path, settings: object
+) -> tuple[dict[str, object] | None, ArtifactMeta | None]:
+    """Run the advisory ReviewAgent over the ReviewReport (ADR-046, Phase 31).
+
+    Gated on settings.review_advice_enabled (OFF by default): when disabled this
+    returns (None, None) so the run is byte-identical to Phase 30. When enabled,
+    the ReviewAgent CONSUMES the deterministic ReviewReport (it never recomputes
+    coverage or findings, never mutates artifacts, never affects execution or loop
+    decisions) and produces advisory ReviewAdvice - deterministic by default, with
+    optional best-effort LLM prose refinement. Surfaced additively as a plain-dict
+    payload plus a standalone export. Any failure degrades to "no advice" without
+    affecting the COMPLETED status.
+
+    Returns (review_advice_payload, review_advice_artifact_meta).
+    """
+    from qaops.config import QAOpsSettings
+    from qaops.models import TestDesignResult
+
+    if not isinstance(settings, QAOpsSettings) or not settings.review_advice_enabled:
+        return None, None
+    if not isinstance(result, TestDesignResult):
+        return None, None
+    try:
+        from qaops.agent.agents import ReviewAgent
+        from qaops.llm import PromptLoader, create_client
+        from qaops.review import QualityReviewer
+
+        report = QualityReviewer().review(result)
+        client = None
+        try:
+            client = create_client(settings)
+        except Exception:  # noqa: BLE001 - LLM optional; deterministic fallback
+            client = None
+        agent = ReviewAgent(client=client, prompts=PromptLoader(), settings=settings)
+        advice = agent.advise(report, settings)
+    except Exception:  # pragma: no cover - advisory; never fail the run
+        logger.info("api.review_advice_failed")
+        return None, None
+
+    payload = advice.model_dump(mode="json")
+    artifact: ArtifactMeta | None = None
+    try:
+        target = output_dir / "review_advice.json"
+        target.write_text(advice.model_dump_json(indent=2), encoding="utf-8")
+        artifact = ArtifactMeta(name=target.name, format="JSON (review advice)", path=target)
+    except OSError:  # pragma: no cover - export is best-effort
+        logger.info("api.review_advice_export_failed")
+    return payload, artifact
+
+
 def _collect_partial_artifacts(output_dir: Path) -> list[ArtifactMeta]:
     """Gather report files a failed run left in its workspace (ADR-040).
 
@@ -172,6 +223,13 @@ def resume_run(
     ]
     if review_artifact is not None:
         run_artifacts.append(review_artifact)
+    # Phase 31 (ADR-046): advisory ReviewAgent, gated OFF by default. Consumes the
+    # ReviewReport; never recomputes or gates. Absent when disabled (byte-identical).
+    advice_payload, advice_artifact = _build_review_advice(
+        outcome.result, run_settings.output_dir, run_settings
+    )
+    if advice_artifact is not None:
+        run_artifacts.append(advice_artifact)
 
     store.update(
         run_id,
@@ -182,6 +240,7 @@ def resume_run(
         resumable=False,
         finished_at=datetime.now(UTC),
         review=review_payload,
+        review_advice=advice_payload,
         artifacts=run_artifacts,
     )
 
@@ -370,6 +429,13 @@ def execute_run(
     ]
     if review_artifact is not None:
         run_artifacts.append(review_artifact)
+    # Phase 31 (ADR-046): advisory ReviewAgent, gated OFF by default. Consumes the
+    # ReviewReport; never recomputes or gates. Absent when disabled (byte-identical).
+    advice_payload, advice_artifact = _build_review_advice(
+        outcome.result, run_settings.output_dir, run_settings
+    )
+    if advice_artifact is not None:
+        run_artifacts.append(advice_artifact)
 
     store.update(
         run_id,
@@ -381,5 +447,6 @@ def execute_run(
         reflection=reflection_payload,
         loop_summary=loop_payload,
         review=review_payload,
+        review_advice=advice_payload,
         artifacts=run_artifacts,
     )

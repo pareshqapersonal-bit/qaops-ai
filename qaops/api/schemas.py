@@ -209,6 +209,30 @@ class ReviewReportSchema(BaseModel):
     recommendations: list[str] = []
 
 
+class ReviewAdviceItemSchema(BaseModel):
+    """One prioritized explanation from the ReviewAgent (ADR-046, advisory)."""
+
+    code: str
+    severity: str
+    explanation: str
+    references: list[str] = []
+
+
+class ReviewAdviceSchema(BaseModel):
+    """The ReviewAgent's advisory narrative over the ReviewReport (ADR-046).
+
+    Present only when review_advice_enabled and the run COMPLETED. Advisory: it
+    explains the deterministic findings and never changes run status. generated_by
+    records provenance ("deterministic" | "llm").
+    """
+
+    source_name: str = ""
+    headline: str = ""
+    items: list[ReviewAdviceItemSchema] = []
+    recommendations: list[str] = []
+    generated_by: str = "deterministic"
+
+
 class RunStatusResponse(BaseModel):
     run_id: str
     status: str
@@ -236,6 +260,9 @@ class RunStatusResponse(BaseModel):
     # Phase 30 (ADR-045), additive: the deterministic quality review (COMPLETED
     # runs only). Advisory - defaulted to None so existing clients are unaffected.
     review: ReviewReportSchema | None = None
+    # Phase 31 (ADR-046), additive: the advisory ReviewAgent narrative. Present
+    # only when review_advice_enabled and COMPLETED. Defaulted None (backward compat).
+    review_advice: ReviewAdviceSchema | None = None
 
 
 class ArtifactSchema(BaseModel):
