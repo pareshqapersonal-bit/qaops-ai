@@ -104,9 +104,14 @@ all Phase 25-29 guarantees preserved (ADR-045).
   `QUALITY` enum member changed; no model/API/schema change.
 - **Future**: an LLM `ReviewAgent` will consume this `ReviewReport` to generate
   explanations/recommendations - it will read findings, never recompute them.
-- **Tests**: backend 828 passed (+30 Phase 30 incl v2: reviewer determinism/non-mutation,
-  per-check findings, two-fixture baselines, API surfacing + backward compat);
-  frontend 62 unchanged.
+- **Bugfix**: the deterministic review was only wired on the fresh-run COMPLETED
+  path; a run resumed to completion produced no review. The `resume_run` COMPLETED
+  path now invokes the same `_build_review` (review field + standalone export),
+  symmetric with `execute_run`. `QualityReviewer` logic unchanged. Regression test
+  added (failed -> resume -> COMPLETED -> review present).
+- **Tests**: backend 831 passed (+33 Phase 30 incl v2 + resume-review regression:
+  reviewer determinism/non-mutation, per-check findings, two-fixture baselines,
+  API surfacing + backward compat, resume produces review); frontend 62 unchanged.
 - **ADR-045**. Version stays `0.18.0-dev`.
 
 ### Phase 29: Narrow gap propagation in unresolved classification (artifact quality)

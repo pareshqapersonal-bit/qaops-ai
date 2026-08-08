@@ -163,6 +163,16 @@ def resume_run(
         store.update(run_id, status=RunStatus.FAILED, error=_safe_error(exc))
         return
 
+    # Phase 30 (ADR-045): deterministic quality review on the resume COMPLETED
+    # path too, symmetric with execute_run. A run resumed to completion must get
+    # the same advisory ReviewReport (field + standalone export) as a fresh run.
+    review_payload, review_artifact = _build_review(outcome.result, run_settings.output_dir)
+    run_artifacts = [
+        ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
+    ]
+    if review_artifact is not None:
+        run_artifacts.append(review_artifact)
+
     store.update(
         run_id,
         status=RunStatus.COMPLETED,
@@ -171,9 +181,8 @@ def resume_run(
         summary=summarize(outcome.result),
         resumable=False,
         finished_at=datetime.now(UTC),
-        artifacts=[
-            ArtifactMeta(name=a.name, format=a.format, path=a.path) for a in outcome.artifacts
-        ],
+        review=review_payload,
+        artifacts=run_artifacts,
     )
 
 
