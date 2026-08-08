@@ -94,9 +94,17 @@ all Phase 25-29 guarantees preserved (ADR-045).
   (defaulted `None`, backward compatible) and a standalone `review_report.json`
   export listed among run artifacts. Never merged into `TestDesignResult` or
   `CoverageReport`.
+- **v2 deeper findings** (same architecture, additive): blocker/major gaps from
+  `gap_report` (CRITICAL/WARNING), partial requirements via
+  `RequirementCoverage.missing_categories`, high provisional ratio, priority-
+  distribution skew, and positive-only-suite detection (missing negative/boundary)
+  - the last two under a new `QUALITY` category. Priority/test-type distributions
+  added as observations. A proposed "traceability holes" check was dropped (would
+  duplicate `uncovered_requirements` or never fire). Only `reviewer.py` and the
+  `QUALITY` enum member changed; no model/API/schema change.
 - **Future**: an LLM `ReviewAgent` will consume this `ReviewReport` to generate
   explanations/recommendations - it will read findings, never recompute them.
-- **Tests**: backend 814 passed (+16 Phase 30: reviewer determinism/non-mutation,
+- **Tests**: backend 828 passed (+30 Phase 30 incl v2: reviewer determinism/non-mutation,
   per-check findings, two-fixture baselines, API surfacing + backward compat);
   frontend 62 unchanged.
 - **ADR-045**. Version stays `0.18.0-dev`.

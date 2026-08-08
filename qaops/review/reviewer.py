@@ -38,6 +38,11 @@ if TYPE_CHECKING:
 _UNRESOLVED_WARNING_RATIO = 0.50
 _UNRESOLVED_CRITICAL_RATIO = 0.80
 
+# Phase 30 v2 (ADR-045): fraction of test cases that are provisional above which
+# the suite is flagged. Advisory only. The healthy BOGO baseline (4/15 = 0.27)
+# stays below WARNING; a pervasively-provisional suite trips it.
+_PROVISIONAL_WARNING_RATIO = 0.50
+
 
 class QualityReviewer:
     """Produce a deterministic, advisory ReviewReport from a completed result.
@@ -57,6 +62,14 @@ class QualityReviewer:
         findings.extend(self._empty_scenario_findings(result))
         findings.extend(self._provisional_case_findings(result))
         findings.extend(self._truncation_findings(result))
+        # Phase 30 v2 (ADR-045): five additional deterministic findings, each
+        # reading already-computed data (gap_report, RequirementCoverage, and
+        # TestCase fields) - never recomputing coverage.
+        findings.extend(self._gap_severity_findings(result))
+        findings.extend(self._partial_requirement_findings(result))
+        findings.extend(self._provisional_ratio_findings(result))
+        findings.extend(self._priority_distribution_findings(result))
+        findings.extend(self._type_balance_findings(result))
 
         observations = self._observations(result)
         recommendations = self._recommendations(findings)
@@ -239,17 +252,194 @@ class QualityReviewer:
             )
         ]
 
+    # -- Phase 30 v2 findings ----------------------------------------------
+
+    def _gap_severity_findings(self, result: TestDesignResult) -> list[ReviewFinding]:
+        """Blocker/major gaps from the gap_report (ADR-045 v2).
+
+        Reads gap_report.gaps[].severity, which CoverageValidator never touches.
+        Blocker gaps are a client-facing red flag (CRITICAL); major gaps warrant
+        review (WARNING). Minor gaps are not surfaced as findings.
+        """
+        from qaops.models.enums import GapSeverity
+
+        blocker = [g for g in result.gap_report.gaps if g.severity is GapSeverity.BLOCKER]
+        major = [g for g in result.gap_report.gaps if g.severity is GapSeverity.MAJOR]
+        findings: list[ReviewFinding] = []
+        if blocker:
+            findings.append(
+                ReviewFinding(
+                    code="blocker_gaps_present",
+                    severity=ReviewSeverity.CRITICAL,
+                    category=ReviewCategory.AMBIGUITY,
+                    message=(
+                        f"{len(blocker)} blocker gap(s) in the requirements - core "
+                        "behaviour is undefined and must be resolved before handoff."
+                    ),
+                    references=[g.requirement_id for g in blocker if g.requirement_id],
+                    recommendation="Resolve blocker gaps with the product owner before delivery.",
+                )
+            )
+        if major:
+            findings.append(
+                ReviewFinding(
+                    code="major_gaps_present",
+                    severity=ReviewSeverity.WARNING,
+                    category=ReviewCategory.AMBIGUITY,
+                    message=f"{len(major)} major gap(s) in the requirements warrant review.",
+                    references=[g.requirement_id for g in major if g.requirement_id],
+                    recommendation="Clarify major gaps to firm up affected expected results.",
+                )
+            )
+        return findings
+
+    def _partial_requirement_findings(self, result: TestDesignResult) -> list[ReviewFinding]:
+        """Requirements partially covered (ADR-045 v2).
+
+        Consumes RequirementCoverage.status == PARTIAL and its already-computed
+        missing_categories. No recomputation - reads CoverageValidator's output.
+        """
+        from qaops.models.enums import CoverageStatus
+
+        partial = [
+            rc for rc in result.coverage.per_requirement if rc.status is CoverageStatus.PARTIAL
+        ]
+        if not partial:
+            return []
+        missing_cats = sorted({cat.value for rc in partial for cat in rc.missing_categories})
+        detail = f" Missing categories include: {', '.join(missing_cats)}." if missing_cats else ""
+        return [
+            ReviewFinding(
+                code="partial_requirements",
+                severity=ReviewSeverity.WARNING,
+                category=ReviewCategory.COVERAGE,
+                message=(f"{len(partial)} requirement(s) are only partially covered.{detail}"),
+                references=[rc.requirement_id for rc in partial],
+                recommendation="Add cases for the missing scenario categories per requirement.",
+            )
+        ]
+
+    def _provisional_ratio_findings(self, result: TestDesignResult) -> list[ReviewFinding]:
+        """Provisional test-case ratio above threshold (ADR-045 v2).
+
+        Complements the existing provisional_test_cases (count/INFO) with a
+        thresholded ratio: a suite that is mostly provisional is not ready for a
+        client. Reads TestCase.provisional; no coverage recompute.
+        """
+        total = len(result.test_cases)
+        if total == 0:
+            return []
+        provisional = sum(1 for tc in result.test_cases if tc.provisional)
+        if provisional == 0:
+            return []
+        ratio = provisional / total
+        if ratio < _PROVISIONAL_WARNING_RATIO:
+            return []
+        pct = round(ratio * 100)
+        return [
+            ReviewFinding(
+                code="high_provisional_ratio",
+                severity=ReviewSeverity.WARNING,
+                category=ReviewCategory.COMPLETENESS,
+                message=(
+                    f"{provisional} of {total} test cases ({pct}%) are provisional - the "
+                    "suite is largely placeholder pending clarification."
+                ),
+                recommendation="Resolve the underlying gaps so provisional cases become concrete.",
+            )
+        ]
+
+    def _priority_distribution_findings(self, result: TestDesignResult) -> list[ReviewFinding]:
+        """Test-priority distribution skew (ADR-045 v2).
+
+        Reads TestCase.priority (CoverageValidator computes no priority data). A
+        suite with no critical AND no high cases is a QA-balance concern.
+        """
+        from qaops.models.enums import Priority
+
+        if not result.test_cases:
+            return []
+        priorities = {tc.priority for tc in result.test_cases}
+        if Priority.CRITICAL not in priorities and Priority.HIGH not in priorities:
+            return [
+                ReviewFinding(
+                    code="priority_distribution_skew",
+                    severity=ReviewSeverity.WARNING,
+                    category=ReviewCategory.QUALITY,
+                    message=(
+                        "No test cases are marked critical or high priority - the suite "
+                        "lacks prioritisation for the most important paths."
+                    ),
+                    recommendation="Review priorities so critical paths are marked accordingly.",
+                )
+            ]
+        return []
+
+    def _type_balance_findings(self, result: TestDesignResult) -> list[ReviewFinding]:
+        """Test-type balance: positive-only suites (ADR-045 v2).
+
+        Reads TestCase.test_type. A suite with no negative and no boundary cases
+        is a classic QA weakness (happy-path only). CoverageValidator computes no
+        type distribution.
+        """
+        from qaops.models.enums import TestType
+
+        if not result.test_cases:
+            return []
+        types = {tc.test_type for tc in result.test_cases}
+        has_negative = TestType.NEGATIVE in types
+        has_boundary = TestType.BOUNDARY in types
+        if not has_negative and not has_boundary:
+            return [
+                ReviewFinding(
+                    code="missing_negative_boundary_coverage",
+                    severity=ReviewSeverity.WARNING,
+                    category=ReviewCategory.QUALITY,
+                    message=(
+                        "The suite contains no negative or boundary test cases - it "
+                        "exercises happy paths only."
+                    ),
+                    recommendation="Add negative and boundary cases to harden the suite.",
+                )
+            ]
+        return []
+
     # -- narrative-free observations / recommendations ----------------------
 
     def _observations(self, result: TestDesignResult) -> list[str]:
         m = result.coverage.metrics
-        return [
+        observations = [
             f"{m.total_requirements} requirements, {m.total_business_rules} business rules, "
             f"{m.total_scenarios} scenarios, {m.total_conditions} conditions, "
             f"{m.total_test_cases} test cases.",
             f"Requirement coverage {round(m.requirement_coverage_pct)}%, "
             f"condition coverage {round(m.condition_coverage_pct)}%.",
         ]
+        # Phase 30 v2 (ADR-045): neutral distribution counts as observations, so a
+        # QA Lead sees the full priority/type breakdown even when no threshold
+        # finding fires. Pure counts over TestCase fields; no coverage recompute.
+        if result.test_cases:
+            observations.append(self._priority_distribution_observation(result))
+            observations.append(self._type_distribution_observation(result))
+        return observations
+
+    @staticmethod
+    def _priority_distribution_observation(result: TestDesignResult) -> str:
+        from collections import Counter
+
+        from qaops.models.enums import Priority
+
+        counts = Counter(tc.priority for tc in result.test_cases)
+        parts = [f"{p.value} {counts[p]}" for p in Priority if counts[p]]
+        return "Priority distribution: " + (", ".join(parts) if parts else "none") + "."
+
+    @staticmethod
+    def _type_distribution_observation(result: TestDesignResult) -> str:
+        from collections import Counter
+
+        counts = Counter(tc.test_type.value for tc in result.test_cases)
+        parts = [f"{name} {counts[name]}" for name in sorted(counts)]
+        return "Test-type distribution: " + (", ".join(parts) if parts else "none") + "."
 
     def _recommendations(self, findings: list[ReviewFinding]) -> list[str]:
         # Deterministic roll-up of the per-finding recommendations, de-duplicated

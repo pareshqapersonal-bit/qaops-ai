@@ -70,6 +70,35 @@ to `None`, so existing clients are unaffected) and a standalone
 into `TestDesignResult` or `CoverageReport`; findings reference artifact ids but
 copy no artifact content.
 
+## Amendment (Phase 30 v2): deeper deterministic findings
+
+The initial reviewer reported only high-level metrics. v2 deepens it with five
+additional deterministic findings, each reading already-computed data and never
+recomputing coverage, keeping the architecture unchanged (same reviewer, same
+`ReviewReport`, additive only):
+
+- **Blocker/major gaps** (`blocker_gaps_present` CRITICAL, `major_gaps_present`
+  WARNING) - reads `gap_report.gaps[].severity`, which `CoverageValidator` never
+  touches.
+- **Partial requirements** (`partial_requirements` WARNING) - consumes
+  `RequirementCoverage.status == PARTIAL` and its already-computed
+  `missing_categories`.
+- **High provisional ratio** (`high_provisional_ratio` WARNING) - a thresholded
+  ratio complementing the existing provisional count.
+- **Priority distribution skew** (`priority_distribution_skew` WARNING,
+  `QUALITY`) - reads `TestCase.priority`; flags a suite with no critical/high.
+- **Type balance** (`missing_negative_boundary_coverage` WARNING, `QUALITY`) -
+  reads `TestCase.test_type`; flags a positive-only suite.
+
+Priority and test-type distributions are also added as neutral observations.
+Only the `QUALITY` `ReviewCategory` member is new. A proposed sixth check
+("traceability holes") was **deliberately dropped**: defined as empty-trace it
+duplicates `uncovered_requirements`, and defined as missing-from-entries it can
+never fire on a well-formed result - so it would be a duplicate or dead code.
+
+No new stage, agent, API field, or schema change: new finding codes and the new
+category serialize through the existing string-typed API fields additively.
+
 ## Consequences
 
 - Objective, reproducible quality findings on every completed run, with the

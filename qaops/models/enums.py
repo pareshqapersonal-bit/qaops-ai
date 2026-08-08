@@ -134,3 +134,6 @@ class ReviewCategory(StrEnum):
     DUPLICATION = "duplication"
     REFERENCES = "references"
     COMPLETENESS = "completeness"
+    # Phase 30 v2 (ADR-045): QA-balance signals over the generated suite -
+    # priority distribution and test-type/category coverage. Additive.
+    QUALITY = "quality"
