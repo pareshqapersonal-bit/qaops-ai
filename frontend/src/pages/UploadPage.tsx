@@ -1,6 +1,13 @@
 import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, NetworkError, createDesignRun } from "../api/client";
+import {
+  ApiError,
+  NetworkError,
+  createDesignRun,
+  createTicketRun,
+} from "../api/client";
+
+type InputMode = "document" | "ticket";
 
 // Mirrors the backend's accepted suffixes (verified against the API).
 const ACCEPTED = [
@@ -33,6 +40,64 @@ export function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Phase 32: input mode + Jira-style ticket fields. Document mode is unchanged.
+  const [mode, setMode] = useState<InputMode>("document");
+  const [ticketId, setTicketId] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [criteria, setCriteria] = useState("");
+  const [priority, setPriority] = useState("");
+  const [labels, setLabels] = useState("");
+
+  const onSubmitTicket = useCallback(async () => {
+    if (submitting) return;
+    if (!title.trim() || !description.trim()) {
+      setError("Title and description are required.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const acceptance_criteria = criteria
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const labelList = labels
+        .split(",")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      const created = await createTicketRun({
+        title: title.trim(),
+        description: description.trim(),
+        acceptance_criteria,
+        ticket_id: ticketId.trim() || undefined,
+        priority: priority.trim() || undefined,
+        labels: labelList.length > 0 ? labelList : undefined,
+      });
+      navigate(`/runs/${created.run_id}`);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.detail);
+      } else if (err instanceof NetworkError) {
+        setError(
+          "Could not reach the QAOps backend. Is it running on the configured address?",
+        );
+      } else {
+        setError("Something went wrong submitting the ticket.");
+      }
+      setSubmitting(false);
+    }
+  }, [
+    submitting,
+    title,
+    description,
+    criteria,
+    labels,
+    ticketId,
+    priority,
+    navigate,
+  ]);
 
   const chooseFile = useCallback((f: File) => {
     const ext = extensionOf(f.name);
@@ -98,6 +163,34 @@ export function UploadPage() {
         </div>
       )}
 
+      <div className="row" role="tablist" aria-label="Input type" style={{ marginBottom: 16 }}>
+        <button
+          className={`btn ${mode === "document" ? "" : "secondary"}`}
+          role="tab"
+          aria-selected={mode === "document"}
+          onClick={() => {
+            setMode("document");
+            setError(null);
+          }}
+          disabled={submitting}
+        >
+          Document
+        </button>
+        <button
+          className={`btn ${mode === "ticket" ? "" : "secondary"}`}
+          role="tab"
+          aria-selected={mode === "ticket"}
+          onClick={() => {
+            setMode("ticket");
+            setError(null);
+          }}
+          disabled={submitting}
+        >
+          Ticket
+        </button>
+      </div>
+
+      {mode === "document" && (
       <div className="panel">
         <div
           className={`dropzone ${dragging ? "dragging" : ""}`}
@@ -169,6 +262,93 @@ export function UploadPage() {
           )}
         </div>
       </div>
+      )}
+
+      {mode === "ticket" && (
+      <div className="panel">
+        <div className="field">
+          <label htmlFor="ticket-id">Ticket ID</label>
+          <input
+            id="ticket-id"
+            type="text"
+            value={ticketId}
+            placeholder="OTP-123 (optional)"
+            onChange={(e) => setTicketId(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="ticket-title">Title</label>
+          <input
+            id="ticket-title"
+            type="text"
+            value={title}
+            placeholder="Add OTP login"
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="ticket-description">Description</label>
+          <textarea
+            id="ticket-description"
+            rows={3}
+            value={description}
+            placeholder="Users should be able to log in using their mobile number and OTP."
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="ticket-criteria">Acceptance criteria (one per line)</label>
+          <textarea
+            id="ticket-criteria"
+            rows={4}
+            value={criteria}
+            placeholder={"OTP is sent to the registered mobile number.\nValid OTP logs the user in."}
+            onChange={(e) => setCriteria(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="ticket-priority">Priority</label>
+          <input
+            id="ticket-priority"
+            type="text"
+            value={priority}
+            placeholder="High (optional)"
+            onChange={(e) => setPriority(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="ticket-labels">Labels (comma-separated)</label>
+          <input
+            id="ticket-labels"
+            type="text"
+            value={labels}
+            placeholder="auth, login (optional)"
+            onChange={(e) => setLabels(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+        <div className="row" style={{ marginTop: 20 }}>
+          <button
+            className="btn"
+            onClick={onSubmitTicket}
+            disabled={!title.trim() || !description.trim() || submitting}
+          >
+            {submitting ? (
+              <>
+                <span className="spin" aria-hidden="true" /> Submitting…
+              </>
+            ) : (
+              "Start run"
+            )}
+          </button>
+        </div>
+      </div>
+      )}
     </div>
   );
 }

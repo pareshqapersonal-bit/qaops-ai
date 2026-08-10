@@ -1,0 +1,13 @@
+{
+  "ticket_id": "OTP-123",
+  "title": "Add OTP login",
+  "description": "Users should be able to log in using their mobile number and OTP.",
+  "acceptance_criteria": [
+    "OTP should be sent to the registered mobile number.",
+    "Valid OTP should log the user in.",
+    "Invalid OTP should show an appropriate error.",
+    "Expired OTP should not allow login."
+  ],
+  "priority": "High",
+  "labels": ["auth", "login"]
+}

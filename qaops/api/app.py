@@ -40,9 +40,11 @@ from qaops.api.schemas import (
     RunStatusResponse,
     StageStatusSchema,
     SummarySchema,
+    TicketRequest,
 )
 from qaops.cli.config_loader import load_settings
 from qaops.execution import ModelRegistry, available_providers
+from qaops.ingestion.ticket_normalizer import ticket_to_markdown
 from qaops.services import DesignService
 
 logger = logging.getLogger(__name__)
@@ -216,6 +218,30 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             )
         return ModelsResponse(providers=providers)
 
+    def _create_and_schedule_run(
+        *, input_name: str, contents: bytes, suffix: str, background: BackgroundTasks
+    ) -> RunCreatedResponse:
+        """Create a run, persist the input, schedule execution, return at once.
+
+        The source-agnostic run-creation tail shared by every input source (Phase
+        32). It depends only on a resolved (input_name, contents, suffix) - never on
+        how those were obtained - so both the document upload and the ticket
+        endpoint reuse it without duplicating run creation, file persistence,
+        scheduling, or the response. The workflow (document / requirements /
+        scenarios) is still detected downstream from the written file; callers do
+        not specify it.
+        """
+        run = store.create(input_name=input_name)
+        safe_name = _sanitize_filename(input_name)
+        # Preserve the extension even if sanitizing altered the stem.
+        if not safe_name.lower().endswith(suffix):
+            safe_name = f"{Path(safe_name).stem}{suffix}"
+        (run.input_dir / safe_name).write_bytes(contents)
+
+        settings = load_settings(None)
+        background.add_task(execute_run, store, run.id, settings, service)
+        return RunCreatedResponse(run_id=run.id, status=run.status.value)
+
     @app.post(
         "/api/v1/design",
         response_model=RunCreatedResponse,
@@ -244,16 +270,37 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         if not contents:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-        run = store.create(input_name=raw_name)
-        safe_name = _sanitize_filename(raw_name)
-        # Preserve the extension even if sanitizing altered the stem.
-        if not safe_name.lower().endswith(suffix):
-            safe_name = f"{Path(safe_name).stem}{suffix}"
-        (run.input_dir / safe_name).write_bytes(contents)
+        return _create_and_schedule_run(
+            input_name=raw_name, contents=contents, suffix=suffix, background=background
+        )
 
-        settings = load_settings(None)
-        background.add_task(execute_run, store, run.id, settings, service)
-        return RunCreatedResponse(run_id=run.id, status=run.status.value)
+    @app.post(
+        "/api/v1/design/ticket",
+        response_model=RunCreatedResponse,
+        status_code=202,
+        tags=["design"],
+    )
+    def submit_ticket(background: BackgroundTasks, ticket: TicketRequest) -> RunCreatedResponse:
+        """Accept a Jira-style ticket, normalize it to Markdown, run it (Phase 32).
+
+        The ticket is transcribed to a Markdown document by the TicketNormalizer and
+        then flows through the EXISTING DOCUMENT pipeline via the same
+        run-creation helper as an uploaded file. No Jira integration is performed -
+        this only accepts a ticket-shaped payload. Provenance rides through the
+        input name ("<TICKET-ID> - <title>", or the title alone when no id) into
+        source_name, without changing any generated REQ-*/BR-*/SC-*/TC- id.
+        """
+        markdown = ticket_to_markdown(ticket)
+        if ticket.ticket_id and ticket.ticket_id.strip():
+            input_name = f"{ticket.ticket_id.strip()} - {ticket.title.strip()}.md"
+        else:
+            input_name = f"{ticket.title.strip()}.md"
+        return _create_and_schedule_run(
+            input_name=input_name,
+            contents=markdown.encode("utf-8"),
+            suffix=".md",
+            background=background,
+        )
 
     @app.post(
         "/api/v1/runs/{run_id}/resume",

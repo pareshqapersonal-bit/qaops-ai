@@ -68,6 +68,38 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 32A: Jira-style ticket input
+
+Accepts a Jira-style ticket and runs it through the EXISTING document pipeline to
+produce the same artifacts (requirements → … → coverage, ReviewReport, and
+ReviewAdvice when enabled). No second pipeline, no Jira integration (ADR-047).
+
+- **`TicketNormalizer`** (`qaops/ingestion/ticket_normalizer.py`): a pure,
+  deterministic transcription of a ticket into Markdown - title, optional
+  `Ticket:/Priority:/Labels:` header (only when supplied), verbatim `## Description`,
+  and a verbatim numbered `## Acceptance Criteria` list. Never invents requirements,
+  rules, expected values, or criteria; never rewrites; emits no table/scenario
+  marker so it stays on the DOCUMENT route. No LLM.
+- **`TicketRequest`** (request-only schema): title/description required;
+  `acceptance_criteria` list with empty allowed; optional ticket_id/priority/labels.
+- **Shared run-creation helper** `_create_and_schedule_run` extracted verbatim from
+  `submit_design`; both the document upload and the ticket endpoint delegate to it -
+  no duplicated run creation/persistence/scheduling/response. Document behaviour
+  unchanged (the two upload-specific 400 checks stay in `submit_design`).
+- **`POST /api/v1/design/ticket`**: validates, normalizes, and runs the ticket
+  through the same execute_run/DOCUMENT path. Provenance rides `source_name` as
+  `"<TICKET-ID> - <title>"` (or title alone) via the `.md` filename; generated
+  REQ-*/BR-*/SC-*/TC- ids untouched.
+- **Frontend**: an additive Document/Ticket selector on New Run with a minimal
+  ticket form; existing document upload unchanged.
+- **Scope**: ticket payload only - no Jira auth, REST, retrieval, updates, issue
+  creation, publishing, or sync; no new agent, no ticket-specific stage.
+- **Tests**: backend 869 passed (+25 Phase 32: normalizer determinism/verbatim/no-
+  fabrication, TicketRequest validation, endpoint, provenance, shared helper,
+  DOCUMENT routing, ticket→pipeline integration, sparse→gap, document regression);
+  frontend 65 passed (+3 ticket-mode). One OTP-login fixture. Phase 25-31 green.
+- **ADR-047**. Version stays `0.18.0-dev`.
+
 ### Phase 31: Advisory ReviewAgent (ReviewAdvice over ReviewReport)
 
 Introduces the LLM-optional `ReviewAgent` reserved by ADR-045. It consumes the

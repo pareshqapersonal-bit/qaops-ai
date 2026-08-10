@@ -5,7 +5,7 @@ contract, deliberately separate from the domain models so an internal change
 does not silently reshape the HTTP surface. None of them carry secrets.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HealthResponse(BaseModel):
@@ -36,6 +36,26 @@ class ModelsResponse(BaseModel):
 class RunCreatedResponse(BaseModel):
     run_id: str
     status: str
+
+
+class TicketRequest(BaseModel):
+    """A Jira-style ticket accepted by POST /api/v1/design/ticket (Phase 32).
+
+    A request-only model: it validates the incoming ticket and is transcribed to
+    Markdown by the TicketNormalizer, which then enters the existing DOCUMENT
+    pipeline. It is deliberately NOT a domain/pipeline model - the pipeline input
+    remains RequirementInput. Missing optional detail is left absent so the
+    existing gap analysis surfaces it; nothing here is fabricated.
+    """
+
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    # Empty list is allowed: a ticket with no acceptance criteria is a genuine
+    # sparse ticket that must produce gaps, not a validation error.
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    ticket_id: str | None = None
+    priority: str | None = None
+    labels: list[str] = Field(default_factory=list)
 
 
 class SummarySchema(BaseModel):

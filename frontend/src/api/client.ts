@@ -104,6 +104,30 @@ export function createDesignRun(
   });
 }
 
+// A Jira-style ticket accepted by POST /api/v1/design/ticket (Phase 32). The
+// ticket is normalized to Markdown server-side and flows through the same
+// document pipeline as an uploaded file.
+export interface TicketInput {
+  title: string;
+  description: string;
+  acceptance_criteria: string[];
+  ticket_id?: string;
+  priority?: string;
+  labels?: string[];
+}
+
+export function createTicketRun(
+  ticket: TicketInput,
+  opts?: RequestOptions,
+): Promise<RunCreatedResponse> {
+  return request<RunCreatedResponse>("/api/v1/design/ticket", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(ticket),
+    signal: opts?.signal,
+  });
+}
+
 export function getRun(
   runId: string,
   opts?: RequestOptions,
