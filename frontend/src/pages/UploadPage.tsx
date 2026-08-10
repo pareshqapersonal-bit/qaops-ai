@@ -265,7 +265,7 @@ export function UploadPage() {
       )}
 
       {mode === "ticket" && (
-      <div className="panel">
+      <div className="panel ticket-form">
         <div className="field">
           <label htmlFor="ticket-id">Ticket ID</label>
           <input

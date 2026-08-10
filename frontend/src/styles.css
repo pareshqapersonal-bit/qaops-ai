@@ -576,3 +576,44 @@ table.data tr:hover td {
     transform: rotate(360deg);
   }
 }
+
+/* Phase 32: ticket input form. Matches the app's surface/border tokens and the
+   .search-input field style; label-above-input blocks with consistent rhythm. */
+.ticket-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.ticket-form .field label {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.ticket-form .field input,
+.ticket-form .field textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 8px 12px;
+  width: 100%;
+  max-width: 520px;
+  font-family: var(--sans);
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.ticket-form .field textarea {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.5;
+}
+.ticket-form .field input:focus,
+.ticket-form .field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.ticket-form .field input::placeholder,
+.ticket-form .field textarea::placeholder {
+  color: var(--text-dim);
+}
