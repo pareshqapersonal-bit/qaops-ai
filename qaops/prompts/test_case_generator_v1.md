@@ -13,11 +13,17 @@ Grounding and evidence:
 - Each test case references exactly one condition_id and one scenario_id (the condition's scenario) and one or more requirement_ids, all from the provided lists. Use only the given IDs; never invent IDs.
 - A slot whose technique is "provisional" belongs to an UNRESOLVED condition with NO documented expected behaviour. Author the case that exercises the documented steps, but set "expected_result" to state what must be confirmed with the product owner. Do NOT fabricate a pass/fail assertion, and do NOT skip it.
 
+Three kinds of information - keep them separate:
+1. SOURCE-BACKED behaviour: anything stated in the ticket/requirements/business rules, or carried by a condition's evidence (its source_basis and referenced IDs). State these as facts in steps and expected_result.
+2. QA-GENERATED TEST DATA: concrete representative values you choose so a step is executable (an OTP like "123456", a sample SKU, an example email). This is legitimate and expected. Put such values in "test_data" and reference them in steps. NEVER phrase a chosen value as a product rule. For example "Enter an OTP such as 123456" is fine; "OTPs are always 6 digits" is a product rule and is NOT allowed unless the evidence states it.
+3. UNSUPPORTED ASSUMPTIONS: a product/system fact the case must rely on that the source does NOT establish (e.g. "the PDP shows a numeric review count", "a product with active reviews exists in the catalogue", "the OTP expires in 30 seconds"). Do NOT state these silently as given facts in preconditions or expected_result. Instead list each one in the "assumptions" array so it is visible and can be confirmed. Keep genuine setup that the source DOES support in "preconditions" as normal.
+- Do not turn QA test data (2) or assumptions (3) into requirements or business rules. If you cannot proceed without assuming something the source never states, record it in "assumptions" rather than asserting it.
+
 Writing the case:
 - "steps" is an ordered array in execution order. Do NOT include step numbers; numbering is assigned by the system. Each step has an "action" and an optional "expected".
 - Steps must be concrete and executable by a tester who has never seen the application: name the screen, the field, and the exact value. Reference the values you put in "test_data".
 - "expected_result" states the final verifiable outcome. Mandatory (except provisional slots, per above).
-- "preconditions" list required state before step 1. "objective" states in one sentence what the case proves.
+- "preconditions" list required state before step 1 that the source supports. "assumptions" (optional) list product/system facts you had to assume that the source does not establish; omit or leave empty when there are none. "objective" states in one sentence what the case proves.
 - "priority" is exactly one of: critical, high, medium, low.
 - "test_type" is exactly one of: functional, negative, boundary, validation, permission, state_transition, integration, ui, error_handling.
 - "module" and "feature" name the application area. "tags" are short lowercase labels; include the technique as a tag.
@@ -54,6 +60,7 @@ Respond with ONLY this JSON structure, no prose, no markdown fences:
       "title": "Specific, unique title reflecting the variant",
       "objective": "What this test case proves.",
       "preconditions": ["..."],
+      "assumptions": [],
       "test_data": {"quantity": "1"},
       "steps": [
         {"action": "What the tester does, using the test_data values.", "expected": "What the tester observes."}

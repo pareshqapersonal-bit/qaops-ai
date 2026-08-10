@@ -245,6 +245,15 @@ class TestCase(_StrictModel):
     priority: Priority = Priority.MEDIUM
     test_type: TestType = TestType.FUNCTIONAL
     tags: list[str] = Field(default_factory=list)
+    # Phase 33 (ADR-048): product/system facts a case must assume that the source
+    # (ticket/requirements/business rules/evidence-bound conditions) does not
+    # establish. This makes unsupported assumptions VISIBLE and separable from
+    # legitimate QA-generated test data (which stays in test_data) and from
+    # evidence-backed behaviour (traceable via the condition's source_basis).
+    # Defaults empty; with exclude_defaults serialization, evidence-complete cases
+    # are byte-identical to pre-Phase-33 output. Advisory only - not consumed by
+    # CoverageValidator, QualityReviewer, or ReviewAgent in this phase.
+    assumptions: list[str] = Field(default_factory=list)
 
     @field_validator("id")
     @classmethod

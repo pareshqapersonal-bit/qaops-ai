@@ -38,9 +38,13 @@ class TestReviewerContract:
     def test_review_does_not_mutate_result(self) -> None:
         raw = json.loads((_FIXTURES / "auto_delete_result.json").read_text())
         result = TestDesignResult.model_validate(raw)
+        # Snapshot the validated model BEFORE review, then compare AFTER. This is a
+        # true mutation check on the object under review (robust to additive model
+        # fields like Phase 33's test_case.assumptions, which appear in a full dump
+        # but are not present in the pre-Phase-33 fixture JSON).
+        before = result.model_dump_json()
         QualityReviewer().review(result)
-        # The input result must be byte-identical after review.
-        assert json.loads(result.model_dump_json()) == raw
+        assert result.model_dump_json() == before
 
     def test_review_returns_review_report(self) -> None:
         report = QualityReviewer().review(_result("bogo_result.json"))

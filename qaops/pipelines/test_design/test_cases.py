@@ -174,6 +174,7 @@ class TestCaseGenerator:
                 priority=wire.priority,
                 test_type=wire.test_type,
                 tags=wire.tags,
+                assumptions=wire.assumptions,
             )
             for wire in bounded
         ]

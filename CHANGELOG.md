@@ -68,6 +68,36 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 33: Test-case assumption provenance
+
+Makes unsupported assumptions in generated test cases visible and separable from
+legitimate QA-generated test data, without prohibiting either (ADR-048).
+
+- **`TestCase.assumptions: list[str]`** (default empty): product/system facts a
+  case must assume that the source (ticket/requirements/business rules/evidence-
+  bound conditions) does not establish. QA test data stays in `test_data`;
+  evidence-backed behaviour stays traceable via the condition's `source_basis`.
+- **Generator prompt contract** (`test_case_generator_v1.md`, edited in place -
+  additive guidance): names the three categories (source-backed / QA test data /
+  unsupported assumption), keeps chosen values in `test_data` and forbids phrasing
+  them as product rules, and routes any required-but-unsupported fact into
+  `assumptions` instead of silently into `preconditions`/`expected_result`.
+- **Threading**: the field flows from the wire extraction model into `TestCase`,
+  defaulting empty when absent.
+- **Backward compatibility (proven, not assumed)**: a pinned regression test
+  asserts an evidence-complete case serializes with NO `assumptions` key under
+  `exclude_defaults`, so existing document runs are byte-identical. One Phase 30
+  non-mutation test was corrected to compare before/after of the object under
+  review (robust to additive fields) rather than against a pre-Phase-33 fixture;
+  the reviewer was confirmed to not mutate the result.
+- **Out of scope**: no change to requirements, business rules, gaps, scenarios, the
+  TestCondition evidence model, CoverageValidator, or pipeline topology; the
+  QualityReviewer and ReviewAgent do NOT consume `assumptions` this phase.
+- **Tests**: backend 874 passed (+5 Phase 33: default-empty, pinned byte-identical
+  regression, assumptions flow-through, full-serialization presence, coverage-
+  unaffected); frontend 65 unchanged. Phase 25-32 green.
+- **ADR-048**. Version stays `0.18.0-dev`.
+
 ### Phase 32A: Jira-style ticket input
 
 Accepts a Jira-style ticket and runs it through the EXISTING document pipeline to

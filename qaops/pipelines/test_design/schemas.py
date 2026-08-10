@@ -167,6 +167,10 @@ class ExtractedTestCase(_WireModel):
     priority: Priority = Priority.MEDIUM
     test_type: TestType = TestType.FUNCTIONAL
     tags: list[str] = Field(default_factory=list)
+    # Phase 33 (ADR-048): product/system facts the case must assume that the
+    # source does not establish. Optional/defaulted, so existing fixtures that
+    # omit it stay valid and evidence-complete cases serialize unchanged.
+    assumptions: list[str] = Field(default_factory=list)
 
 
 class TestCaseExtraction(_WireModel):

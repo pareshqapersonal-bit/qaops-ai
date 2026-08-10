@@ -48,5 +48,6 @@
 | [045](045-deterministic-quality-review.md) | Deterministic QualityReviewer (not an Agent) consuming CoverageReport to produce an advisory ReviewReport; LLM ReviewAgent deferred | Accepted |
 | [046](046-review-agent-advisory-narrative.md) | Advisory ReviewAgent consuming ReviewReport to produce ReviewAdvice (prioritized explanations + recommendations); Runner-invoked, gated OFF by default, deterministic fallback | Accepted |
 | [047](047-jira-style-ticket-input.md) | Jira-style ticket input: deterministic TicketNormalizer → Markdown → existing DOCUMENT pipeline via a shared run-creation helper; no second pipeline, no Jira integration | Accepted |
+| [048](048-test-case-assumption-provenance.md) | Test-case assumption provenance: additive TestCase.assumptions + generator prompt contract separating source-backed / QA test data / unsupported assumptions; byte-identical for evidence-complete cases | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.
