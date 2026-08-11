@@ -43,6 +43,13 @@ _UNRESOLVED_CRITICAL_RATIO = 0.80
 # stays below WARNING; a pervasively-provisional suite trips it.
 _PROVISIONAL_WARNING_RATIO = 0.50
 
+# Phase 34 (ADR-049): fraction of test cases carrying at least one assumption
+# above which the suite is flagged. Deterministic and quantity-based - severity
+# comes from HOW MANY cases depend on unconfirmed facts, never from interpreting
+# the free-text assumption strings (which could be setup, product capability, or
+# business-rule assumptions - indistinguishable from the text alone). Advisory.
+_ASSUMPTION_WARNING_RATIO = 0.50
+
 
 class QualityReviewer:
     """Produce a deterministic, advisory ReviewReport from a completed result.
@@ -70,6 +77,9 @@ class QualityReviewer:
         findings.extend(self._provisional_ratio_findings(result))
         findings.extend(self._priority_distribution_findings(result))
         findings.extend(self._type_balance_findings(result))
+        # Phase 34 (ADR-049): threshold-gated finding surfacing test-case
+        # assumptions (consumes Phase 33's TestCase.assumptions; never categorizes).
+        findings.extend(self._assumption_findings(result))
 
         observations = self._observations(result)
         recommendations = self._recommendations(findings)
@@ -346,6 +356,44 @@ class QualityReviewer:
                     "suite is largely placeholder pending clarification."
                 ),
                 recommendation="Resolve the underlying gaps so provisional cases become concrete.",
+            )
+        ]
+
+    def _assumption_findings(self, result: TestDesignResult) -> list[ReviewFinding]:
+        """Test cases resting on unconfirmed assumptions, above threshold (ADR-049).
+
+        Phase 34. Consumes Phase 33's TestCase.assumptions. Deterministic and
+        quantity-based: it counts cases carrying at least one assumption and flags
+        the suite only when that fraction crosses the threshold - severity comes
+        from HOW MANY cases depend on unconfirmed facts, never from interpreting
+        the assumption text (which the reviewer treats as opaque). References list
+        the exact case IDs so QA can trace each one. Does not categorize
+        assumptions, and does not touch coverage or provisional status.
+        """
+        total = len(result.test_cases)
+        if total == 0:
+            return []
+        with_assumptions = sorted(tc.id for tc in result.test_cases if tc.assumptions)
+        if not with_assumptions:
+            return []
+        ratio = len(with_assumptions) / total
+        if ratio < _ASSUMPTION_WARNING_RATIO:
+            return []
+        pct = round(ratio * 100)
+        return [
+            ReviewFinding(
+                code="test_case_assumptions",
+                severity=ReviewSeverity.WARNING,
+                category=ReviewCategory.COMPLETENESS,
+                message=(
+                    f"{len(with_assumptions)} of {total} test cases ({pct}%) rest on "
+                    "unconfirmed assumptions the source does not establish."
+                ),
+                references=with_assumptions,
+                recommendation=(
+                    "Review the listed cases' assumptions with the product owner / BA and "
+                    "confirm or turn them into requirements."
+                ),
             )
         ]
 

@@ -68,6 +68,38 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 34: Test-case assumptions review finding
+
+Surfaces Phase 33's `TestCase.assumptions` on the review surface so a QA lead can
+act on them, without unsafe interpretation of the free-text strings (ADR-049).
+
+- **New QualityReviewer finding** `test_case_assumptions` (`WARNING`,
+  `completeness`): fires when the fraction of test cases carrying at least one
+  assumption reaches the threshold (`_ASSUMPTION_WARNING_RATIO = 0.50`). Consumes
+  Phase 33's `TestCase.assumptions`; deterministic.
+- **Quantity-based severity, no prose classification**: severity comes from HOW
+  MANY cases depend on unconfirmed facts, never from interpreting the assumption
+  text (which could be setup, product capability, or business-rule assumptions -
+  indistinguishable from wording). The reviewer treats each assumption as opaque.
+- **Traceability**: `references` are the exact `TestCase` IDs of assumption-bearing
+  cases, sorted, verbatim; the assumption text is never echoed or categorized.
+- **Readiness**: only in aggregate and only when the finding fires, via the existing
+  ReviewAgent warning mechanism - no new readiness logic.
+- **Unchanged**: ReviewAgent (finding-agnostic, surfaces the new finding
+  automatically), CoverageValidator, `provisional` status, and all of Phase 33.
+- **Calibration**: exercised through the real pipeline (a ticket-sourced run with
+  2/3 cases carrying assumptions = 67% produced the WARNING with references
+  [TC-001, TC-002]); the assumption strings were realistic sparse-ticket text
+  because this environment has no live LLM key - the finding mechanics/ratio/
+  references are genuine pipeline output. 50% accepted as a conservative default
+  (mirrors `high_provisional_ratio`), tunable via one constant.
+- **Backward compatibility**: runs with no assumptions produce a `ReviewReport`
+  identical to pre-Phase-34 (the finding is absent), pinned by a regression test.
+- **Tests**: backend 882 passed (+8 Phase 34: threshold fire/silent, exact sorted
+  references, text-not-interpreted, deterministic, provisional-untouched, pinned
+  byte-identical no-assumptions regression); frontend 65 unchanged.
+- **ADR-049**. Version stays `0.18.0-dev`.
+
 ### Phase 33: Test-case assumption provenance
 
 Makes unsupported assumptions in generated test cases visible and separable from
