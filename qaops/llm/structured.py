@@ -20,7 +20,7 @@ from pathlib import Path
 from pydantic import BaseModel, ValidationError
 
 from qaops.llm.client import LLMClient
-from qaops.llm.errors import LLMEmptyResponseError, LLMResponseFormatError
+from qaops.llm.errors import LLMEmptyResponseError, LLMProviderError, LLMResponseFormatError
 from qaops.llm.models import LLMRequest
 from qaops.llm.request_budget import NullRequestObserver, RequestObserver
 
@@ -89,6 +89,20 @@ def generate_structured[T: BaseModel](
         RequestBudgetExhausted: propagated from the observer.
     """
     obs = observer or NullRequestObserver()
+
+    # Phase 36: never silently discard visual evidence. If the request carries
+    # images but the provider does not declare image support, fail clearly rather
+    # than sending a request whose images would be dropped. Providers default to
+    # text-only (supports_images is absent/False) until a multimodal provider is
+    # added in a later, separately-approved phase.
+    if any(m.images for m in request.messages) and not getattr(client, "supports_images", False):
+        raise LLMProviderError(
+            getattr(client, "provider_name", "unknown"),
+            "This request includes image evidence, but the configured provider/model "
+            "does not support image input. Select a multimodal provider/model, or "
+            "submit the run without visual evidence.",
+        )
+
     attempts = retries + 1
     raw_responses: list[str] = []
     current = request

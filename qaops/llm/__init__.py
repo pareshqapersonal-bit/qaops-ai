@@ -18,7 +18,7 @@ from qaops.llm.errors import (
 )
 from qaops.llm.factory import create_client
 from qaops.llm.mock import MockLLMClient
-from qaops.llm.models import LLMMessage, LLMRequest, LLMResponse, LLMUsage
+from qaops.llm.models import ImagePart, LLMMessage, LLMRequest, LLMResponse, LLMUsage
 from qaops.llm.prompt_loader import PromptLoader
 from qaops.llm.request_budget import (
     NullRequestObserver,
@@ -30,6 +30,7 @@ from qaops.llm.structured import extract_json_payload, generate_structured
 __all__ = [
     "AnthropicClient",
     "LLMClient",
+    "ImagePart",
     "LLMMessage",
     "LLMProviderError",
     "LLMRequest",

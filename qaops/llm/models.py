@@ -15,11 +15,38 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
+class ImagePart(_StrictModel):
+    """One image supplied as visual evidence alongside a text message (Phase 36).
+
+    Provider-agnostic. Carries the raw image (base64) plus its media type and
+    provenance so a downstream multimodal provider can render it and a reader can
+    trace it. In Phase 36 Part 1 no provider consumes images yet; this only defines
+    the transport and is attached to the analyzer's request. Provenance fields
+    (page/image_index) exist for future embedded-image extraction and default to
+    None for standalone images.
+    """
+
+    media_type: Literal["image/png", "image/jpeg"] = Field()
+    data: str = Field(min_length=1, description="Base64-encoded image bytes.")
+    source_filename: str = Field(min_length=1)
+    order: int = Field(ge=0, description="Position of this image within the evidence, 0-based.")
+    page: int | None = Field(default=None, ge=1)
+    image_index: int | None = Field(default=None, ge=0)
+
+
 class LLMMessage(_StrictModel):
-    """One turn in a conversation sent to the model."""
+    """One turn in a conversation sent to the model.
+
+    `content` remains the text of the turn. `images` (Phase 36) is an ADDITIVE,
+    optional list of visual evidence; it defaults empty, so text-only messages are
+    byte-identical to pre-Phase-36 messages under exclude_defaults serialization and
+    every existing construction stays valid. Only the RequirementAnalyzer attaches
+    images; all other stages leave it empty.
+    """
 
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1)
+    images: list[ImagePart] = Field(default_factory=list)
 
 
 class LLMRequest(_StrictModel):

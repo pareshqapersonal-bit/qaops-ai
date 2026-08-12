@@ -8,7 +8,14 @@ call, map wire objects to domain models.
 from pydantic import BaseModel
 
 from qaops.config import QAOpsSettings
-from qaops.llm import LLMClient, LLMMessage, LLMRequest, PromptLoader, generate_structured
+from qaops.llm import (
+    ImagePart,
+    LLMClient,
+    LLMMessage,
+    LLMRequest,
+    PromptLoader,
+    generate_structured,
+)
 from qaops.llm.request_budget import current_observer
 
 SYSTEM_PROMPT = (
@@ -27,13 +34,20 @@ def run_structured_stage[T: BaseModel](
     settings: QAOpsSettings,
     prompt_name: str,
     schema: type[T],
+    images: list[ImagePart] | None = None,
     **prompt_vars: str,
 ) -> T:
-    """Render a versioned prompt, execute it, and validate the output."""
+    """Render a versioned prompt, execute it, and validate the output.
+
+    `images` (Phase 36) is optional visual evidence attached to the single user
+    message. It defaults to None, so every existing (text-only) caller builds a
+    byte-identical request. Only the RequirementAnalyzer passes images; all other
+    stages omit them.
+    """
     rendered = prompts.render(prompt_name, **prompt_vars)
     request = LLMRequest(
         system=SYSTEM_PROMPT,
-        messages=[LLMMessage(role="user", content=rendered)],
+        messages=[LLMMessage(role="user", content=rendered, images=images or [])],
         temperature=settings.temperature,
         max_output_tokens=settings.max_output_tokens,
     )

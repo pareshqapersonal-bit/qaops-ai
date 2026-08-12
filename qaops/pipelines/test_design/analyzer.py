@@ -14,6 +14,7 @@ models (ADR-001, ADR-011).
 from qaops.config import QAOpsSettings
 from qaops.core.errors import InputTooLargeError, StageError
 from qaops.core.ids import requirement_ids
+from qaops.ingestion.evidence import EvidencePackage
 from qaops.llm import LLMClient, PromptLoader
 from qaops.models import Requirement, RequirementAnalysisResult, RequirementInput
 from qaops.pipelines.test_design._support import run_structured_stage
@@ -32,7 +33,9 @@ class RequirementAnalyzer:
         self._prompts = prompts
         self._settings = settings
 
-    def run(self, data: RequirementInput) -> RequirementAnalysisResult:
+    def run(
+        self, data: RequirementInput, evidence: EvidencePackage | None = None
+    ) -> RequirementAnalysisResult:
         if len(data.text) > self._settings.max_input_chars:
             msg = (
                 f"Input '{data.source_name}' is {len(data.text)} characters; "
@@ -55,12 +58,18 @@ class RequirementAnalyzer:
                 "this limit.\n\n"
             )
 
+        # Phase 36: optional visual evidence is attached to THIS stage only (the
+        # sole stage that reads the raw source). Text-only runs pass no images and
+        # are byte-identical. No provider consumes images yet in Part 1.
+        images = evidence.ordered_images() if evidence and evidence.has_images else None
+
         extraction = run_structured_stage(
             client=self._client,
             prompts=self._prompts,
             settings=self._settings,
             prompt_name=PROMPT_NAME,
             schema=RequirementExtraction,
+            images=images,
             requirement_text=data.text,
             evaluation_note=evaluation_note,
         )

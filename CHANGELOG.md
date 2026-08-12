@@ -68,6 +68,37 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 36 Part 1: Visual evidence transport seam
+
+Introduces the multimodal transport for visual evidence and wires it to the
+RequirementAnalyzer, without adding any provider that consumes images (ADR-052).
+Plumbing only; text-only behavior is unchanged.
+
+- **`ImagePart`** (`qaops/llm/models.py`): provider-agnostic image value - media_type
+  (png/jpeg), base64 data, source_filename, order, optional page/image_index.
+- **`LLMMessage.images: list[ImagePart] = []`**: additive, optional; `content: str`
+  unchanged. A text-only message serializes with no `images` key (byte-identical).
+- **`EvidencePackage`** (`qaops/ingestion/evidence.py`): internal ingestion/API value
+  object carrying images with provenance/order; travels alongside `RequirementInput`
+  (which is NOT modified) and is consumed only by the analyzer. Not a domain model.
+- **`run_structured_stage`** gains an optional `images` parameter attached to the
+  single user message; only the analyzer passes it, so all other stages build
+  byte-identical requests.
+- **`RequirementAnalyzer.run(data, evidence=None)`**: passes ordered images through the
+  seam; the default keeps the existing call backward-compatible.
+- **Hard-fail, never silent drop**: `generate_structured` raises `LLMProviderError` if
+  a request carries images but the provider does not declare image support (read via a
+  `supports_images` `getattr` convention, so no provider is modified).
+- **Out of scope (deferred)**: no real provider (no Nemotron/Anthropic/Gemini vision),
+  no OCR, no image-attachment ingestion, no image UI, no PDF/DOCX loader changes, no
+  embedded-image extraction, no pipeline-topology change.
+- **Unchanged**: all five downstream stages, CoverageValidator, QualityReviewer,
+  ReviewAgent, all LLM providers, `RequirementInput`, Phase 33/34, and Phase 35A/35B.
+- **Tests**: backend 936 passed (+19 Phase 36: ImagePart validation, EvidencePackage
+  construction/ordering, text-only byte-identity, analyzer-attaches-images,
+  downstream-receives-none, Mock records image requests, text-only-provider hard-fail).
+- **ADR-052**. Version stays `0.18.0-dev`.
+
 ### Phase 35B: Multiple ticket attachments
 
 Extends the single ticket attachment (Phase 35A) to multiple, folded into one
