@@ -46,9 +46,10 @@ export function UploadPage() {
   const [ticketId, setTicketId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [criteria, setCriteria] = useState("");
   const [priority, setPriority] = useState("");
   const [labels, setLabels] = useState("");
+  // Phase 35: optional design / reference attachment.
+  const [attachment, setAttachment] = useState<File | null>(null);
 
   const onSubmitTicket = useCallback(async () => {
     if (submitting) return;
@@ -59,22 +60,20 @@ export function UploadPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const acceptance_criteria = criteria
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
       const labelList = labels
         .split(",")
         .map((l) => l.trim())
         .filter((l) => l.length > 0);
-      const created = await createTicketRun({
-        title: title.trim(),
-        description: description.trim(),
-        acceptance_criteria,
-        ticket_id: ticketId.trim() || undefined,
-        priority: priority.trim() || undefined,
-        labels: labelList.length > 0 ? labelList : undefined,
-      });
+      const created = await createTicketRun(
+        {
+          title: title.trim(),
+          description: description.trim(),
+          ticket_id: ticketId.trim() || undefined,
+          priority: priority.trim() || undefined,
+          labels: labelList.length > 0 ? labelList : undefined,
+        },
+        attachment,
+      );
       navigate(`/runs/${created.run_id}`);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -92,10 +91,10 @@ export function UploadPage() {
     submitting,
     title,
     description,
-    criteria,
     labels,
     ticketId,
     priority,
+    attachment,
     navigate,
   ]);
 
@@ -300,17 +299,6 @@ export function UploadPage() {
           />
         </div>
         <div className="field">
-          <label htmlFor="ticket-criteria">Acceptance criteria (one per line)</label>
-          <textarea
-            id="ticket-criteria"
-            rows={4}
-            value={criteria}
-            placeholder={"OTP is sent to the registered mobile number.\nValid OTP logs the user in."}
-            onChange={(e) => setCriteria(e.target.value)}
-            disabled={submitting}
-          />
-        </div>
-        <div className="field">
           <label htmlFor="ticket-priority">Priority</label>
           <input
             id="ticket-priority"
@@ -331,6 +319,21 @@ export function UploadPage() {
             onChange={(e) => setLabels(e.target.value)}
             disabled={submitting}
           />
+        </div>
+        <div className="field">
+          <label htmlFor="ticket-attachment">
+            Design / Reference Material (optional)
+          </label>
+          <input
+            id="ticket-attachment"
+            type="file"
+            accept=".pdf,.docx,.md,.markdown,.txt"
+            onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+            disabled={submitting}
+          />
+          {attachment && (
+            <span className="muted">Attached: {attachment.name}</span>
+          )}
         </div>
         <div className="row" style={{ marginTop: 20 }}>
           <button

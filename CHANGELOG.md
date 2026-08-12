@@ -68,6 +68,47 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 35: Ticket design/reference attachment
+
+Lets a Jira-style ticket optionally carry one design/reference file as additional
+evidence, combined into a single document for the existing pipeline (ADR-050).
+
+- **Multipart ticket endpoint**: `POST /api/v1/design/ticket` now accepts multipart
+  form data - ticket fields plus an optional `attachment`. Still delegates to the
+  unchanged `_create_and_schedule_run`; no second pipeline, no Jira integration.
+- **Attachment as evidence**: the file is extracted with the existing
+  `load_document` and appended verbatim to the ticket Markdown as a delimited
+  section:
+  ```
+  ## Design / Reference Material
+  Source: <filename>
+
+  <extracted attachment text>
+  ```
+  The existing analyzers decide what is a requirement - the attachment is never
+  parsed into requirements at the endpoint.
+- **Supported attachment formats**: PDF, DOCX, MD/Markdown, TXT (a narrower set than
+  the full document-upload formats; expandable later).
+- **Empty acceptance criteria now omit the section** entirely (previously a bare
+  `## Acceptance Criteria` heading) - an intentional normalization change, pinned by
+  tests. `TicketRequest.acceptance_criteria` stays optional in the schema.
+- **Error behavior (all 400, never 500)**: unsupported suffix, empty attachment,
+  loader failure (incl. missing pdf/docx dependency, surfaced as a clear message),
+  and no-extractable-text each return 400. Empty description still returns 422.
+- **Provenance**: `source_name` stays ticket-anchored; the attachment filename is
+  recorded only in the evidence section's `Source:` line.
+- **Frontend**: the ticket form drops the Acceptance Criteria field and adds an
+  optional "Design / Reference Material" file input (PDF/DOCX/MD/TXT);
+  `createTicketRun` sends multipart FormData. The document-upload UI is unchanged.
+- **Unchanged**: ticket-only runs (byte-identical pipeline path for equivalent
+  normalized input), the existing `/api/v1/design` document endpoint, the Phase 31
+  `review_advice_enabled` flag (`QAOPS_REVIEW_ADVICE_ENABLED`, still opt-in),
+  ReviewAgent, ReviewReport, CoverageValidator, Phase 33 assumptions, and the
+  Phase 34 finding/threshold.
+- **Tests**: backend 900 passed (+18 Phase 35; Phase 32 API tests updated to the
+  multipart contract); frontend 67 passed (+ticket attachment/AC-removal tests).
+- **ADR-050**. Version stays `0.18.0-dev`.
+
 ### Phase 34: Test-case assumptions review finding
 
 Surfaces Phase 33's `TestCase.assumptions` on the review surface so a QA lead can

@@ -61,13 +61,30 @@ def ticket_to_markdown(ticket: TicketRequest) -> str:
     lines.append("## Description")
     lines.append("")
     lines.append(ticket.description.strip())
-    lines.append("")
 
-    # Acceptance criteria - verbatim, in order, numbered. Empty list is valid:
-    # the heading stands alone and the missing detail flows into the gap analysis.
-    lines.append("## Acceptance Criteria")
-    lines.append("")
-    for index, criterion in enumerate(ticket.acceptance_criteria, start=1):
-        lines.append(f"{index}. {criterion}")
+    # Acceptance criteria - verbatim, in order, numbered. Phase 35: when there are
+    # none, the section is omitted entirely (no empty heading) rather than left as
+    # a bare heading. A ticket with criteria is unchanged.
+    criteria = [c for c in ticket.acceptance_criteria if c is not None]
+    if criteria:
+        lines.append("")
+        lines.append("## Acceptance Criteria")
+        lines.append("")
+        for index, criterion in enumerate(criteria, start=1):
+            lines.append(f"{index}. {criterion}")
 
     return "\n".join(lines).strip() + "\n"
+
+
+def append_reference_material(markdown: str, *, filename: str, text: str) -> str:
+    """Append an attachment as a delimited Design / Reference Material section (Phase 35).
+
+    Deterministic, transcription-only: the extracted attachment text is embedded
+    verbatim as document EVIDENCE - the existing pipeline decides what, if anything,
+    constitutes a requirement. This never parses or interprets the attachment. The
+    section is plain prose/headings only (no table or scenario markers), so the
+    combined document still classifies as DOCUMENT.
+    """
+    base = markdown.rstrip("\n")
+    section = f"## Design / Reference Material\nSource: {filename}\n\n{text.strip()}"
+    return f"{base}\n\n{section}\n"

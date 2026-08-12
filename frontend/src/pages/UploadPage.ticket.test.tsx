@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderAt } from "../test/render";
@@ -18,52 +18,80 @@ vi.mock("../api/client", async () => {
 });
 const { createTicketRun } = await import("../api/client");
 
-describe("UploadPage ticket mode", () => {
-  it("switches to ticket mode and shows the ticket form", async () => {
-    const user = userEvent.setup();
-    renderAt(<UploadPage />);
-    await user.click(screen.getByRole("tab", { name: /ticket/i }));
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+async function openTicketMode() {
+  const user = userEvent.setup();
+  renderAt(<UploadPage />);
+  await user.click(screen.getByRole("tab", { name: /ticket/i }));
+  return user;
+}
+
+describe("UploadPage ticket mode (Phase 35)", () => {
+  it("shows the ticket fields without an Acceptance Criteria field", async () => {
+    await openTicketMode();
     expect(screen.getByLabelText(/title/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/acceptance criteria/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/priority/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/labels/i)).toBeInTheDocument();
+    // Acceptance Criteria has been removed from the primary ticket UI.
+    expect(screen.queryByLabelText(/acceptance criteria/i)).toBeNull();
+  });
+
+  it("exposes an optional design / reference attachment input", async () => {
+    await openTicketMode();
+    const input = screen.getByLabelText(/design \/ reference material/i);
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveAttribute("type", "file");
   });
 
   it("keeps Start run disabled until title and description are set", async () => {
-    const user = userEvent.setup();
-    renderAt(<UploadPage />);
-    await user.click(screen.getByRole("tab", { name: /ticket/i }));
+    const user = await openTicketMode();
     expect(screen.getByRole("button", { name: /start run/i })).toBeDisabled();
     await user.type(screen.getByLabelText(/title/i), "Add OTP login");
     await user.type(screen.getByLabelText(/description/i), "Users log in with OTP.");
     expect(screen.getByRole("button", { name: /start run/i })).toBeEnabled();
   });
 
-  it("submits the ticket and navigates to the run", async () => {
+  it("submits ticket-only (no attachment) and navigates", async () => {
     vi.mocked(createTicketRun).mockResolvedValue({
       run_id: "run_ticket_1",
       status: "queued",
     });
-    const user = userEvent.setup();
-    renderAt(<UploadPage />);
-    await user.click(screen.getByRole("tab", { name: /ticket/i }));
+    const user = await openTicketMode();
     await user.type(screen.getByLabelText(/title/i), "Add OTP login");
-    await user.type(
-      screen.getByLabelText(/description/i),
-      "Users log in with OTP.",
-    );
-    await user.type(
-      screen.getByLabelText(/acceptance criteria/i),
-      "OTP is sent.\nValid OTP logs in.",
-    );
+    await user.type(screen.getByLabelText(/description/i), "Users log in with OTP.");
     await user.click(screen.getByRole("button", { name: /start run/i }));
     await waitFor(() =>
       expect(navigateMock).toHaveBeenCalledWith("/runs/run_ticket_1"),
     );
-    const arg = vi.mocked(createTicketRun).mock.calls[0][0];
-    expect(arg.title).toBe("Add OTP login");
-    expect(arg.acceptance_criteria).toEqual([
-      "OTP is sent.",
-      "Valid OTP logs in.",
-    ]);
+    const [ticketArg, attachmentArg] = vi.mocked(createTicketRun).mock.calls[0];
+    expect(ticketArg.title).toBe("Add OTP login");
+    // No attachment selected -> passed as null/undefined.
+    expect(attachmentArg ?? null).toBeNull();
+  });
+
+  it("submits ticket + attachment, passing the File to createTicketRun", async () => {
+    vi.mocked(createTicketRun).mockResolvedValue({
+      run_id: "run_ticket_2",
+      status: "queued",
+    });
+    const user = await openTicketMode();
+    await user.type(screen.getByLabelText(/title/i), "Ratings");
+    await user.type(screen.getByLabelText(/description/i), "Show ratings on PDP.");
+    const file = new File(["design evidence"], "design.txt", { type: "text/plain" });
+    await user.upload(screen.getByLabelText(/design \/ reference material/i), file);
+    await waitFor(() =>
+      expect(screen.getByText(/Attached: design.txt/i)).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: /start run/i }));
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith("/runs/run_ticket_2"),
+    );
+    const [, attachmentArg] = vi.mocked(createTicketRun).mock.calls[0];
+    expect(attachmentArg).toBeInstanceOf(File);
+    expect((attachmentArg as File).name).toBe("design.txt");
   });
 });

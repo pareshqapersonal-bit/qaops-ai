@@ -97,9 +97,11 @@ class TestOptionalMetadata:
         assert "Ticket:" not in md
         assert "Priority:" not in md
 
-    def test_empty_criteria_yields_heading_only(self) -> None:
+    def test_empty_criteria_omits_heading(self) -> None:
+        # Phase 35: empty acceptance criteria omit the section entirely (previously
+        # a bare heading was emitted). Intentional normalization change.
         md = ticket_to_markdown(_ticket(acceptance_criteria=[]))
-        assert "## Acceptance Criteria" in md
+        assert "## Acceptance Criteria" not in md
         # No numbered items follow.
         assert "1. " not in md
 

@@ -104,13 +104,13 @@ export function createDesignRun(
   });
 }
 
-// A Jira-style ticket accepted by POST /api/v1/design/ticket (Phase 32). The
-// ticket is normalized to Markdown server-side and flows through the same
-// document pipeline as an uploaded file.
+// A Jira-style ticket accepted by POST /api/v1/design/ticket (Phase 32/35). The
+// ticket is normalized to Markdown server-side; an optional design/reference
+// attachment is extracted and appended as evidence, then the combined document
+// flows through the same document pipeline. Sent as multipart FormData.
 export interface TicketInput {
   title: string;
   description: string;
-  acceptance_criteria: string[];
   ticket_id?: string;
   priority?: string;
   labels?: string[];
@@ -118,12 +118,20 @@ export interface TicketInput {
 
 export function createTicketRun(
   ticket: TicketInput,
+  attachment?: File | null,
   opts?: RequestOptions,
 ): Promise<RunCreatedResponse> {
+  const form = new FormData();
+  form.append("title", ticket.title);
+  form.append("description", ticket.description);
+  if (ticket.ticket_id) form.append("ticket_id", ticket.ticket_id);
+  if (ticket.priority) form.append("priority", ticket.priority);
+  // List fields are sent as repeated keys, matching the backend list[str] Form param.
+  for (const label of ticket.labels ?? []) form.append("labels", label);
+  if (attachment) form.append("attachment", attachment);
   return request<RunCreatedResponse>("/api/v1/design/ticket", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(ticket),
+    body: form,
     signal: opts?.signal,
   });
 }

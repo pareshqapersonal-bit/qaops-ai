@@ -9,12 +9,14 @@ Run locally:  uvicorn qaops.api.app:app --reload
 """
 
 import logging
+import tempfile
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi import File as FileParam
+from fastapi import Form as FormParam
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -43,14 +45,22 @@ from qaops.api.schemas import (
     TicketRequest,
 )
 from qaops.cli.config_loader import load_settings
+from qaops.core.errors import DocumentLoadError, UnsupportedDocumentFormatError
 from qaops.execution import ModelRegistry, available_providers
-from qaops.ingestion.ticket_normalizer import ticket_to_markdown
+from qaops.ingestion.registry import load_document
+from qaops.ingestion.ticket_normalizer import append_reference_material, ticket_to_markdown
 from qaops.services import DesignService
 
 logger = logging.getLogger(__name__)
 
 # Input extensions QAOps accepts, across the document and structured routes.
 _ALLOWED_SUFFIXES = {".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".json", ".xlsx", ".xlsm"}
+
+# Phase 35: design / reference attachments on a ticket are deliberately a NARROWER
+# set than the full document-upload formats - the natural design/reference formats
+# only. Not exposing csv/json/xlsx as "design attachments" just because ingestion
+# supports them; can expand later on real demand.
+_TICKET_ATTACHMENT_SUFFIXES = {".pdf", ".docx", ".md", ".markdown", ".txt"}
 
 
 def _package_version() -> str:
@@ -280,17 +290,76 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         status_code=202,
         tags=["design"],
     )
-    def submit_ticket(background: BackgroundTasks, ticket: TicketRequest) -> RunCreatedResponse:
-        """Accept a Jira-style ticket, normalize it to Markdown, run it (Phase 32).
+    async def submit_ticket(
+        background: BackgroundTasks,
+        title: Annotated[str, FormParam(min_length=1)],
+        description: Annotated[str, FormParam(min_length=1)],
+        ticket_id: Annotated[str | None, FormParam()] = None,
+        priority: Annotated[str | None, FormParam()] = None,
+        acceptance_criteria: Annotated[list[str] | None, FormParam()] = None,
+        labels: Annotated[list[str] | None, FormParam()] = None,
+        attachment: Annotated[UploadFile | None, FileParam()] = None,
+    ) -> RunCreatedResponse:
+        """Accept a Jira-style ticket + optional design/reference attachment (Phase 35).
 
-        The ticket is transcribed to a Markdown document by the TicketNormalizer and
-        then flows through the EXISTING DOCUMENT pipeline via the same
-        run-creation helper as an uploaded file. No Jira integration is performed -
-        this only accepts a ticket-shaped payload. Provenance rides through the
-        input name ("<TICKET-ID> - <title>", or the title alone when no id) into
-        source_name, without changing any generated REQ-*/BR-*/SC-*/TC- id.
+        The ticket is transcribed to Markdown by the TicketNormalizer. If an
+        attachment is supplied, its text is extracted via the EXISTING load_document
+        ingestion and appended as a delimited "Design / Reference Material" section -
+        additional document EVIDENCE, never parsed into requirements here. The
+        combined single .md flows through the EXISTING DOCUMENT pipeline via the same
+        run-creation helper. No second pipeline, no Jira integration. Provenance rides
+        the input name ("<TICKET-ID> - <title>", or title alone) into source_name;
+        the attachment's own name is recorded only in the evidence section.
+
+        Without an attachment this is byte-identical to the Phase 32 ticket-only
+        pipeline path (for equivalent normalized input).
         """
+        ticket = TicketRequest(
+            title=title,
+            description=description,
+            ticket_id=ticket_id,
+            priority=priority,
+            acceptance_criteria=acceptance_criteria or [],
+            labels=labels or [],
+        )
         markdown = ticket_to_markdown(ticket)
+
+        # Optional attachment: validate, extract via existing ingestion, append as
+        # evidence. Every failure mode is a client-facing 400 - never a bare 500.
+        if attachment is not None and attachment.filename:
+            raw_name = attachment.filename
+            suffix = Path(raw_name).suffix.lower()
+            if suffix not in _TICKET_ATTACHMENT_SUFFIXES:
+                allowed = ", ".join(sorted(_TICKET_ATTACHMENT_SUFFIXES))
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Unsupported attachment type {suffix or '(none)'}. "
+                        f"Design / reference attachments must be one of: {allowed}."
+                    ),
+                )
+            attachment_bytes = await attachment.read()
+            if not attachment_bytes:
+                raise HTTPException(status_code=400, detail="Attachment is empty.")
+
+            with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
+                tmp.write(attachment_bytes)
+                tmp.flush()
+                try:
+                    attachment_text = load_document(Path(tmp.name))
+                except (UnsupportedDocumentFormatError, DocumentLoadError) as exc:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Attachment could not be processed: {exc}",
+                    ) from exc
+
+            if not attachment_text.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Attachment contains no extractable text.",
+                )
+            markdown = append_reference_material(markdown, filename=raw_name, text=attachment_text)
+
         if ticket.ticket_id and ticket.ticket_id.strip():
             input_name = f"{ticket.ticket_id.strip()} - {ticket.title.strip()}.md"
         else:

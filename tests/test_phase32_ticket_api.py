@@ -74,6 +74,15 @@ _OTP_BODY = {
 }
 
 
+def _form(body: dict) -> dict:
+    """Encode a ticket dict as multipart/form fields (Phase 35 endpoint contract).
+
+    Returned as a dict; httpx sends list values as repeated keys, which is how
+    FastAPI reads a list[str] Form parameter.
+    """
+    return dict(body)
+
+
 @pytest.fixture(autouse=True)
 def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret-key-1234567890")
@@ -101,13 +110,13 @@ def _mock(responses: list[str]) -> AbstractContextManager[object]:
 class TestTicketEndpoint:
     def test_returns_202_and_run_id(self, client: TestClient) -> None:
         with _mock(_DOC_RESPONSES):
-            r = client.post("/api/v1/design/ticket", json=_OTP_BODY)
+            r = client.post("/api/v1/design/ticket", data=_form(_OTP_BODY))
         assert r.status_code == 202
         assert "run_id" in r.json()
 
     def test_markdown_written_to_input_dir(self, client: TestClient, config: APIConfig) -> None:
         with _mock(_DOC_RESPONSES):
-            r = client.post("/api/v1/design/ticket", json=_OTP_BODY)
+            r = client.post("/api/v1/design/ticket", data=_form(_OTP_BODY))
         run_id = r.json()["run_id"]
         input_files = list((config.runtime_dir / run_id / "input").iterdir())
         assert len(input_files) == 1
@@ -115,7 +124,7 @@ class TestTicketEndpoint:
 
     def test_provenance_in_filename(self, client: TestClient, config: APIConfig) -> None:
         with _mock(_DOC_RESPONSES):
-            r = client.post("/api/v1/design/ticket", json=_OTP_BODY)
+            r = client.post("/api/v1/design/ticket", data=_form(_OTP_BODY))
         run_id = r.json()["run_id"]
         name = next((config.runtime_dir / run_id / "input").iterdir()).name
         assert "OTP-123" in name
@@ -126,14 +135,14 @@ class TestTicketEndpoint:
     ) -> None:
         body = {k: v for k, v in _OTP_BODY.items() if k != "ticket_id"}
         with _mock(_DOC_RESPONSES):
-            r = client.post("/api/v1/design/ticket", json=body)
+            r = client.post("/api/v1/design/ticket", data=_form(body))
         run_id = r.json()["run_id"]
         name = next((config.runtime_dir / run_id / "input").iterdir()).name
         assert "Add OTP login" in name
 
     def test_invalid_ticket_is_422(self, client: TestClient) -> None:
         # Missing required description.
-        r = client.post("/api/v1/design/ticket", json={"title": "x", "acceptance_criteria": []})
+        r = client.post("/api/v1/design/ticket", data={"title": "x"})
         assert r.status_code == 422
 
 
@@ -142,7 +151,7 @@ class TestTicketThroughDocumentPipeline:
         self, client: TestClient, config: APIConfig
     ) -> None:
         with _mock(_DOC_RESPONSES):
-            r = client.post("/api/v1/design/ticket", json=_OTP_BODY)
+            r = client.post("/api/v1/design/ticket", data=_form(_OTP_BODY))
         run_id = r.json()["run_id"]
         status = client.get(f"/api/v1/runs/{run_id}").json()
         assert status["status"] == "completed"
@@ -155,7 +164,7 @@ class TestTicketThroughDocumentPipeline:
         self, client: TestClient, config: APIConfig
     ) -> None:
         with _mock(_DOC_RESPONSES):
-            r = client.post("/api/v1/design/ticket", json=_OTP_BODY)
+            r = client.post("/api/v1/design/ticket", data=_form(_OTP_BODY))
         run_id = r.json()["run_id"]
         status = client.get(f"/api/v1/runs/{run_id}").json()
         # The document entry point is what a .md prose file classifies as.
@@ -170,10 +179,9 @@ class TestTicketThroughDocumentPipeline:
         sparse = {
             "title": "Add OTP login",
             "description": "Users log in with OTP.",
-            "acceptance_criteria": [],
         }
         with _mock(_DOC_RESPONSES_WITH_GAP):
-            r = client.post("/api/v1/design/ticket", json=sparse)
+            r = client.post("/api/v1/design/ticket", data=sparse)
         run_id = r.json()["run_id"]
         status = client.get(f"/api/v1/runs/{run_id}").json()
         assert status["status"] == "completed"
