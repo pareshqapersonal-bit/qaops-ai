@@ -105,9 +105,11 @@ export function createDesignRun(
 }
 
 // A Jira-style ticket accepted by POST /api/v1/design/ticket (Phase 32/35). The
-// ticket is normalized to Markdown server-side; an optional design/reference
-// attachment is extracted and appended as evidence, then the combined document
-// flows through the same document pipeline. Sent as multipart FormData.
+// ticket is normalized to Markdown server-side; optional design/reference
+// attachments are extracted and appended as evidence (one section per file, in
+// order), then the combined document flows through the same document pipeline.
+// Sent as multipart FormData. The multipart field name is "attachment" (repeated
+// once per file), matching the backend list[UploadFile] param (Phase 35B).
 export interface TicketInput {
   title: string;
   description: string;
@@ -118,7 +120,7 @@ export interface TicketInput {
 
 export function createTicketRun(
   ticket: TicketInput,
-  attachment?: File | null,
+  attachments?: File[] | null,
   opts?: RequestOptions,
 ): Promise<RunCreatedResponse> {
   const form = new FormData();
@@ -128,7 +130,8 @@ export function createTicketRun(
   if (ticket.priority) form.append("priority", ticket.priority);
   // List fields are sent as repeated keys, matching the backend list[str] Form param.
   for (const label of ticket.labels ?? []) form.append("labels", label);
-  if (attachment) form.append("attachment", attachment);
+  // Each file is appended under the same "attachment" field name, in order.
+  for (const file of attachments ?? []) form.append("attachment", file);
   return request<RunCreatedResponse>("/api/v1/design/ticket", {
     method: "POST",
     body: form,

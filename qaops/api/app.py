@@ -48,7 +48,11 @@ from qaops.cli.config_loader import load_settings
 from qaops.core.errors import DocumentLoadError, UnsupportedDocumentFormatError
 from qaops.execution import ModelRegistry, available_providers
 from qaops.ingestion.registry import load_document
-from qaops.ingestion.ticket_normalizer import append_reference_material, ticket_to_markdown
+from qaops.ingestion.ticket_normalizer import (
+    AttachmentEvidence,
+    append_reference_materials,
+    ticket_to_markdown,
+)
 from qaops.services import DesignService
 
 logger = logging.getLogger(__name__)
@@ -298,21 +302,25 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         priority: Annotated[str | None, FormParam()] = None,
         acceptance_criteria: Annotated[list[str] | None, FormParam()] = None,
         labels: Annotated[list[str] | None, FormParam()] = None,
-        attachment: Annotated[UploadFile | None, FileParam()] = None,
+        attachment: Annotated[list[UploadFile] | None, FileParam()] = None,
     ) -> RunCreatedResponse:
-        """Accept a Jira-style ticket + optional design/reference attachment (Phase 35).
+        """Accept a Jira-style ticket + optional design/reference attachments (Phase 35).
 
-        The ticket is transcribed to Markdown by the TicketNormalizer. If an
-        attachment is supplied, its text is extracted via the EXISTING load_document
-        ingestion and appended as a delimited "Design / Reference Material" section -
-        additional document EVIDENCE, never parsed into requirements here. The
-        combined single .md flows through the EXISTING DOCUMENT pipeline via the same
-        run-creation helper. No second pipeline, no Jira integration. Provenance rides
-        the input name ("<TICKET-ID> - <title>", or title alone) into source_name;
-        the attachment's own name is recorded only in the evidence section.
+        The ticket is transcribed to Markdown by the TicketNormalizer. Each supplied
+        attachment (0, 1, or many - multipart field name "attachment") is extracted
+        via the EXISTING load_document ingestion and appended as its own delimited
+        "Design / Reference Material" section, in upload order - additional document
+        EVIDENCE, never parsed into requirements here. The combined single .md flows
+        through the EXISTING DOCUMENT pipeline via the same run-creation helper. No
+        second pipeline, no Jira integration. Provenance rides the input name
+        ("<TICKET-ID> - <title>", or title alone) into source_name; each attachment's
+        own name is recorded only in its evidence section.
 
-        Without an attachment this is byte-identical to the Phase 32 ticket-only
-        pipeline path (for equivalent normalized input).
+        Attachment handling is strict: if ANY attachment fails validation or
+        extraction, the whole request fails with a client-facing 400 (never a bare
+        500, and never a silent skip). Without attachments this is byte-identical to
+        the Phase 32 ticket-only pipeline path; with exactly one it is byte-identical
+        to Phase 35A.
         """
         ticket = TicketRequest(
             title=title,
@@ -324,23 +332,29 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         )
         markdown = ticket_to_markdown(ticket)
 
-        # Optional attachment: validate, extract via existing ingestion, append as
-        # evidence. Every failure mode is a client-facing 400 - never a bare 500.
-        if attachment is not None and attachment.filename:
-            raw_name = attachment.filename
+        # Each attachment: validate, extract via existing ingestion, collect as
+        # evidence in upload order. Strict-fail - the first bad file raises 400 and
+        # no run is created; failures name the offending file and never surface as
+        # a 500.
+        evidences: list[AttachmentEvidence] = []
+        for item in attachment or []:
+            if not item.filename:
+                continue
+            raw_name = item.filename
             suffix = Path(raw_name).suffix.lower()
             if suffix not in _TICKET_ATTACHMENT_SUFFIXES:
                 allowed = ", ".join(sorted(_TICKET_ATTACHMENT_SUFFIXES))
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"Unsupported attachment type {suffix or '(none)'}. "
-                        f"Design / reference attachments must be one of: {allowed}."
+                        f"Unsupported attachment type {suffix or '(none)'} for "
+                        f"'{raw_name}'. Design / reference attachments must be one of: "
+                        f"{allowed}."
                     ),
                 )
-            attachment_bytes = await attachment.read()
+            attachment_bytes = await item.read()
             if not attachment_bytes:
-                raise HTTPException(status_code=400, detail="Attachment is empty.")
+                raise HTTPException(status_code=400, detail=f"Attachment '{raw_name}' is empty.")
 
             with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
                 tmp.write(attachment_bytes)
@@ -350,15 +364,17 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
                 except (UnsupportedDocumentFormatError, DocumentLoadError) as exc:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Attachment could not be processed: {exc}",
+                        detail=f"Attachment '{raw_name}' could not be processed: {exc}",
                     ) from exc
 
             if not attachment_text.strip():
                 raise HTTPException(
                     status_code=400,
-                    detail="Attachment contains no extractable text.",
+                    detail=f"Attachment '{raw_name}' contains no extractable text.",
                 )
-            markdown = append_reference_material(markdown, filename=raw_name, text=attachment_text)
+            evidences.append(AttachmentEvidence(filename=raw_name, text=attachment_text))
+
+        markdown = append_reference_materials(markdown, evidences)
 
         if ticket.ticket_id and ticket.ticket_id.strip():
             input_name = f"{ticket.ticket_id.strip()} - {ticket.title.strip()}.md"

@@ -67,13 +67,13 @@ describe("UploadPage ticket mode (Phase 35)", () => {
     await waitFor(() =>
       expect(navigateMock).toHaveBeenCalledWith("/runs/run_ticket_1"),
     );
-    const [ticketArg, attachmentArg] = vi.mocked(createTicketRun).mock.calls[0];
+    const [ticketArg, attachmentsArg] = vi.mocked(createTicketRun).mock.calls[0];
     expect(ticketArg.title).toBe("Add OTP login");
-    // No attachment selected -> passed as null/undefined.
-    expect(attachmentArg ?? null).toBeNull();
+    // No attachment selected -> empty array (or nullish).
+    expect(attachmentsArg ?? []).toEqual([]);
   });
 
-  it("submits ticket + attachment, passing the File to createTicketRun", async () => {
+  it("submits ticket + attachment, passing the File array to createTicketRun", async () => {
     vi.mocked(createTicketRun).mockResolvedValue({
       run_id: "run_ticket_2",
       status: "queued",
@@ -90,8 +90,33 @@ describe("UploadPage ticket mode (Phase 35)", () => {
     await waitFor(() =>
       expect(navigateMock).toHaveBeenCalledWith("/runs/run_ticket_2"),
     );
-    const [, attachmentArg] = vi.mocked(createTicketRun).mock.calls[0];
-    expect(attachmentArg).toBeInstanceOf(File);
-    expect((attachmentArg as File).name).toBe("design.txt");
+    const [, attachmentsArg] = vi.mocked(createTicketRun).mock.calls[0];
+    expect(attachmentsArg).toHaveLength(1);
+    expect((attachmentsArg as File[])[0].name).toBe("design.txt");
+  });
+
+  it("submits ticket + multiple attachments, preserving order", async () => {
+    vi.mocked(createTicketRun).mockResolvedValue({
+      run_id: "run_ticket_3",
+      status: "queued",
+    });
+    const user = await openTicketMode();
+    await user.type(screen.getByLabelText(/title/i), "Ratings");
+    await user.type(screen.getByLabelText(/description/i), "Show ratings.");
+    const a = new File(["A"], "a.txt", { type: "text/plain" });
+    const b = new File(["B"], "b.md", { type: "text/markdown" });
+    await user.upload(screen.getByLabelText(/design \/ reference material/i), [a, b]);
+    await waitFor(() =>
+      expect(screen.getByText(/Attached: a.txt, b.md/i)).toBeInTheDocument(),
+    );
+    await user.click(screen.getByRole("button", { name: /start run/i }));
+    await waitFor(() =>
+      expect(navigateMock).toHaveBeenCalledWith("/runs/run_ticket_3"),
+    );
+    const [, attachmentsArg] = vi.mocked(createTicketRun).mock.calls[0];
+    expect((attachmentsArg as File[]).map((f) => f.name)).toEqual([
+      "a.txt",
+      "b.md",
+    ]);
   });
 });

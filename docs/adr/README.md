@@ -51,5 +51,6 @@
 | [048](048-test-case-assumption-provenance.md) | Test-case assumption provenance: additive TestCase.assumptions + generator prompt contract separating source-backed / QA test data / unsupported assumptions; byte-identical for evidence-complete cases | Accepted |
 | [049](049-test-case-assumptions-review-finding.md) | Threshold-gated deterministic QualityReviewer finding (test_case_assumptions, WARNING/completeness, 50%) surfacing Phase 33 assumptions with exact TestCase references; quantity-based severity, no prose classification; ReviewAgent/CoverageValidator/Phase 33 unchanged | Accepted |
 | [050](050-ticket-design-reference-attachment.md) | Optional design/reference attachment on a ticket: multipart endpoint, extracted via load_document and appended as a verbatim evidence section into one combined document; ticket-only stays compatible; no second pipeline | Accepted |
+| [051](051-multiple-ticket-attachments.md) | Multiple ticket attachments (field name `attachment` kept, cardinality->list): each extracted via load_document and appended as an ordered evidence section into one combined document; strict-fail on any bad file; XLSX/images deferred; single/no-attachment stays 35A-compatible | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

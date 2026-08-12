@@ -48,8 +48,8 @@ export function UploadPage() {
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("");
   const [labels, setLabels] = useState("");
-  // Phase 35: optional design / reference attachment.
-  const [attachment, setAttachment] = useState<File | null>(null);
+  // Phase 35B: optional design / reference attachments (0, 1, or many).
+  const [attachments, setAttachments] = useState<File[]>([]);
 
   const onSubmitTicket = useCallback(async () => {
     if (submitting) return;
@@ -72,7 +72,7 @@ export function UploadPage() {
           priority: priority.trim() || undefined,
           labels: labelList.length > 0 ? labelList : undefined,
         },
-        attachment,
+        attachments,
       );
       navigate(`/runs/${created.run_id}`);
     } catch (err) {
@@ -94,7 +94,7 @@ export function UploadPage() {
     labels,
     ticketId,
     priority,
-    attachment,
+    attachments,
     navigate,
   ]);
 
@@ -327,12 +327,15 @@ export function UploadPage() {
           <input
             id="ticket-attachment"
             type="file"
+            multiple
             accept=".pdf,.docx,.md,.markdown,.txt"
-            onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+            onChange={(e) => setAttachments(Array.from(e.target.files ?? []))}
             disabled={submitting}
           />
-          {attachment && (
-            <span className="muted">Attached: {attachment.name}</span>
+          {attachments.length > 0 && (
+            <span className="muted">
+              Attached: {attachments.map((f) => f.name).join(", ")}
+            </span>
           )}
         </div>
         <div className="row" style={{ marginTop: 20 }}>

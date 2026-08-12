@@ -22,6 +22,7 @@ No LLM is used here and none may be added: the normalizer must stay deterministi
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -76,15 +77,49 @@ def ticket_to_markdown(ticket: TicketRequest) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def append_reference_material(markdown: str, *, filename: str, text: str) -> str:
-    """Append an attachment as a delimited Design / Reference Material section (Phase 35).
+@dataclass(frozen=True)
+class AttachmentEvidence:
+    """One extracted design/reference attachment (Phase 35B).
 
-    Deterministic, transcription-only: the extracted attachment text is embedded
-    verbatim as document EVIDENCE - the existing pipeline decides what, if anything,
-    constitutes a requirement. This never parses or interprets the attachment. The
-    section is plain prose/headings only (no table or scenario markers), so the
-    combined document still classifies as DOCUMENT.
+    An internal ingestion/API value object - NOT a pipeline/domain model and never
+    imported by any pipeline stage. It carries only what is needed to render a
+    provenance-preserving evidence section: the original filename and the verbatim
+    extracted text. Constructed in the ticket endpoint after successful extraction
+    and consumed only by append_reference_materials.
     """
+
+    filename: str
+    text: str
+
+
+def append_reference_materials(markdown: str, evidences: list[AttachmentEvidence]) -> str:
+    """Append one Design / Reference Material section per attachment (Phase 35B).
+
+    Deterministic and transcription-only. Sections are emitted in the given order
+    (the upload order) - never sorted or de-duplicated, so two files with the same
+    name yield two distinct, honest sections. Each attachment's text is embedded
+    verbatim as document EVIDENCE; the existing pipeline decides what, if anything,
+    is a requirement. Sections are plain prose/headings only (no table or scenario
+    markers), so the combined document still classifies as DOCUMENT.
+
+    An empty list returns the markdown unchanged, guaranteeing the ticket-only path
+    stays byte-identical. A single attachment produces output byte-identical to the
+    Phase 35A single-attachment section.
+    """
+    if not evidences:
+        return markdown
     base = markdown.rstrip("\n")
-    section = f"## Design / Reference Material\nSource: {filename}\n\n{text.strip()}"
-    return f"{base}\n\n{section}\n"
+    sections = "\n\n".join(
+        f"## Design / Reference Material\nSource: {e.filename}\n\n{e.text.strip()}"
+        for e in evidences
+    )
+    return f"{base}\n\n{sections}\n"
+
+
+def append_reference_material(markdown: str, *, filename: str, text: str) -> str:
+    """Append a single attachment as an evidence section (Phase 35A compatibility).
+
+    Thin wrapper over append_reference_materials so single-attachment output is
+    byte-identical to Phase 35A by construction.
+    """
+    return append_reference_materials(markdown, [AttachmentEvidence(filename=filename, text=text)])

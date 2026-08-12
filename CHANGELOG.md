@@ -68,6 +68,39 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 35B: Multiple ticket attachments
+
+Extends the single ticket attachment (Phase 35A) to multiple, folded into one
+combined document as ordered evidence (ADR-051).
+
+- **Multiple attachments**: the ticket endpoint's multipart `attachment` field now
+  accepts 0, 1, or many files. The field name is unchanged (repeated once per file,
+  matching the backend `list[UploadFile]`) - no breaking `attachments` rename.
+- **Supported formats unchanged**: PDF, DOCX, MD, MARKDOWN, TXT. XLSX and images
+  remain deferred (no spreadsheet loader, no OCR, no multimodal, no LLM change).
+- **AttachmentEvidence**: a small internal frozen dataclass (filename, text) in the
+  ingestion/API layer - not a pipeline/domain model, never imported by any stage.
+- **Ordered evidence**: `append_reference_materials` emits one
+  `## Design / Reference Material` section per attachment, in upload order, verbatim;
+  never sorted or de-duplicated. The Phase 35A singular helper is now a thin wrapper,
+  so single-attachment output is byte-identical.
+- **Strict failure**: if ANY attachment fails validation/extraction (unsupported
+  suffix, empty, loader failure incl. missing dependency, or no extractable text),
+  the whole request returns 400 naming the file - never a silent skip, never a
+  partial run, never a 500. No run is created on failure. Empty description still 422.
+- **Provenance**: `source_name` stays ticket-anchored; each attachment's filename
+  appears only in its evidence section's `Source:` line.
+- **Frontend**: the ticket attachment input accepts multiple files (`multiple`);
+  `createTicketRun` sends each under the `attachment` field in order.
+- **Unchanged**: ticket-only (byte-identical to Phase 32), single attachment
+  (byte-identical to Phase 35A), the existing `/api/v1/design` document endpoint,
+  `_create_and_schedule_run`, `execute_run`, `load_document`, `classify_input`, all
+  pipeline stages, CoverageValidator, QualityReviewer, ReviewAgent, the LLM
+  abstraction/providers, Phase 33/34, and the Phase 31 `review_advice_enabled` flag.
+- **Tests**: backend 917 passed (+17 Phase 35B); frontend 68 passed (+multi-file
+  ticket test). Phase 32/35A tests remain green unchanged.
+- **ADR-051**. Version stays `0.18.0-dev`.
+
 ### Phase 35: Ticket design/reference attachment
 
 Lets a Jira-style ticket optionally carry one design/reference file as additional
