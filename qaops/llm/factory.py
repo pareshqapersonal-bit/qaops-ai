@@ -42,6 +42,14 @@ def create_client(settings: QAOpsSettings) -> LLMClient:
         from qaops.llm.groq_client import GroqClient
 
         return GroqClient(model=settings.groq_model, timeout_seconds=timeout)
+    if settings.provider == "nvidia":
+        from qaops.llm.nvidia_client import NvidiaClient
+
+        return NvidiaClient(
+            model=settings.nvidia_model,
+            base_url=settings.nvidia_base_url,
+            timeout_seconds=timeout,
+        )
     if settings.provider == "mock":
         msg = (
             "Provider 'mock' cannot be created by the factory; construct "

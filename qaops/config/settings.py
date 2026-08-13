@@ -41,6 +41,17 @@ class QAOpsSettings(BaseSettings):
         default="llama-3.3-70b-versatile",
         description="Model identifier used when provider is 'groq'.",
     )
+    nvidia_model: str = Field(
+        default="nvidia/nemotron-nano-12b-v2-vl",
+        description="Model identifier used when provider is 'nvidia'.",
+    )
+    nvidia_base_url: str = Field(
+        default="https://integrate.api.nvidia.com/v1",
+        description=(
+            "OpenAI-compatible base URL for the 'nvidia' provider. Defaults to "
+            "build.nvidia.com cloud; override for a self-hosted NIM endpoint."
+        ),
+    )
     execution_strategy: str = Field(
         default="any",
         description=(
@@ -214,7 +225,7 @@ class QAOpsSettings(BaseSettings):
     @field_validator("provider")
     @classmethod
     def _known_provider(cls, value: str) -> str:
-        known = {"anthropic", "gemini", "openrouter", "groq", "mock"}
+        known = {"anthropic", "gemini", "openrouter", "groq", "nvidia", "mock"}
         if value not in known:
             msg = f"Unknown provider {value!r}. Known providers: {sorted(known)}"
             raise ValueError(msg)
