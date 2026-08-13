@@ -12,7 +12,7 @@ import logging
 import tempfile
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi import File as FileParam
@@ -47,6 +47,14 @@ from qaops.api.schemas import (
 from qaops.cli.config_loader import load_settings
 from qaops.core.errors import DocumentLoadError, UnsupportedDocumentFormatError
 from qaops.execution import ModelRegistry, available_providers
+from qaops.ingestion.evidence_sidecar import write_image_sidecar
+from qaops.ingestion.image_ingest import (
+    IMAGE_SUFFIXES,
+    ImageValidationError,
+    build_image_part,
+    check_image_budget,
+    is_image_suffix,
+)
 from qaops.ingestion.registry import load_document
 from qaops.ingestion.ticket_normalizer import (
     AttachmentEvidence,
@@ -54,6 +62,9 @@ from qaops.ingestion.ticket_normalizer import (
     ticket_to_markdown,
 )
 from qaops.services import DesignService
+
+if TYPE_CHECKING:
+    from qaops.llm import ImagePart
 
 logger = logging.getLogger(__name__)
 
@@ -336,14 +347,41 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         # evidence in upload order. Strict-fail - the first bad file raises 400 and
         # no run is created; failures name the offending file and never surface as
         # a 500.
+        #
+        # Phase 36B: attachments are partitioned by suffix. Document attachments
+        # (pdf/docx/md/txt) keep the EXACT Phase 35B text path below. Image
+        # attachments (png/jpg/jpeg) are validated by magic bytes and turned into
+        # 36A ImageParts, preserving upload order. In this part images are only
+        # constructed and budget-checked; they are NOT yet persisted or threaded
+        # into the execution path (a later, separately-approved step), so an
+        # image-bearing run does not yet reach a multimodal provider.
         evidences: list[AttachmentEvidence] = []
+        image_parts: list[ImagePart] = []
+        image_total_bytes = 0
         for item in attachment or []:
             if not item.filename:
                 continue
             raw_name = item.filename
             suffix = Path(raw_name).suffix.lower()
+
+            if is_image_suffix(suffix):
+                image_bytes = await item.read()
+                try:
+                    part = build_image_part(
+                        filename=raw_name,
+                        suffix=suffix,
+                        data=image_bytes,
+                        order=len(image_parts),
+                    )
+                    image_total_bytes += len(image_bytes)
+                    check_image_budget(count=len(image_parts) + 1, total_bytes=image_total_bytes)
+                except ImageValidationError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                image_parts.append(part)
+                continue
+
             if suffix not in _TICKET_ATTACHMENT_SUFFIXES:
-                allowed = ", ".join(sorted(_TICKET_ATTACHMENT_SUFFIXES))
+                allowed = ", ".join(sorted(_TICKET_ATTACHMENT_SUFFIXES | IMAGE_SUFFIXES))
                 raise HTTPException(
                     status_code=400,
                     detail=(
@@ -380,12 +418,24 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             input_name = f"{ticket.ticket_id.strip()} - {ticket.title.strip()}.md"
         else:
             input_name = f"{ticket.title.strip()}.md"
-        return _create_and_schedule_run(
+        created = _create_and_schedule_run(
             input_name=input_name,
             contents=markdown.encode("utf-8"),
             suffix=".md",
             background=background,
         )
+
+        # Phase 36B Part 2: when the ticket carried images, persist them as a sidecar
+        # in the run workspace (beside input/), NOT in the combined Markdown. The
+        # sidecar is written before the scheduled execution reads it; execute_run
+        # reconstructs an EvidencePackage from it. Document/ticket-only runs write no
+        # sidecar and are unchanged.
+        if image_parts:
+            run = store.get(created.run_id)
+            if run is not None:
+                write_image_sidecar(run.workspace, image_parts)
+
+        return created
 
     @app.post(
         "/api/v1/runs/{run_id}/resume",

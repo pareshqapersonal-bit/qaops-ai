@@ -46,6 +46,8 @@ from qaops.execution.events import EventSink
 from qaops.execution.executor import CheckpointSink
 from qaops.exporters import CsvBundleExporter
 from qaops.ingestion import load_document
+from qaops.ingestion.evidence import EvidencePackage
+from qaops.ingestion.evidence_sidecar import load_evidence_package
 from qaops.llm import PromptLoader, create_client
 from qaops.models import (
     ConditionDesignResult,
@@ -139,6 +141,14 @@ class DesignService:
         emit = report or (lambda _line: None)
         emit_event = events or (lambda _event: None)
 
+        # Phase 36B Part 2: reconstruct any image evidence persisted with the run.
+        # The sidecar lives in the run workspace beside output/ (output_dir is
+        # workspace/output). A missing sidecar yields None, so text/document-only
+        # runs are unchanged. A corrupt sidecar raises, failing the run clearly
+        # rather than silently downgrading to text-only. Only the analyzer (stage 1)
+        # receives this evidence.
+        evidence = load_evidence_package(settings.output_dir.parent)
+
         if not input_path.exists():
             msg = f"Input file not found: {input_path}"
             raise ConfigurationError(msg)
@@ -178,6 +188,7 @@ class DesignService:
                 emit,
                 emit_event,
                 checkpoint=_checkpoint,
+                evidence=evidence,
             )
         except StageError as exc:
             # Never discard completed work: export whatever the furthest
@@ -218,6 +229,12 @@ class DesignService:
         """
         emit = report or (lambda _line: None)
         emit_event = events or (lambda _event: None)
+
+        # Phase 36B Part 2: same image-evidence reconstruction as run(). Only the
+        # analyzer (stage 1) consumes it; when resuming past the analyzer it has no
+        # effect, but loading it keeps a resume-from-start consistent with a fresh
+        # run and preserves the fail-clearly contract on a corrupt sidecar.
+        evidence = load_evidence_package(settings.output_dir.parent)
 
         entry_point, detection = self.resolve_entry_point(input_path, from_)
         export_formats = list(formats) if formats else list(settings.default_export_formats)
@@ -283,6 +300,7 @@ class DesignService:
                 emit_event,
                 checkpoint=_checkpoint,
                 start_index=resume_index,
+                evidence=evidence,
             )
         except StageError as exc:
             self._export_partial(checkpoints, exporters, settings, input_path, want_bundle, emit)
@@ -320,8 +338,14 @@ class DesignService:
         emit_event: EventSink,
         checkpoint: CheckpointSink | None = None,
         start_index: int = 0,
+        evidence: EvidencePackage | None = None,
     ) -> TestDesignResult:
-        """Run through the adaptive executor (single- or multi-provider)."""
+        """Run through the adaptive executor (single- or multi-provider).
+
+        `evidence` (Phase 36B) is optional image evidence bound to the analyzer only
+        (stage 1). It defaults to None, so runs without images build a byte-identical
+        pipeline.
+        """
         emit(f"Running pipeline ({entry_point.value}): {' -> '.join(stage_names_for(entry_point))}")
 
         # All execution flows through the adaptive executor, single-provider or
@@ -342,6 +366,7 @@ class DesignService:
                 stage_client,
                 PromptLoader(version=stage_settings.prompt_version),
                 stage_settings,
+                evidence=evidence,
             )
             return list(built.stages)
 

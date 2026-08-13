@@ -16,6 +16,7 @@ licence to feed unbounded input.
 
 from qaops.config import QAOpsSettings
 from qaops.core.errors import InputTooLargeError, StageError
+from qaops.ingestion.evidence import EvidencePackage
 from qaops.llm import LLMClient, PromptLoader
 from qaops.models import RequirementAnalysisResult, RequirementInput
 from qaops.pipelines.chunking.merge import merge_requirements
@@ -41,7 +42,13 @@ class ChunkedRequirementAnalyzer:
     # and break callers that identify the stage by name.
     name = "requirement_analyzer"
 
-    def __init__(self, client: LLMClient, prompts: PromptLoader, settings: QAOpsSettings) -> None:
+    def __init__(
+        self,
+        client: LLMClient,
+        prompts: PromptLoader,
+        settings: QAOpsSettings,
+        evidence: EvidencePackage | None = None,
+    ) -> None:
         # Imported here rather than at module scope: the test_design package
         # imports this module for pipeline composition, so a top-level import
         # of its analyzer would be circular.
@@ -49,6 +56,10 @@ class ChunkedRequirementAnalyzer:
 
         self._settings = settings
         self._analyzer = RequirementAnalyzer(client, prompts, settings)
+        # Phase 36B: optional image evidence, forwarded to the analyzer on the
+        # whole-document (non-chunked) path. Defaults to None so text/document-only
+        # runs are unchanged.
+        self._evidence = evidence
         fixed = settings.chunking_strategy == "fixed"
         self._strategy = ChunkStrategy(
             provider=settings.provider,
@@ -71,8 +82,8 @@ class ChunkedRequirementAnalyzer:
         decision = self._strategy.decide(len(data.text))
         if not decision.should_chunk:
             # Bypass: the analyzer executes exactly as it would with no
-            # chunking involved.
-            return self._analyzer.run(data)
+            # chunking involved. Image evidence rides the whole-document call.
+            return self._analyzer.run(data, self._evidence)
 
         planner = ChunkPlanner(
             chunk_size=decision.chunk_size,
@@ -80,7 +91,7 @@ class ChunkedRequirementAnalyzer:
         )
         chunks = planner.plan(data.text)
         if len(chunks) <= 1:
-            return self._analyzer.run(data)
+            return self._analyzer.run(data, self._evidence)
 
         results: list[RequirementAnalysisResult] = []
         failures: list[str] = []

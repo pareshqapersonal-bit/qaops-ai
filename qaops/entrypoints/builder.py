@@ -13,6 +13,7 @@ always has.
 from qaops.config import QAOpsSettings
 from qaops.core.pipeline import Pipeline
 from qaops.entrypoints.entry_point import EntryPoint
+from qaops.ingestion.evidence import EvidencePackage
 from qaops.llm import LLMClient, PromptLoader
 from qaops.pipelines.chunking import ChunkedRequirementAnalyzer
 from qaops.pipelines.test_design.conditions import TestConditionAnalyzer
@@ -28,10 +29,16 @@ def build_pipeline_for(
     client: LLMClient,
     prompts: PromptLoader,
     settings: QAOpsSettings,
+    evidence: EvidencePackage | None = None,
 ) -> Pipeline:
     """Compose the minimal pipeline that takes `entry_point` input to a
-    fully validated TestDesignResult."""
-    analyzer = ChunkedRequirementAnalyzer(client, prompts, settings)
+    fully validated TestDesignResult.
+
+    `evidence` (Phase 36B) is optional image evidence bound to the analyzer only.
+    It defaults to None so existing callers and text/document-only runs build a
+    byte-identical pipeline.
+    """
+    analyzer = ChunkedRequirementAnalyzer(client, prompts, settings, evidence=evidence)
     rules = BusinessRuleExtractor(client, prompts, settings)
     gaps = GapAnalyzer(client, prompts, settings)
     scenarios = ScenarioGenerator(client, prompts, settings)
