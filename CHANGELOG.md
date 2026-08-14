@@ -68,6 +68,28 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 40A: gap_analyzer tolerates null-sentinel requirement IDs
+
+Fixes a production image run stalling at `gap_analyzer` with "Model referenced unknown
+requirement IDs: ['null']" (ADR-056). The gap's `requirement_id` is nullable by design,
+but Nemotron emitted the STRING `"null"` instead of JSON null, which passed the
+`is not None` guard and failed as an unknown ID - blocking all downstream stages.
+
+- **Null-sentinel normalization**: before ID validation, `gap_analyzer` coerces
+  `"null"`, `"none"`, and empty/whitespace-only strings (case-insensitive) to real
+  None via a small helper. Any other string (including `"REQ-999"`, `"abc"`) is left
+  intact and still fails validation. Provider-agnostic robustness; benefits any model.
+- **No provider-selection change**: only `gaps.py` is touched. Phase 38 image-aware
+  selection, Phase 39 NVIDIA free classification, provider priority (nvidia stays 60,
+  not preferred for text), ordering, and `QAOPS_EXECUTION_STRATEGY=free_only` are all
+  unchanged.
+- **Not in scope**: per-stage provider selection (Phase 40B/Shape-3) remains deferred.
+- **Tests**: +21 Phase 40A (helper across all sentinel/valid/unknown cases; through
+  the real GapAnalyzer stage: real null accepted, `"null"`/`" NULL "`/`"none"`/`""`/
+  whitespace normalized, valid REQ IDs unchanged, unknown IDs still fail, the exact
+  production failure case now passes, mixed valid+null). ADR-056. Version stays
+  `0.18.0-dev`.
+
 ### Phase 39: NVIDIA classified free (image runs work under FREE_ONLY)
 
 Fixes image tickets failing under `QAOPS_EXECUTION_STRATEGY=free_only` while

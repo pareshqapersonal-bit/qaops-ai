@@ -19,6 +19,26 @@ from qaops.pipelines.test_design.schemas import GapExtraction
 
 PROMPT_NAME = "gap_analyzer"
 
+# Unambiguous "no value" sentinels a model may emit for a nullable requirement_id
+# instead of a real JSON null (e.g. Nemotron emitting the string "null"). These are
+# normalized to None before ID validation so a genuinely requirement-agnostic gap is
+# not misread as referencing an unknown ID. Only these exact sentinels (case- and
+# whitespace-insensitive) are normalized; any other string is left intact so real
+# unknown IDs like "REQ-999" still fail validation.
+_NULL_SENTINELS = frozenset({"null", "none", ""})
+
+
+def _normalize_requirement_id(value: str | None) -> str | None:
+    """Coerce an unambiguous null sentinel to None; leave every other value as-is.
+
+    Real JSON null stays None. "null"/"none"/"" and whitespace-only (any case) become
+    None. "REQ-001" stays "REQ-001"; "REQ-999"/"abc" stay unchanged (and thus still
+    fail validation).
+    """
+    if value is None:
+        return None
+    return None if value.strip().casefold() in _NULL_SENTINELS else value
+
 
 class GapAnalyzer:
     """Finds ambiguities, missing details, and undefined behaviors."""
@@ -45,9 +65,11 @@ class GapAnalyzer:
         )
 
         known_ids = {r.id for r in data.requirements}
-        unknown = sorted(
-            {w.requirement_id for w in extraction.gaps if w.requirement_id is not None} - known_ids
-        )
+        # Normalize null sentinels ("null"/"none"/""/whitespace) to real None before
+        # validating references, so a requirement-agnostic gap the model serialized as
+        # the string "null" is treated as null rather than an unknown ID.
+        normalized_ids = [_normalize_requirement_id(w.requirement_id) for w in extraction.gaps]
+        unknown = sorted({rid for rid in normalized_ids if rid is not None} - known_ids)
         if unknown:
             raise StageError(
                 self.name,
@@ -59,10 +81,10 @@ class GapAnalyzer:
             Gap(
                 description=wire.description,
                 severity=wire.severity,
-                requirement_id=wire.requirement_id,
+                requirement_id=rid,
                 suggested_question=wire.suggested_question,
             )
-            for wire in extraction.gaps
+            for wire, rid in zip(extraction.gaps, normalized_ids, strict=True)
         ]
         return RequirementAnalysisResult(
             source_name=data.source_name,
