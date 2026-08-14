@@ -68,6 +68,31 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 39: NVIDIA classified free (image runs work under FREE_ONLY)
+
+Fixes image tickets failing under `QAOPS_EXECUTION_STRATEGY=free_only` while
+PRD/document runs worked (ADR-055). NVIDIA is the only image-capable provider, but
+`_configured_model_is_free("nvidia")` fell through to False, so the FREE_ONLY strategy
+filter removed NVIDIA before image-capability selection - leaving no image-capable
+candidate.
+
+- **NVIDIA classified free** (cost-based): a `provider == "nvidia"` branch in
+  `_configured_model_is_free` returns True. NVIDIA's Nemotron endpoint has no per-call
+  cost through build.nvidia.com's OpenAI-compatible API, consistent with how gemini
+  flash / groq (also rate-limited) are already `free=True`.
+- **CAVEAT (documented, not hidden)**: NVIDIA's free hosted tier is RATE-LIMITED
+  (~40 RPM, credits can exhaust -> HTTP 429) and NVIDIA's FAQ restricts it to
+  development/evaluation, not production traffic. "free" means zero monetary cost per
+  call - not unlimited throughput or a production SLA.
+- **PRD/text ordering unchanged**: NVIDIA keeps `priority=60`, behind the existing
+  free providers (groq=10, gemini), so it is never preferred for text runs and the
+  order among existing providers is identical with or without NVIDIA.
+- **Unchanged**: provider priority, the strategy engine, the selector, image
+  transport/sidecar/provider implementation, Render config, and PRD/document behavior.
+- **Tests**: +8 Phase 39 (nvidia free classification, free_only+image selects NVIDIA,
+  no fallback to text-only, text ordering unaffected, byte-identical transport under
+  free_only). ADR-055. Version stays `0.18.0-dev`.
+
 ### Phase 38: NVIDIA registry registration + image-aware provider selection
 
 Fixes image tickets failing in production with "all providers failed / gemini"

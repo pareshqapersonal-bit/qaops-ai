@@ -238,6 +238,16 @@ class AdaptiveExecutor:
         if provider == "gemini":
             # Flash / flash-lite tiers are the free-eligible Gemini models.
             return "flash" in configured
+        if provider == "nvidia":
+            # NVIDIA's Nemotron models are served free (no per-token cost, no card)
+            # through build.nvidia.com's OpenAI-compatible endpoint, like the other
+            # free-tier providers, so a configured NVIDIA model is free-eligible
+            # (ADR-055). CAVEAT: the free hosted tier is RATE-LIMITED (~40 RPM,
+            # credits can exhaust -> 429) and NVIDIA's FAQ restricts it to
+            # development/evaluation, not production traffic. "free" here means
+            # zero monetary cost per call, consistent with this codebase's
+            # cost-based definition - not unlimited throughput or a production SLA.
+            return True
         # Local providers are always free; everything else defaults to not-free
         # unless a registry model said otherwise (handled above).
         info = next((p for p in (self._all_provider_info()) if p.name == provider), None)

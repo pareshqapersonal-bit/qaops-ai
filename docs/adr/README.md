@@ -54,5 +54,6 @@
 | [051](051-multiple-ticket-attachments.md) | Multiple ticket attachments (field name `attachment` kept, cardinality->list): each extracted via load_document and appended as an ordered evidence section into one combined document; strict-fail on any bad file; XLSX/images deferred; single/no-attachment stays 35A-compatible | Accepted |
 | [052](052-visual-evidence-transport-seam.md) | Visual evidence transport seam (Phase 36 Part 1): additive LLMMessage.images + ImagePart + internal EvidencePackage, wired to the analyzer via run_structured_stage; hard-fail on images without a multimodal provider; no provider/OCR/UI, text-only byte-identical | Accepted |
 | [054](054-image-aware-provider-selection.md) | NVIDIA registered in the execution registry (QAOPS_PROVIDER=nvidia honored) + image-aware provider selection: image runs only consider image-capable providers and fail fast with a clear message when none exists; text-only runs unchanged | Accepted |
+| [055](055-nvidia-free-classification.md) | Classify NVIDIA/Nemotron as free (cost-based) so image runs stay eligible under QAOPS_EXECUTION_STRATEGY=free_only; priority stays 60 so PRD/text ordering is unchanged. Caveat: NVIDIA free tier is rate-limited and dev/eval-only | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.
