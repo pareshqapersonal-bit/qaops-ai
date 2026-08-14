@@ -44,6 +44,10 @@ class StageRequirements:
     # When True, only free-eligible candidates (ModelInfo.free) pass the filter.
     # Set by a FREE_ONLY execution strategy; leaves default runs unaffected.
     free_only: bool = False
+    # When True, only image-capable candidates (ModelInfo.images_supported) pass
+    # the filter (Phase 38). Set for a run carrying image evidence. Defaults
+    # False, so text-only runs select and fail over exactly as before.
+    needs_images: bool = False
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,8 @@ def _passes_filter(
         return False, "excluded after a prior failure this run"
     if requirements.free_only and not model.free:
         return False, "not free-eligible under the free-only strategy"
+    if requirements.needs_images and not model.images_supported:
+        return False, "does not support image input (run carries image evidence)"
     if requirements.needs_text and not model.text_capable:
         return False, "not a text-generation model (unsuitable for QA workloads)"
     if requirements.needs_structured_output and not model.structured_output:

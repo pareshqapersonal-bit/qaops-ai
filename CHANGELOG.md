@@ -68,6 +68,35 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 38: NVIDIA registry registration + image-aware provider selection
+
+Fixes image tickets failing in production with "all providers failed / gemini"
+despite `QAOPS_PROVIDER=nvidia` (ADR-054). Two execution-layer defects: NVIDIA was
+missing from the execution registry (so it was silently ignored), and provider
+selection was not image-aware (so image runs could recover onto text-only providers).
+
+- **NVIDIA registered** in `qaops/execution/registry.py` (`_IMPLEMENTED` + a
+  `ProviderInfo` with `key_variables=("NVIDIA_API_KEY",)`, `images=True`,
+  `priority=60`). `QAOPS_PROVIDER=nvidia` now leads the chain and NVIDIA appears in
+  `available_providers()` when `NVIDIA_API_KEY` is set.
+- **Image-aware selection**: `ProviderInfo.images` populates
+  `ModelInfo.images_supported`; `StageRequirements.needs_images` + a `_passes_filter`
+  clause exclude non-image-capable candidates for image-bearing runs.
+- **Run-level requirement**: `DesignService._execute` derives `requires_images` from
+  the Phase 36B evidence and passes it to `AdaptiveExecutor`; no per-stage plumbing.
+- **Fail fast, clearly**: an image run with no image-capable provider raises a clear
+  `StageError` at selection ("run includes image evidence… set QAOPS_PROVIDER=nvidia")
+  before any provider call - no fallback to text-only providers, no silent drop.
+- **Unchanged**: text-only runs (`needs_images=False` is a no-op, so selection and
+  multi-provider fallback are byte-identical); the PRD/document flow; `ImagePart`,
+  `EvidencePackage`, `LLMMessage`, `RequirementAnalyzer`, `structured.py`,
+  `execute_run`, the evidence sidecar, and pipeline stages.
+- **Tests**: +16 Phase 38 (registry gap fix, image-capability filtering, executor
+  selection scenarios, no-capable-provider clear failure, and an end-to-end mocked
+  image ticket selecting NVIDIA with transport reaching the client). Phase 36B
+  transport tests updated to run image cases under `provider="nvidia"`.
+- **ADR-054**. Version stays `0.18.0-dev`.
+
 ### Phase 36 Part 1: Visual evidence transport seam
 
 Introduces the multimodal transport for visual evidence and wires it to the

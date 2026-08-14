@@ -48,6 +48,11 @@ class ModelInfo:
     # metadata, so they are filtered out before ranking rather than selected on
     # the strength of a large context window.
     text_capable: bool = True
+    # Whether the model accepts image input alongside text (Phase 38). Defaults
+    # False: image-bearing runs require a model that sets this True (only the
+    # NVIDIA/Nemotron vision models today). Text-only runs never consult it, so
+    # existing selection is unaffected.
+    images_supported: bool = False
     local: bool = False
     free: bool = False
     priority: int = 100

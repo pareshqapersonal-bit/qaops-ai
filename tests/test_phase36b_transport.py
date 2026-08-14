@@ -131,6 +131,8 @@ def _workspace_with_input(tmp_path: Path, text: str = "The screen shows a login 
 @pytest.fixture(autouse=True)
 def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret-key-1234567890")
+    # Phase 38: image-bearing runs require an image-capable provider (nvidia).
+    monkeypatch.setenv("NVIDIA_API_KEY", "sk-test-nvidia-key")
 
 
 class TestRunPathTransport:
@@ -139,7 +141,10 @@ class TestRunPathTransport:
         write_image_sidecar(ws, [_part(name="login_screen.png")])
         mock = _CapturingMock([_response(r) for r in _DOC_RESPONSES])
         with patch("qaops.services.design_service.create_client", return_value=mock):
-            DesignService().run(ws / "input" / "ticket.md", QAOpsSettings(output_dir=ws / "output"))
+            DesignService().run(
+                ws / "input" / "ticket.md",
+                QAOpsSettings(provider="nvidia", output_dir=ws / "output"),
+            )
         assert mock.first_request is not None
         images = mock.first_request.messages[0].images
         assert len(images) == 1
@@ -151,7 +156,10 @@ class TestRunPathTransport:
         write_image_sidecar(ws, [_part(name="a.png")])
         mock = _CapturingMock([_response(r) for r in _DOC_RESPONSES])
         with patch("qaops.services.design_service.create_client", return_value=mock):
-            DesignService().run(ws / "input" / "ticket.md", QAOpsSettings(output_dir=ws / "output"))
+            DesignService().run(
+                ws / "input" / "ticket.md",
+                QAOpsSettings(provider="nvidia", output_dir=ws / "output"),
+            )
         assert mock.first_request is not None
         img = mock.first_request.messages[0].images[0]
         assert img.data == PNG_B64
@@ -169,7 +177,10 @@ class TestRunPathTransport:
         )
         mock = _CapturingMock([_response(r) for r in _DOC_RESPONSES])
         with patch("qaops.services.design_service.create_client", return_value=mock):
-            DesignService().run(ws / "input" / "ticket.md", QAOpsSettings(output_dir=ws / "output"))
+            DesignService().run(
+                ws / "input" / "ticket.md",
+                QAOpsSettings(provider="nvidia", output_dir=ws / "output"),
+            )
         assert mock.first_request is not None
         names = [p.source_filename for p in mock.first_request.messages[0].images]
         assert names == ["one.png", "two.jpg"]

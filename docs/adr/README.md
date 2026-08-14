@@ -53,5 +53,6 @@
 | [050](050-ticket-design-reference-attachment.md) | Optional design/reference attachment on a ticket: multipart endpoint, extracted via load_document and appended as a verbatim evidence section into one combined document; ticket-only stays compatible; no second pipeline | Accepted |
 | [051](051-multiple-ticket-attachments.md) | Multiple ticket attachments (field name `attachment` kept, cardinality->list): each extracted via load_document and appended as an ordered evidence section into one combined document; strict-fail on any bad file; XLSX/images deferred; single/no-attachment stays 35A-compatible | Accepted |
 | [052](052-visual-evidence-transport-seam.md) | Visual evidence transport seam (Phase 36 Part 1): additive LLMMessage.images + ImagePart + internal EvidencePackage, wired to the analyzer via run_structured_stage; hard-fail on images without a multimodal provider; no provider/OCR/UI, text-only byte-identical | Accepted |
+| [054](054-image-aware-provider-selection.md) | NVIDIA registered in the execution registry (QAOPS_PROVIDER=nvidia honored) + image-aware provider selection: image runs only consider image-capable providers and fail fast with a clear message when none exists; text-only runs unchanged | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

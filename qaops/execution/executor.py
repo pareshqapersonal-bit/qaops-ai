@@ -72,6 +72,7 @@ _MODEL_FIELD: dict[str, str] = {
     "gemini": "gemini_model",
     "openrouter": "openrouter_model",
     "groq": "groq_model",
+    "nvidia": "nvidia_model",
 }
 
 
@@ -155,11 +156,16 @@ class AdaptiveExecutor:
         start_index: int = 0,
         max_attempts_per_model: int = 3,
         sleep: Callable[[float], None] = time.sleep,
+        requires_images: bool = False,
     ) -> None:
         if not providers:
             msg = "AdaptiveExecutor requires at least one provider"
             raise ValueError(msg)
         self._settings = settings
+        # Phase 38: whether this run carries image evidence. When True, only
+        # image-capable candidates are eligible (capability filtering), and a
+        # run with no image-capable provider fails fast with a clear message.
+        self._requires_images = requires_images
         self._stage_factory = stage_factory
         # Registry must be set before applying the strategy: free-eligibility
         # queries the registry for each provider's models.
@@ -302,6 +308,10 @@ class AdaptiveExecutor:
             # Under FREE_ONLY a non-free synthetic candidate must not run.
             if self._requirements().free_only and not candidate.free:
                 return []
+            # Phase 38: an image-bearing run must not run on a non-image-capable
+            # synthetic candidate (e.g. a text-only provider used as failover).
+            if self._requirements().needs_images and not candidate.images_supported:
+                return []
             return [candidate]
         scored = select_candidates(
             models,
@@ -340,7 +350,9 @@ class AdaptiveExecutor:
 
     def _requirements(self) -> StageRequirements:
         """Stage requirements for the active strategy (free_only when FREE_ONLY)."""
-        return StageRequirements(free_only=self._strategy.requires_free)
+        return StageRequirements(
+            free_only=self._strategy.requires_free, needs_images=self._requires_images
+        )
 
     def _synthetic_candidate(self, provider: str, name: str) -> ModelInfo:
         """A single-model candidate for a provider with no catalogue.
@@ -350,8 +362,16 @@ class AdaptiveExecutor:
         anthropic model as paid.
         """
         return ModelInfo(
-            name=name, provider=provider, free=self._configured_model_is_free(provider)
+            name=name,
+            provider=provider,
+            free=self._configured_model_is_free(provider),
+            images_supported=self._provider_supports_images(provider),
         )
+
+    def _provider_supports_images(self, provider: str) -> bool:
+        """Whether the registry marks this provider as image-capable (Phase 38)."""
+        info = next((p for p in self._all_provider_info() if p.name == provider), None)
+        return bool(info and info.images)
 
     def _configured_model(self, provider: str) -> str:
         field_name = _MODEL_FIELD.get(provider)
@@ -729,6 +749,14 @@ class AdaptiveExecutor:
         for candidate in self._healthy_providers():
             if self._candidates(candidate):
                 return candidate
+        if self._requires_images:
+            msg = (
+                "This run includes image evidence, but no configured provider "
+                "supports image input. Set QAOPS_PROVIDER=nvidia (or another "
+                "image-capable provider) and provide its API key. Visual evidence "
+                "is never dropped and the run is never downgraded to text-only."
+            )
+            raise StageError("execution", msg)
         msg = "No provider has any compatible model available"
         raise StageError("execution", msg)
 

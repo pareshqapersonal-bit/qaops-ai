@@ -34,6 +34,10 @@ class ProviderInfo:
     key_variables: tuple[str, ...] = ()
     local: bool = False
     structured_output: bool = True
+    # Whether this provider supports image input (Phase 38). Source capability
+    # that populates ModelInfo.images_supported for the provider's candidates.
+    # Defaults False: existing text-only providers are unaffected.
+    images: bool = False
     priority: int = 100
     notes: str = ""
 
@@ -52,7 +56,7 @@ class ProviderInfo:
 # Providers with no client implementation yet must not be offered for failover,
 # however available their credentials appear. Ollama needs no API key, so
 # without this it would always look usable.
-_IMPLEMENTED = frozenset({"anthropic", "gemini", "openrouter", "groq", "mock"})
+_IMPLEMENTED = frozenset({"anthropic", "gemini", "openrouter", "groq", "nvidia", "mock"})
 
 
 _REGISTRY: dict[str, ProviderInfo] = {
@@ -94,6 +98,18 @@ _REGISTRY: dict[str, ProviderInfo] = {
         # so the free/paid distinction lives on ModelInfo, not here.
         priority=25,
         notes="Free tier, OpenAI-compatible, strict structured output",
+    ),
+    "nvidia": ProviderInfo(
+        name="nvidia",
+        key_variables=("NVIDIA_API_KEY",),
+        structured_output=True,
+        # The only image-capable provider (Nemotron vision). For image-bearing
+        # runs, capability filtering makes it the eligible candidate regardless
+        # of this priority. For normal text runs it ranks BEHIND the existing
+        # free/preferred providers so it does not disturb text failover ordering.
+        images=True,
+        priority=60,
+        notes="OpenAI-compatible; Nemotron vision models support image input (Phase 37/38)",
     ),
     "mock": ProviderInfo(
         name="mock",

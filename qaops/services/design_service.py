@@ -379,6 +379,7 @@ class DesignService:
             events=emit_event,
             checkpoint=checkpoint,
             start_index=start_index,
+            requires_images=evidence is not None and evidence.has_images,
         )
         result = executor.run(pipeline_input)
 
