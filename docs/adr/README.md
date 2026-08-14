@@ -56,5 +56,6 @@
 | [054](054-image-aware-provider-selection.md) | NVIDIA registered in the execution registry (QAOPS_PROVIDER=nvidia honored) + image-aware provider selection: image runs only consider image-capable providers and fail fast with a clear message when none exists; text-only runs unchanged | Accepted |
 | [055](055-nvidia-free-classification.md) | Classify NVIDIA/Nemotron as free (cost-based) so image runs stay eligible under QAOPS_EXECUTION_STRATEGY=free_only; priority stays 60 so PRD/text ordering is unchanged. Caveat: NVIDIA free tier is rate-limited and dev/eval-only | Accepted |
 | [056](056-gap-null-sentinel-normalization.md) | gap_analyzer normalizes null-sentinel requirement IDs ("null"/"none"/""/whitespace -> None) before validation, so a model emitting the string "null" no longer stalls the pipeline; real unknown IDs still fail; provider selection unchanged | Accepted |
+| [057](057-per-stage-provider-selection.md) | Per-stage provider selection for image runs: requirement_analyzer -> image-capable provider (NVIDIA); downstream stages exclude NVIDIA and use the normal text chain; text/PRD runs and resume unchanged; fixes downstream NVIDIA 500s blocking the pipeline | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

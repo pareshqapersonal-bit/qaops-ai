@@ -48,6 +48,14 @@ class StageRequirements:
     # the filter (Phase 38). Set for a run carrying image evidence. Defaults
     # False, so text-only runs select and fail over exactly as before.
     needs_images: bool = False
+    # When True, image-capable candidates are EXCLUDED (Phase 40B). Set for the
+    # downstream stages of an image-bearing run: those stages receive no images,
+    # so the image-only provider (NVIDIA) must not be selected for them - it is
+    # reserved for the image-consuming stage and kept off the flaky path for the
+    # rest. Mutually exclusive with needs_images in practice (a stage either needs
+    # images or must avoid the image provider). Defaults False: text runs and the
+    # image stage itself are unaffected.
+    exclude_image_providers: bool = False
 
 
 @dataclass(frozen=True)
@@ -69,6 +77,8 @@ def _passes_filter(
         return False, "not free-eligible under the free-only strategy"
     if requirements.needs_images and not model.images_supported:
         return False, "does not support image input (run carries image evidence)"
+    if requirements.exclude_image_providers and model.images_supported:
+        return False, "image-capable provider excluded on a downstream text stage (Phase 40B)"
     if requirements.needs_text and not model.text_capable:
         return False, "not a text-generation model (unsuitable for QA workloads)"
     if requirements.needs_structured_output and not model.structured_output:

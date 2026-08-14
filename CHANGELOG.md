@@ -68,6 +68,37 @@ DocumentLoader interface without further architecture.)
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 40B: per-stage provider selection for image runs
+
+Fixes image runs failing when NVIDIA's free endpoint 500s on downstream stages
+(ADR-057). Phase 38 made provider selection image-aware at the RUN level, forcing every
+stage onto NVIDIA; but only requirement_analyzer consumes images, so downstream text
+stages were needlessly pinned to the flaky image provider with no eligible failover.
+
+- **Per-stage selection**: the image-consuming stage (requirement_analyzer) requires an
+  image-capable provider; downstream stages of an image run EXCLUDE NVIDIA
+  (`exclude_image_providers`) and use the normal text chain. The image stage is named
+  by the orchestration layer (`DesignService` passes `image_stage_name` + ordered
+  `stage_names`) - no hard-coded index, no stage-protocol or RequirementAnalyzer change.
+- **Image run result**: requirement_analyzer -> NVIDIA (image byte-identical);
+  business_rule_extractor / gap_analyzer / scenario_generator / test_case_generator /
+  coverage -> Groq/Gemini. Downstream NVIDIA 500s can no longer block the pipeline.
+- **Recovery**: image stage recovers only to image-capable providers (Phase 36A
+  hard-fail preserved); downstream recovers across the text chain; NVIDIA never a
+  downstream candidate.
+- **Resume fix**: resuming at a downstream stage no longer requires NVIDIA merely
+  because the original run had images.
+- **Unchanged**: text/PRD runs (no image stage -> identical selection, ordering,
+  fallback; NVIDIA stays low-priority, not preferred); free_only (analyzer->NVIDIA,
+  downstream->free text chain); budgets/health accounting; ImagePart, EvidencePackage,
+  sidecar, RequirementAnalyzer, pipeline stages, LLM abstraction, provider clients,
+  image ingestion, execute_run, API, frontend; Phase 40A gaps.py.
+- **Tests**: +12 Phase 40B (per-stage selection, downstream NVIDIA exclusion across all
+  stages, image-stage fail-fast, downstream text recovery, resume at downstream stages,
+  end-to-end image run analyzer=NVIDIA/downstream=text with no image propagation
+  downstream, text run doesn't prefer NVIDIA). Phase 38/39 executor tests migrated to
+  the per-stage API. ADR-057. Version stays `0.18.0-dev`.
+
 ### Phase 40A: gap_analyzer tolerates null-sentinel requirement IDs
 
 Fixes a production image run stalling at `gap_analyzer` with "Model referenced unknown

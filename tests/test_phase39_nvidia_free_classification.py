@@ -35,13 +35,26 @@ def _noop_factory(_settings: object) -> list:
     return []
 
 
+_STAGE_NAMES = ("requirement_analyzer", "business_rule_extractor", "gap_analyzer")
+
+
+def _image_ex(providers, settings, *, at_stage="requirement_analyzer"):
+    ex = AdaptiveExecutor(
+        providers,
+        settings,
+        _noop_factory,
+        image_stage_name="requirement_analyzer",
+        stage_names=_STAGE_NAMES,
+    )
+    ex._current_stage_name = at_stage
+    return ex
+
+
 class TestNvidiaFreeClassification:
     def test_nvidia_configured_model_is_free(self) -> None:
-        ex = AdaptiveExecutor(
+        ex = _image_ex(
             [get_provider("nvidia")],
             QAOpsSettings(provider="nvidia", execution_strategy="free_only"),
-            _noop_factory,
-            requires_images=True,
         )
         assert ex._configured_model_is_free("nvidia") is True
 
@@ -51,20 +64,16 @@ class TestNvidiaFreeClassification:
 
 class TestFreeOnlyImageSelection:
     def test_free_only_image_run_selects_nvidia(self) -> None:
-        ex = AdaptiveExecutor(
+        ex = _image_ex(
             _providers(),
             QAOpsSettings(provider="nvidia", execution_strategy="free_only"),
-            _noop_factory,
-            requires_images=True,
         )
         assert ex._select_first_provider().name == "nvidia"
 
     def test_free_only_image_run_does_not_fall_back_to_text_only(self) -> None:
-        ex = AdaptiveExecutor(
+        ex = _image_ex(
             _providers(),
             QAOpsSettings(provider="nvidia", execution_strategy="free_only"),
-            _noop_factory,
-            requires_images=True,
         )
         for provider in _providers():
             if provider.name != "nvidia":
@@ -79,7 +88,6 @@ class TestTextOrderingUnchanged:
             _providers(),
             QAOpsSettings(provider="gemini", execution_strategy="free_only"),
             _noop_factory,
-            requires_images=False,
         )
         assert ex._select_first_provider().name != "nvidia"
 
@@ -88,7 +96,6 @@ class TestTextOrderingUnchanged:
             _providers(),
             QAOpsSettings(provider="gemini", execution_strategy="free_only"),
             _noop_factory,
-            requires_images=False,
         )
         order = [p.name for p in ex._providers]
         assert "nvidia" in order
@@ -102,7 +109,6 @@ class TestTextOrderingUnchanged:
             _providers(),
             QAOpsSettings(provider="gemini", execution_strategy="free_only"),
             _noop_factory,
-            requires_images=False,
         )
         order = [p.name for p in ex._providers]
         assert "nvidia" not in order
@@ -156,7 +162,7 @@ class TestTransportStillByteIdentical:
                     for r in _DOC_RESPONSES
                 ]
             )
-            holder["client"] = client
+            holder[settings.provider] = client
             return client
 
         with patch("qaops.services.design_service.create_client", side_effect=_capture):
@@ -169,7 +175,10 @@ class TestTransportStillByteIdentical:
                 ),
             )
 
-        client = holder["client"]
+        # Phase 40B: under free_only, the analyzer runs on nvidia (image-capable,
+        # free) and receives the image byte-identical; downstream runs on text.
+        assert "nvidia" in holder
+        client = holder["nvidia"]
         assert client.first_request is not None
         images = client.first_request.messages[0].images
         assert len(images) == 1

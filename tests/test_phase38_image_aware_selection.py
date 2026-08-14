@@ -105,22 +105,40 @@ def _noop_factory(_settings: object) -> list:
     return []
 
 
+_STAGE_NAMES = ("requirement_analyzer", "business_rule_extractor", "gap_analyzer")
+
+
+def _image_executor(
+    providers: list, settings: QAOpsSettings, *, at_stage: str = "requirement_analyzer"
+):
+    """Build an executor for an image run, positioned at a given stage (Phase 40B).
+
+    Defaults to the image-consuming stage (requirement_analyzer). Setting
+    _current_stage_name mirrors what run() does as it enters each stage.
+    """
+    ex = AdaptiveExecutor(
+        [p for p in providers if p],
+        settings,
+        _noop_factory,
+        image_stage_name="requirement_analyzer",
+        stage_names=_STAGE_NAMES,
+    )
+    ex._current_stage_name = at_stage
+    return ex
+
+
 class TestExecutorSelection:
     def _settings(self) -> QAOpsSettings:
         return QAOpsSettings(provider="nvidia")
 
     def test_image_run_selects_nvidia(self) -> None:
         providers = [get_provider("nvidia"), get_provider("groq"), get_provider("gemini")]
-        ex = AdaptiveExecutor(
-            [p for p in providers if p], self._settings(), _noop_factory, requires_images=True
-        )
+        ex = _image_executor(providers, self._settings())
         assert ex._select_first_provider().name == "nvidia"
 
     def test_image_run_without_capable_provider_fails_clearly(self) -> None:
         providers = [get_provider("gemini"), get_provider("groq")]
-        ex = AdaptiveExecutor(
-            [p for p in providers if p], self._settings(), _noop_factory, requires_images=True
-        )
+        ex = _image_executor(providers, self._settings())
         with pytest.raises(StageError) as exc:
             ex._select_first_provider()
         message = str(exc.value)
@@ -131,9 +149,7 @@ class TestExecutorSelection:
         # With image capability required, text-only providers yield no candidates,
         # so they can never be selected as recovery targets.
         providers = [get_provider("gemini"), get_provider("groq")]
-        ex = AdaptiveExecutor(
-            [p for p in providers if p], self._settings(), _noop_factory, requires_images=True
-        )
+        ex = _image_executor(providers, self._settings())
         assert ex._candidates(get_provider("gemini")) == []  # type: ignore[arg-type]
         assert ex._candidates(get_provider("groq")) == []  # type: ignore[arg-type]
 
@@ -141,9 +157,7 @@ class TestExecutorSelection:
         # A text run with only text-only providers selects the first normally and
         # they remain valid recovery candidates - existing behavior.
         providers = [get_provider("gemini"), get_provider("groq")]
-        ex = AdaptiveExecutor(
-            [p for p in providers if p], self._settings(), _noop_factory, requires_images=False
-        )
+        ex = AdaptiveExecutor([p for p in providers if p], self._settings(), _noop_factory)
         assert ex._select_first_provider().name in {"gemini", "groq"}
         assert ex._candidates(get_provider("gemini")) != []  # type: ignore[arg-type]
 
@@ -198,23 +212,18 @@ class TestEndToEndSelection:
             ws, [ImagePart(media_type="image/png", data=b64, source_filename="login.png", order=0)]
         )
 
-        captured = {}
+        captured: dict = {}
+        clients_by_provider: dict = {}
 
-        def _fake_create_client(settings: QAOpsSettings) -> _CapturingMock:
-            captured["provider"] = settings.provider
-            return _CapturingMock(
+        def _capture(settings: QAOpsSettings) -> _CapturingMock:
+            client = _CapturingMock(
                 [
                     LLMResponse(text=r, model="m", usage=LLMUsage(input_tokens=1, output_tokens=1))
                     for r in _DOC_RESPONSES
                 ]
             )
-
-        mock_holder = {}
-        original = _fake_create_client
-
-        def _capture(settings: QAOpsSettings) -> _CapturingMock:
-            client = original(settings)
-            mock_holder["client"] = client
+            captured.setdefault("providers", []).append(settings.provider)
+            clients_by_provider[settings.provider] = client
             return client
 
         with patch("qaops.services.design_service.create_client", side_effect=_capture):
@@ -223,12 +232,15 @@ class TestEndToEndSelection:
                 QAOpsSettings(provider="nvidia", output_dir=ws / "output"),
             )
 
-        # The run selected the nvidia provider (image-capable) ...
-        assert captured["provider"] == "nvidia"
-        # ... and the image transport reached the client's first (analyzer) request.
-        client = mock_holder["client"]
-        assert client.first_request is not None
-        images = client.first_request.messages[0].images
+        # Phase 40B: the image-consuming stage ran on nvidia; downstream stages ran
+        # on a text provider (nvidia excluded downstream).
+        assert "nvidia" in captured["providers"]  # analyzer used nvidia
+        assert any(p != "nvidia" for p in captured["providers"])  # downstream on text
+        # The image transport reached the nvidia client's (analyzer) request,
+        # byte-identical.
+        nvidia_client = clients_by_provider["nvidia"]
+        assert nvidia_client.first_request is not None
+        images = nvidia_client.first_request.messages[0].images
         assert len(images) == 1
         assert base64.b64decode(images[0].data) == png
 

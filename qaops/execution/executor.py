@@ -156,16 +156,30 @@ class AdaptiveExecutor:
         start_index: int = 0,
         max_attempts_per_model: int = 3,
         sleep: Callable[[float], None] = time.sleep,
-        requires_images: bool = False,
+        image_stage_name: str | None = None,
+        stage_names: tuple[str, ...] = (),
     ) -> None:
         if not providers:
             msg = "AdaptiveExecutor requires at least one provider"
             raise ValueError(msg)
         self._settings = settings
-        # Phase 38: whether this run carries image evidence. When True, only
-        # image-capable candidates are eligible (capability filtering), and a
-        # run with no image-capable provider fails fast with a clear message.
-        self._requires_images = requires_images
+        # Phase 40B: the name of the single image-consuming stage (the
+        # requirement analyzer) when this run carries image evidence, else None.
+        # Per-stage selection uses it: the image stage requires an image-capable
+        # provider; every downstream stage of an image run EXCLUDES the image
+        # provider (NVIDIA) so downstream text stages never touch it. Identified
+        # by the orchestration layer (DesignService), not a hard-coded index.
+        self._image_stage_name = image_stage_name
+        # Ordered stage names for this run (Phase 40B), supplied by the
+        # orchestration layer so the executor can set the current stage before
+        # selecting a provider - without hard-coding an index or reading a stage
+        # attribute. Empty for callers that don't need per-stage selection (text
+        # runs behave identically whether or not this is supplied).
+        self._stage_names = stage_names
+        # The stage the executor is currently selecting a provider for. Set as the
+        # loop enters each stage and before the initial selection, so _requirements
+        # can be computed per stage rather than per run.
+        self._current_stage_name: str | None = None
         self._stage_factory = stage_factory
         # Registry must be set before applying the strategy: free-eligibility
         # queries the registry for each provider's models.
@@ -322,6 +336,10 @@ class AdaptiveExecutor:
             # synthetic candidate (e.g. a text-only provider used as failover).
             if self._requirements().needs_images and not candidate.images_supported:
                 return []
+            # Phase 40B: a downstream text stage of an image run must not run on
+            # the image provider (NVIDIA), even synthetically.
+            if self._requirements().exclude_image_providers and candidate.images_supported:
+                return []
             return [candidate]
         scored = select_candidates(
             models,
@@ -348,6 +366,10 @@ class AdaptiveExecutor:
             candidate = self._synthetic_candidate(provider.name, configured)
             if self._requirements().free_only and not candidate.free:
                 return []
+            if self._requirements().needs_images and not candidate.images_supported:
+                return []
+            if self._requirements().exclude_image_providers and candidate.images_supported:
+                return []
             return [candidate]
         scored = select_candidates(
             models,
@@ -359,9 +381,25 @@ class AdaptiveExecutor:
         return [entry.model for entry in scored]
 
     def _requirements(self) -> StageRequirements:
-        """Stage requirements for the active strategy (free_only when FREE_ONLY)."""
+        """Per-stage requirements (Phase 40B).
+
+        Text runs (no image stage) are unchanged: needs_images=False and no
+        exclusion, so selection and fallback match pre-image behavior exactly.
+        For an image run, the image-consuming stage requires an image-capable
+        provider (needs_images=True); every other stage excludes the image
+        provider so downstream text stages never select NVIDIA.
+        """
+        needs_images = False
+        exclude_image = False
+        if self._image_stage_name is not None:
+            if self._current_stage_name == self._image_stage_name:
+                needs_images = True
+            else:
+                exclude_image = True
         return StageRequirements(
-            free_only=self._strategy.requires_free, needs_images=self._requires_images
+            free_only=self._strategy.requires_free,
+            needs_images=needs_images,
+            exclude_image_providers=exclude_image,
         )
 
     def _synthetic_candidate(self, provider: str, name: str) -> ModelInfo:
@@ -415,8 +453,33 @@ class AdaptiveExecutor:
 
     # --- execution -----------------------------------------------------------
 
+    def _provider_serves_current_stage(self, provider: ProviderInfo, model: ModelInfo) -> bool:
+        """Whether the given provider yields any candidate for the current stage.
+
+        Used at a stage boundary to decide if re-selection is needed. For text
+        runs and same-requirement transitions the current provider still serves,
+        so this returns True and nothing changes. When the image stage finishes
+        and the next stage must exclude the image provider, the current (NVIDIA)
+        provider yields no candidate, so this returns False and the caller
+        re-selects from the normal text chain.
+        """
+        return bool(self._candidates(provider))
+
+    def _stage_name_at(
+        self, index: int, stages: list[PipelineStage[BaseModel, BaseModel]] | None = None
+    ) -> str | None:
+        """Name of the stage at `index`: from the supplied stage_names when
+        available (lets us know the stage before building it), else from an
+        already-built stage list. None when neither is available."""
+        if 0 <= index < len(self._stage_names):
+            return self._stage_names[index]
+        if stages is not None and 0 <= index < len(stages):
+            return str(stages[index].name)
+        return None
+
     def run(self, data: BaseModel) -> BaseModel:
         """Run every stage, adapting model and provider as failures require."""
+        self._current_stage_name = self._stage_name_at(self._start_index)
         provider = self._select_first_provider()
         model = self._candidates(provider)[0]
         stages = list(self._stage_factory(self._settings_for(provider, model)))
@@ -648,6 +711,18 @@ class AdaptiveExecutor:
                 self._checkpoint(stage.name, index, output)
                 current = output
                 index += 1
+                # Phase 40B: entering a new stage, refresh the current-stage name
+                # and re-select the provider IF the stage just entered can no
+                # longer run on the current provider (e.g. the image stage just
+                # finished on NVIDIA and the next stage must exclude it). For text
+                # runs and same-requirement transitions this is a no-op: the
+                # current provider still passes, so nothing changes.
+                if index < len(stages):
+                    self._current_stage_name = self._stage_name_at(index, stages)
+                    if not self._provider_serves_current_stage(provider, model):
+                        provider = self._select_first_provider()
+                        model = self._candidates(provider)[0]
+                        stages = list(self._stage_factory(self._settings_for(provider, model)))
                 break
 
         return current
@@ -759,7 +834,7 @@ class AdaptiveExecutor:
         for candidate in self._healthy_providers():
             if self._candidates(candidate):
                 return candidate
-        if self._requires_images:
+        if self._requirements().needs_images:
             msg = (
                 "This run includes image evidence, but no configured provider "
                 "supports image input. Set QAOPS_PROVIDER=nvidia (or another "

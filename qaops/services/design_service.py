@@ -370,6 +370,7 @@ class DesignService:
             )
             return list(built.stages)
 
+        has_images = evidence is not None and evidence.has_images
         executor = AdaptiveExecutor(
             candidates,
             settings,
@@ -379,7 +380,12 @@ class DesignService:
             events=emit_event,
             checkpoint=checkpoint,
             start_index=start_index,
-            requires_images=evidence is not None and evidence.has_images,
+            # Phase 40B: name the single image-consuming stage (the requirement
+            # analyzer) only when this run carries images. The executor requires an
+            # image-capable provider for that stage and excludes the image provider
+            # for every downstream stage. Text runs pass None -> unchanged behavior.
+            image_stage_name="requirement_analyzer" if has_images else None,
+            stage_names=tuple(stage_names_for(entry_point)),
         )
         result = executor.run(pipeline_input)
 
