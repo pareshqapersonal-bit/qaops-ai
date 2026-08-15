@@ -6,6 +6,111 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Pre-1.0, minor versions may contain breaking changes; each is called out explicitly.
 
+## [0.18.0-dev] - unreleased
+
+### Phase 41D: clarification frontend
+
+Completes the clarification feature with the UI (ADR-061). A user can opt into
+clarification, answer questions, see readiness, and start test design - all through the
+existing run page, reusing the completed/failed/one-shot rendering unchanged.
+
+- **Opt-in checkbox** ("Clarify requirements first") on both the file and ticket submit
+  paths; off by default preserves the one-shot flow.
+- **Backend ticket parity**: the `clarify` flag is added to `POST /design/ticket`
+  (previously only on `POST /design`), so both entry points support clarification.
+- **RunPage branches** (not a new page): `awaiting_clarification` -> ClarificationPanel,
+  `ready_for_test_design` -> ReadinessGate, via a ClarificationView wrapper. After
+  Generate Test Cases the run resumes the existing ProgressView -> Results path.
+- **`useClarification` hook** owns the question batch/readiness/answers; `useRun` keeps
+  owning status polling. Answer widgets by type (Yes/No, radio, checkbox, number, date,
+  text), blocking-first, batch submit, proceed-with-assumptions when only
+  recommended/optional remain. 409/400 errors reuse the existing ApiError surface.
+- **Unchanged**: Results, ProgressView, useRun core, and all backend pipeline/executor/
+  agent code; one-shot UI is byte-identical when the checkbox is off.
+- **Tests**: +30 frontend (ClarificationPanel, ReadinessGate, useClarification, RunPage
+  branches, client methods, UploadPage toggle) and +2 backend (ticket clarify parity).
+  ADR-061.
+
+### Phase 41C-2: clarification -> test-design handoff
+
+Completes the clarification workflow (ADR-060): a READY run hands off to the existing
+test-design pipeline, reusing the analyzer + gap work done during clarification.
+
+- **`start-test-design` endpoint** (`POST /runs/{id}/start-test-design`): gates on
+  readiness (409 if not ready / no clarification / already started), then schedules the
+  handoff and returns 202.
+- **Clarified requirements**: analyzed requirements are persisted at clarification start;
+  at handoff the recorded answers are applied by augmenting them (41B agent) into a
+  clarified-requirements JSON.
+- **Reuse via the `requirements` entry point**: the clarified JSON auto-detects as the
+  `requirements` entry point, so the existing `execute_run` starts the pipeline at
+  business_rule_extractor - the analyzer and gap stages are NOT re-run. No
+  DesignService/executor/pipeline change.
+- **Safe** under invalid/not-ready/duplicate-start (each a 409); handoff prep is
+  idempotent. Requirement IDs stay stable. One-shot flow unchanged.
+- **Tests**: +9 Phase 41C-2 (service handoff, ID stability, augmentation, not-ready
+  refusal, idempotency, endpoint gate/guard, and the full clarify->answer->ready->
+  design->COMPLETED end-to-end). ADR-060.
+
+### Phase 41C-1: clarification API / run-lifecycle integration
+
+Wires the 41A state layer + 41B agent into the run lifecycle and API (ADR-059). Adds an
+opt-in clarification workflow without disturbing the existing one-shot flow. The handoff
+to the test-design pipeline is 41C-2 (not in this change).
+
+- **ClarificationService**: runs bounded analysis by composing the EXISTING
+  RequirementAnalyzer + GapAnalyzer stages directly (no pipeline/executor change),
+  generates the first question batch, persists 41A state, and applies answers with a
+  5-round cap. One LLM client shared across analyzer + gap + agent.
+- **Opt-in `clarify=true`** on the submit flow: true schedules a new
+  `execute_clarification_analysis` task (bounded analysis -> AWAITING_CLARIFICATION or
+  READY_FOR_TEST_DESIGN); false/omitted schedules the unchanged one-shot `execute_run`.
+- **2 additive RunStatus values**: AWAITING_CLARIFICATION, READY_FOR_TEST_DESIGN
+  (one-shot runs never enter them).
+- **2 endpoints**: `GET /runs/{id}/clarifications` (404/409), `POST
+  /runs/{id}/clarifications/answers` (400 malformed/contradictory, 409
+  not-awaiting/round-cap).
+- **Unchanged**: the one-shot flow is byte-identical when clarify is false/omitted
+  (verified). Executor, selector, DesignService, GapAnalyzer (40A/40B), structured.py,
+  providers, image ingestion, RequirementAnalyzer, pipeline stages, 41A models, and
+  frontend are untouched.
+- **Tests**: +13 Phase 41C-1 (service start/answers/round-cap/contradictions, both
+  endpoints, one-shot-unchanged regression). ADR-059.
+
+### Phase 41B: ClarificationAgent (intelligence layer)
+
+Adds the clarification intelligence over the existing GapAnalyzer (ADR-058), building
+on the Phase 41A state layer. Converts gaps into a small, answerable question batch and
+processes structured answers - no API, frontend, run-lifecycle, or provider change yet
+(those are 41C/41D).
+
+- **Question generation**: existing GapReport -> 3-7 questions/iteration. Severity ->
+  priority is deterministic (BLOCKER->blocking, MAJOR->recommended, MINOR->optional);
+  the LLM only shapes each gap into an answerable form (phrasing + answer_type +
+  options) or skips it. Blocking-first ordering, capped at 7, never padded.
+- **Answer types**: prefers boolean > single_select > multi_select > numeric/date >
+  text, so the user rarely types prose.
+- **Duplicate/skip suppression**: within a batch and across prior iterations; honors
+  model skip for already-answered/non-relevant gaps.
+- **Answer application**: AUGMENTS requirements (appends a clarification to the
+  requirement's `assumptions`), preserving the original description and REQ id -
+  requirements are never regenerated. Input objects are not mutated.
+- **Assumptions**: explicit, traceable (requirement_id + question_id + source) for
+  skipped questions. **Contradictory answers** for one question raise rather than
+  silently resolve.
+- **Readiness**: delegates to the existing Phase 41A `compute_readiness()`.
+- **Text-only**: reuses `run_structured_stage`; no images ever attached (verified).
+  `structured.py`, GapAnalyzer, executor/selector (40A/40B), providers untouched.
+- **Tests**: +29 Phase 41B. ADR-058.
+
+### Phase 41A: clarification state layer
+
+New self-contained `qaops/clarification/` module: strict Pydantic models
+(ClarificationQuestion/Answer, Assumption, ReadinessStatus, ClarificationState),
+deterministic workspace persistence (`workspace/clarification/state.json`, absent ->
+None, corrupt -> error), and a pure `compute_readiness()`. No LLM/API/frontend/pipeline
+wiring. +19 tests.
+
 ## [0.10.0-alpha] - 2026-07-21
 
 ### Added

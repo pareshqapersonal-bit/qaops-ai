@@ -40,6 +40,8 @@ export function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Phase 41D: opt-in clarification. Off by default -> existing one-shot flow.
+  const [clarify, setClarify] = useState(false);
 
   // Phase 32: input mode + Jira-style ticket fields. Document mode is unchanged.
   const [mode, setMode] = useState<InputMode>("document");
@@ -73,6 +75,7 @@ export function UploadPage() {
           labels: labelList.length > 0 ? labelList : undefined,
         },
         attachments,
+        clarify,
       );
       navigate(`/runs/${created.run_id}`);
     } catch (err) {
@@ -95,6 +98,7 @@ export function UploadPage() {
     ticketId,
     priority,
     attachments,
+    clarify,
     navigate,
   ]);
 
@@ -131,7 +135,7 @@ export function UploadPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createDesignRun(file);
+      const created = await createDesignRun(file, clarify);
       navigate(`/runs/${created.run_id}`);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -145,7 +149,7 @@ export function UploadPage() {
       }
       setSubmitting(false);
     }
-  }, [file, submitting, navigate]);
+  }, [file, submitting, clarify, navigate]);
 
   return (
     <div>
@@ -246,6 +250,18 @@ export function UploadPage() {
           </div>
         )}
 
+        <label className="clar-toggle" style={{ marginTop: 16 }}>
+          <input
+            type="checkbox"
+            checked={clarify}
+            onChange={(e) => setClarify(e.target.checked)}
+          />
+          Clarify requirements first
+          <span className="muted clar-toggle-hint">
+            Review and answer clarification questions before generating test cases.
+          </span>
+        </label>
+
         <div className="row" style={{ marginTop: 20 }}>
           <button className="btn" onClick={onSubmit} disabled={!file || submitting}>
             {submitting ? (
@@ -338,6 +354,18 @@ export function UploadPage() {
             </span>
           )}
         </div>
+        <label className="clar-toggle" style={{ marginTop: 16 }}>
+          <input
+            type="checkbox"
+            checked={clarify}
+            onChange={(e) => setClarify(e.target.checked)}
+          />
+          Clarify requirements first
+          <span className="muted clar-toggle-hint">
+            Review and answer clarification questions before generating test cases.
+          </span>
+        </label>
+
         <div className="row" style={{ marginTop: 20 }}>
           <button
             className="btn"

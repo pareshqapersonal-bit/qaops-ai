@@ -297,3 +297,44 @@ class ArtifactsResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+# Phase 41C (clarification), additive. Present only for clarification-enabled runs;
+# one-shot runs never expose these endpoints, so existing clients are unaffected.
+class ClarificationQuestionSchema(BaseModel):
+    question_id: str
+    question: str
+    priority: str
+    answer_type: str
+    requirement_id: str | None = None
+    options: list[str] = Field(default_factory=list)
+    reason: str = ""
+
+
+class ReadinessSchema(BaseModel):
+    ready: bool
+    requirements_total: int
+    blocking_unanswered: int
+    recommended_unanswered: int
+    optional_unanswered: int
+    critical_gaps: int
+    blocking_reasons: list[str] = Field(default_factory=list)
+
+
+class ClarificationResponse(BaseModel):
+    run_id: str
+    iteration: int
+    status: str
+    questions: list[ClarificationQuestionSchema]
+    readiness: ReadinessSchema
+
+
+class AnswerSchema(BaseModel):
+    question_id: str
+    answer_type: str
+    answer: str
+
+
+class AnswersRequest(BaseModel):
+    answers: list[AnswerSchema] = Field(default_factory=list)
+    proceed_with_assumptions: bool = False

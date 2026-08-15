@@ -450,3 +450,99 @@ def execute_run(
         review_advice=advice_payload,
         artifacts=run_artifacts,
     )
+
+
+def execute_clarification_analysis(
+    store: RunStore,
+    run_id: str,
+    settings: QAOpsSettings,
+) -> None:
+    """Run bounded analysis + first clarification batch for a clarify=true run.
+
+    Phase 41C-1: runs the existing analyzer + gap stages (via ClarificationService,
+    which composes them directly - no pipeline/executor change), generates the first
+    question batch, persists Phase 41A state to the workspace, and parks the run in
+    AWAITING_CLARIFICATION (or READY_FOR_TEST_DESIGN if there were no blocking gaps).
+    The handoff to the test-design pipeline is 41C-2 and is intentionally not here.
+    """
+    from qaops.clarification.enums import ClarificationStatus
+    from qaops.clarification.service import ClarificationService
+
+    run = store.get(run_id)
+    if run is None:  # pragma: no cover - scheduled only for existing runs
+        return
+    input_files = list(run.input_dir.iterdir())
+    if not input_files:  # pragma: no cover - upload always writes one file
+        store.update(run_id, status=RunStatus.FAILED, error="No input file was stored.")
+        return
+
+    store.update(run_id, status=RunStatus.RUNNING, started_at=datetime.now(UTC))
+    run_settings = settings.model_copy(update={"output_dir": run.output_dir})
+    try:
+        service = ClarificationService(run_settings)
+        state = service.start(run_id, input_files[0], run.workspace)
+    except QAOpsError as exc:
+        logger.info("api.clarification_failed run=%s", run_id)
+        store.update(run_id, status=RunStatus.FAILED, error=str(exc))
+        return
+    except Exception as exc:  # noqa: BLE001 - surface any analysis failure cleanly
+        logger.info("api.clarification_error run=%s", run_id)
+        store.update(run_id, status=RunStatus.FAILED, error=str(exc))
+        return
+
+    next_status = (
+        RunStatus.READY_FOR_TEST_DESIGN
+        if state.status is ClarificationStatus.READY_FOR_TEST_DESIGN
+        else RunStatus.AWAITING_CLARIFICATION
+    )
+    store.update(run_id, status=next_status)
+
+
+def start_test_design_from_clarification(
+    store: RunStore,
+    run_id: str,
+    settings: QAOpsSettings,
+    service: DesignService,
+) -> None:
+    """Hand off a READY clarification run to the existing test-design pipeline.
+
+    Phase 41C-2: builds the clarified-requirements artifact (analyzed requirements +
+    applied answers, via ClarificationService), places it as the run's input, and
+    delegates to the EXISTING execute_run. The clarified JSON auto-detects as the
+    `requirements` entry point, so the pipeline starts at business_rule_extractor -
+    the analyzer and gap stages are NOT re-run. No pipeline/executor/DesignService
+    change; this only stages the input and reuses the one-shot execution path.
+    """
+    from qaops.clarification.service import (
+        ClarificationNotReadyError,
+        ClarificationService,
+    )
+
+    run = store.get(run_id)
+    if run is None:  # pragma: no cover - scheduled only for existing runs
+        return
+    run_settings = settings.model_copy(update={"output_dir": run.output_dir})
+    try:
+        clar = ClarificationService(run_settings)
+        clarified_path = clar.prepare_test_design(run.workspace)
+    except ClarificationNotReadyError as exc:
+        store.update(run_id, status=RunStatus.AWAITING_CLARIFICATION, error=str(exc))
+        return
+    except (QAOpsError, Exception) as exc:  # noqa: BLE001 - surface handoff failure
+        logger.info("api.clarification_handoff_failed run=%s", run_id)
+        store.update(run_id, status=RunStatus.FAILED, error=str(exc))
+        return
+
+    # Stage the clarified requirements as the run's input so the existing execution
+    # path picks the `requirements` entry point (skips analyzer+gap). The original
+    # ticket input is left in place beside it; execute_run reads input_dir's file,
+    # so we write the clarified file and point execution at it via a fresh input.
+    design_input = run.input_dir / clarified_path.name
+    design_input.write_bytes(clarified_path.read_bytes())
+    # Remove the original raw input so execute_run's "first input file" is the
+    # clarified requirements (input_dir now holds exactly the handoff artifact).
+    for existing in run.input_dir.iterdir():
+        if existing.name != clarified_path.name:
+            existing.unlink()
+
+    execute_run(store, run_id, settings, service)

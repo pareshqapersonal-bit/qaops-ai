@@ -16,12 +16,15 @@ import type {
   ReflectionSchema,
 } from "../api/types";
 import { useRun } from "../hooks/useRun";
+import { useClarification } from "../hooks/useClarification";
 import {
   PIPELINE_STAGES,
   deriveStageStates,
 } from "../hooks/useBackendStatus";
 import { KeyValue, StatusBadge } from "../components/common";
 import { Results } from "../components/Results";
+import { ClarificationPanel } from "../components/ClarificationPanel";
+import { ReadinessGate } from "../components/ReadinessGate";
 
 export function RunPage() {
   const { runId = null } = useParams();
@@ -80,10 +83,15 @@ export function RunPage() {
 
       {run.plan && <ExecutionPlanPanel plan={run.plan} />}
 
-      {run.status === "failed" || run.status === "partially_completed" || run.status === "cancelled" ? (
+      {run.status === "failed" ||
+      run.status === "partially_completed" ||
+      run.status === "cancelled" ? (
         <FailureView run={run} />
       ) : run.status === "completed" ? (
         <CompletedView runId={run.run_id} summary={run.summary} />
+      ) : run.status === "awaiting_clarification" ||
+        run.status === "ready_for_test_design" ? (
+        <ClarificationView runId={run.run_id} status={run.status} />
       ) : (
         <ProgressView run={run} />
       )}
@@ -92,6 +100,61 @@ export function RunPage() {
 
       {run.loop_summary && <LoopSummaryPanel summary={run.loop_summary} />}
     </div>
+  );
+}
+
+// Phase 41D: renders the clarification loop for a run that is awaiting
+// clarification or ready for test design. Owns clarification state via
+// useClarification; run-status polling stays in useRun (RunPage). When status is
+// awaiting_clarification the panel collects answers; when ready_for_test_design
+// the gate offers Generate Test Cases. A 409 (run moved on) is a no-op here -
+// useRun keeps polling and RunPage re-branches on the next status.
+function ClarificationView({
+  runId,
+  status,
+}: {
+  runId: string;
+  status: string;
+}) {
+  const {
+    data,
+    loadState,
+    errorMessage,
+    answers,
+    setAnswer,
+    submitting,
+    submitError,
+    submit,
+  } = useClarification(runId, true);
+
+  if (loadState === "loading" && !data) {
+    return (
+      <div className="panel" role="status">
+        Loading clarification…
+      </div>
+    );
+  }
+  if (loadState === "error" && !data) {
+    return (
+      <div className="alert error" role="alert">
+        {errorMessage ?? "Failed to load clarification."}
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  if (status === "ready_for_test_design") {
+    return <ReadinessGate runId={runId} data={data} />;
+  }
+  return (
+    <ClarificationPanel
+      data={data}
+      answers={answers}
+      setAnswer={setAnswer}
+      submitting={submitting}
+      submitError={submitError}
+      onSubmit={submit}
+    />
   );
 }
 

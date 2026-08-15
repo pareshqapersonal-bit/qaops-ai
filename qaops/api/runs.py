@@ -32,6 +32,11 @@ class RunStatus(StrEnum):
     PARTIALLY_COMPLETED = "partially_completed"
     RESUMABLE = "resumable"
     CANCELLED = "cancelled"
+    # Phase 41C (clarification), additive - a clarification-enabled run pauses in
+    # AWAITING_CLARIFICATION until blocking questions are answered, then becomes
+    # READY_FOR_TEST_DESIGN. One-shot runs never enter these states.
+    AWAITING_CLARIFICATION = "awaiting_clarification"
+    READY_FOR_TEST_DESIGN = "ready_for_test_design"
 
 
 @dataclass

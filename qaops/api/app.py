@@ -22,12 +22,20 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from qaops.api.config import APIConfig
-from qaops.api.runner import execute_run, resume_run
+from qaops.api.runner import (
+    execute_clarification_analysis,
+    execute_run,
+    resume_run,
+    start_test_design_from_clarification,
+)
 from qaops.api.runs import RunStatus, RunStore
 from qaops.api.schemas import (
+    AnswersRequest,
     ArtifactSchema,
     ArtifactsResponse,
     AttemptSchema,
+    ClarificationQuestionSchema,
+    ClarificationResponse,
     ExecutionPlanSchema,
     HealthResponse,
     LoopSummarySchema,
@@ -35,6 +43,7 @@ from qaops.api.schemas import (
     ModelsResponse,
     ProgressSchema,
     ProviderModelsSchema,
+    ReadinessSchema,
     ReflectionSchema,
     ReviewAdviceSchema,
     ReviewReportSchema,
@@ -43,6 +52,17 @@ from qaops.api.schemas import (
     StageStatusSchema,
     SummarySchema,
     TicketRequest,
+)
+from qaops.clarification import (
+    AnswerType,
+    ClarificationAnswer,
+    ClarificationState,
+    load_clarification_state,
+)
+from qaops.clarification.service import (
+    ClarificationNotFoundError,
+    ClarificationRoundLimitError,
+    ClarificationService,
 )
 from qaops.cli.config_loader import load_settings
 from qaops.core.errors import DocumentLoadError, UnsupportedDocumentFormatError
@@ -172,6 +192,36 @@ def _mount_frontend(app: FastAPI, static_dir: Path | None) -> None:
             )
 
 
+def _clarification_response(state: ClarificationState) -> ClarificationResponse:
+    """Map a Phase 41A ClarificationState to the API response schema."""
+    return ClarificationResponse(
+        run_id=state.run_id,
+        iteration=state.iteration,
+        status=state.status.value,
+        questions=[
+            ClarificationQuestionSchema(
+                question_id=q.question_id,
+                question=q.question,
+                priority=q.priority.value,
+                answer_type=q.answer_type.value,
+                requirement_id=q.requirement_id,
+                options=list(q.options),
+                reason=q.reason,
+            )
+            for q in state.questions
+        ],
+        readiness=ReadinessSchema(
+            ready=state.readiness.ready,
+            requirements_total=state.readiness.requirements_total,
+            blocking_unanswered=state.readiness.blocking_unanswered,
+            recommended_unanswered=state.readiness.recommended_unanswered,
+            optional_unanswered=state.readiness.optional_unanswered,
+            critical_gaps=state.readiness.critical_gaps,
+            blocking_reasons=list(state.readiness.blocking_reasons),
+        ),
+    )
+
+
 def create_app(config: APIConfig | None = None) -> FastAPI:
     """Build the application. A factory so tests can inject a config."""
     cfg = config or APIConfig()
@@ -244,7 +294,12 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         return ModelsResponse(providers=providers)
 
     def _create_and_schedule_run(
-        *, input_name: str, contents: bytes, suffix: str, background: BackgroundTasks
+        *,
+        input_name: str,
+        contents: bytes,
+        suffix: str,
+        background: BackgroundTasks,
+        clarify: bool = False,
     ) -> RunCreatedResponse:
         """Create a run, persist the input, schedule execution, return at once.
 
@@ -264,7 +319,12 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         (run.input_dir / safe_name).write_bytes(contents)
 
         settings = load_settings(None)
-        background.add_task(execute_run, store, run.id, settings, service)
+        if clarify:
+            # Phase 41C: clarification-enabled run. Bounded analysis + questions,
+            # then park in AWAITING_CLARIFICATION. One-shot path is untouched below.
+            background.add_task(execute_clarification_analysis, store, run.id, settings)
+        else:
+            background.add_task(execute_run, store, run.id, settings, service)
         return RunCreatedResponse(run_id=run.id, status=run.status.value)
 
     @app.post(
@@ -276,11 +336,14 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
     async def submit_design(
         background: BackgroundTasks,
         file: Annotated[UploadFile, FileParam(description="Requirement or scenario file")],
+        clarify: Annotated[bool, FormParam()] = False,
     ) -> RunCreatedResponse:
         """Accept an upload, create a run, schedule execution, return at once.
 
         The workflow (document / requirements / scenarios) is detected from the
-        file; the caller does not specify it.
+        file; the caller does not specify it. When clarify=true (Phase 41C), the run
+        first performs bounded analysis and pauses for requirement clarification;
+        when false/omitted, behavior is the existing one-shot pipeline unchanged.
         """
         raw_name = file.filename or "upload"
         suffix = Path(raw_name).suffix.lower()
@@ -296,7 +359,11 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
         return _create_and_schedule_run(
-            input_name=raw_name, contents=contents, suffix=suffix, background=background
+            input_name=raw_name,
+            contents=contents,
+            suffix=suffix,
+            background=background,
+            clarify=clarify,
         )
 
     @app.post(
@@ -314,6 +381,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
         acceptance_criteria: Annotated[list[str] | None, FormParam()] = None,
         labels: Annotated[list[str] | None, FormParam()] = None,
         attachment: Annotated[list[UploadFile] | None, FileParam()] = None,
+        clarify: Annotated[bool, FormParam()] = False,
     ) -> RunCreatedResponse:
         """Accept a Jira-style ticket + optional design/reference attachments (Phase 35).
 
@@ -423,6 +491,7 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
             contents=markdown.encode("utf-8"),
             suffix=".md",
             background=background,
+            clarify=clarify,
         )
 
         # Phase 36B Part 2: when the ticket carried images, persist them as a sidecar
@@ -589,6 +658,111 @@ def create_app(config: APIConfig | None = None) -> FastAPI:
                 ReviewAdviceSchema.model_validate(run.review_advice) if run.review_advice else None
             ),
         )
+
+    @app.get(
+        "/api/v1/runs/{run_id}/clarifications",
+        response_model=ClarificationResponse,
+        tags=["clarification"],
+    )
+    def get_clarifications(run_id: str) -> ClarificationResponse:
+        """Current clarification questions + readiness for a clarify-enabled run.
+
+        404 if the run is unknown; 409 if the run has no clarification in progress
+        (e.g. a one-shot run). Phase 41C-1.
+        """
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+        state = load_clarification_state(run.workspace)
+        if state is None:
+            raise HTTPException(
+                status_code=409,
+                detail="This run has no clarification in progress.",
+            )
+        return _clarification_response(state)
+
+    @app.post(
+        "/api/v1/runs/{run_id}/clarifications/answers",
+        response_model=ClarificationResponse,
+        tags=["clarification"],
+    )
+    def submit_clarification_answers(run_id: str, body: AnswersRequest) -> ClarificationResponse:
+        """Apply structured answers and return the updated questions + readiness.
+
+        400 on malformed/contradictory answers; 404 unknown run; 409 if not awaiting
+        clarification. Phase 41C-1 (the handoff to test design is 41C-2).
+        """
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+        if load_clarification_state(run.workspace) is None:
+            raise HTTPException(
+                status_code=409, detail="This run has no clarification in progress."
+            )
+        settings = load_settings(None).model_copy(update={"output_dir": run.output_dir})
+        service_c = ClarificationService(settings)
+        answers = [
+            ClarificationAnswer(
+                question_id=a.question_id,
+                answer_type=AnswerType(a.answer_type),
+                answer=a.answer,
+            )
+            for a in body.answers
+        ]
+        try:
+            state = service_c.submit_answers(
+                run.workspace, answers, proceed_with_assumptions=body.proceed_with_assumptions
+            )
+        except ClarificationRoundLimitError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, ClarificationNotFoundError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        new_status = (
+            RunStatus.READY_FOR_TEST_DESIGN
+            if state.readiness.ready
+            else RunStatus.AWAITING_CLARIFICATION
+        )
+        store.update(run_id, status=new_status)
+        return _clarification_response(state)
+
+    @app.post(
+        "/api/v1/runs/{run_id}/start-test-design",
+        response_model=RunCreatedResponse,
+        status_code=202,
+        tags=["clarification"],
+    )
+    def start_test_design(run_id: str, background: BackgroundTasks) -> RunCreatedResponse:
+        """Hand a READY clarification run off to the existing test-design pipeline.
+
+        404 unknown run; 409 if no clarification in progress, if not ready, or if the
+        design phase has already started/completed (duplicate-start guard). On success
+        schedules the handoff (clarified requirements -> `requirements` entry point,
+        reusing checkpointed analyzer+gap work) and returns 202. Phase 41C-2.
+        """
+        run = store.get(run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"No run with id {run_id!r}.")
+        state = load_clarification_state(run.workspace)
+        if state is None:
+            raise HTTPException(
+                status_code=409, detail="This run has no clarification in progress."
+            )
+        if not state.readiness.ready:
+            raise HTTPException(
+                status_code=409,
+                detail="Clarification is not ready for test design; blocking questions remain.",
+            )
+        # Duplicate-start guard: only a run parked at READY_FOR_TEST_DESIGN may start.
+        if run.status not in (RunStatus.READY_FOR_TEST_DESIGN,):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Run is {run.status.value}; test design cannot be (re)started.",
+            )
+        settings = load_settings(None)
+        store.update(run_id, status=RunStatus.QUEUED)
+        background.add_task(start_test_design_from_clarification, store, run_id, settings, service)
+        return RunCreatedResponse(run_id=run_id, status=RunStatus.QUEUED.value)
 
     @app.get("/api/v1/runs/{run_id}/artifacts", response_model=ArtifactsResponse, tags=["design"])
     def run_artifacts(run_id: str) -> ArtifactsResponse:

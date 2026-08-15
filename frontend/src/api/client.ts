@@ -3,7 +3,9 @@
 // cancellation so components never touch fetch directly (ADR-032).
 
 import type {
+  AnswerInput,
   ArtifactsResponse,
+  ClarificationResponse,
   DesignArtifact,
   HealthResponse,
   ModelsResponse,
@@ -92,11 +94,14 @@ export function getModels(opts?: RequestOptions): Promise<ModelsResponse> {
 
 export function createDesignRun(
   file: File,
+  clarify = false,
   opts?: RequestOptions,
 ): Promise<RunCreatedResponse> {
   const form = new FormData();
   // The backend multipart field is named "file" (verified against the API).
   form.append("file", file);
+  // Phase 41D: opt-in clarification. Omitted/false preserves the one-shot path.
+  if (clarify) form.append("clarify", "true");
   return request<RunCreatedResponse>("/api/v1/design", {
     method: "POST",
     body: form,
@@ -121,6 +126,7 @@ export interface TicketInput {
 export function createTicketRun(
   ticket: TicketInput,
   attachments?: File[] | null,
+  clarify = false,
   opts?: RequestOptions,
 ): Promise<RunCreatedResponse> {
   const form = new FormData();
@@ -132,6 +138,8 @@ export function createTicketRun(
   for (const label of ticket.labels ?? []) form.append("labels", label);
   // Each file is appended under the same "attachment" field name, in order.
   for (const file of attachments ?? []) form.append("attachment", file);
+  // Phase 41D: opt-in clarification, same flag as the file-upload path.
+  if (clarify) form.append("clarify", "true");
   return request<RunCreatedResponse>("/api/v1/design/ticket", {
     method: "POST",
     body: form,
@@ -178,6 +186,51 @@ export function cancelRun(
 ): Promise<RunStatusResponse> {
   return request<RunStatusResponse>(
     `/api/v1/runs/${encodeURIComponent(runId)}/cancel`,
+    { method: "POST", signal: opts?.signal },
+  );
+}
+
+// Phase 41D: clarification workflow endpoints (41C backend).
+
+// Current clarification question batch + readiness for a clarify-enabled run.
+export function getClarifications(
+  runId: string,
+  opts?: RequestOptions,
+): Promise<ClarificationResponse> {
+  return request<ClarificationResponse>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/clarifications`,
+    { signal: opts?.signal },
+  );
+}
+
+// Submit a batch of structured answers; returns the updated batch + readiness.
+export function submitClarificationAnswers(
+  runId: string,
+  answers: AnswerInput[],
+  proceedWithAssumptions = false,
+  opts?: RequestOptions,
+): Promise<ClarificationResponse> {
+  return request<ClarificationResponse>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/clarifications/answers`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        answers,
+        proceed_with_assumptions: proceedWithAssumptions,
+      }),
+      signal: opts?.signal,
+    },
+  );
+}
+
+// Hand a READY run off to the existing test-design pipeline.
+export function startTestDesign(
+  runId: string,
+  opts?: RequestOptions,
+): Promise<RunCreatedResponse> {
+  return request<RunCreatedResponse>(
+    `/api/v1/runs/${encodeURIComponent(runId)}/start-test-design`,
     { method: "POST", signal: opts?.signal },
   );
 }

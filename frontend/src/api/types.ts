@@ -41,7 +41,53 @@ export type RunStatus =
   | "failed"
   | "partially_completed"
   | "resumable"
-  | "cancelled";
+  | "cancelled"
+  | "awaiting_clarification"
+  | "ready_for_test_design";
+
+// Phase 41D: clarification models mirror the 41C API schemas exactly.
+export type QuestionPriority = "blocking" | "recommended" | "optional";
+export type AnswerType =
+  | "boolean"
+  | "single_select"
+  | "multi_select"
+  | "numeric"
+  | "date"
+  | "text";
+
+export interface ClarificationQuestion {
+  question_id: string;
+  question: string;
+  priority: QuestionPriority;
+  answer_type: AnswerType;
+  requirement_id: string | null;
+  options: string[];
+  reason: string;
+}
+
+export interface Readiness {
+  ready: boolean;
+  requirements_total: number;
+  blocking_unanswered: number;
+  recommended_unanswered: number;
+  optional_unanswered: number;
+  critical_gaps: number;
+  blocking_reasons: string[];
+}
+
+export interface ClarificationResponse {
+  run_id: string;
+  iteration: number;
+  status: string;
+  questions: ClarificationQuestion[];
+  readiness: Readiness;
+}
+
+export interface AnswerInput {
+  question_id: string;
+  answer_type: AnswerType;
+  answer: string;
+}
 
 export interface ProgressSchema {
   current_stage: string | null;

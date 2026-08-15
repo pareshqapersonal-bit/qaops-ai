@@ -1,11 +1,16 @@
 import type { ReactNode } from "react";
 import type { RunStatus } from "../api/types";
 
+const STATUS_LABELS: Partial<Record<RunStatus, string>> = {
+  awaiting_clarification: "Awaiting Clarification",
+  ready_for_test_design: "Ready for Test Design",
+};
+
 export function StatusBadge({ status }: { status: RunStatus }) {
   return (
     <span className={`badge ${status}`} role="status">
       {status === "running" && <span className="spin" aria-hidden="true" />}
-      {status}
+      {STATUS_LABELS[status] ?? status}
     </span>
   );
 }
