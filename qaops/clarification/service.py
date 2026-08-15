@@ -44,7 +44,6 @@ if TYPE_CHECKING:
 
     from qaops.clarification.models import ClarificationAnswer, ClarificationQuestion
     from qaops.config import QAOpsSettings
-    from qaops.llm import LLMClient
     from qaops.models.domain import GapReport, Requirement
 
 # Decision 8(6): at most 5 clarification rounds before proceed-with-assumptions is
@@ -79,23 +78,32 @@ class ClarificationService:
     # -- bounded analysis (option 8(a): compose existing stages directly) -----
 
     def _analyze(
-        self, input_path: Path, settings: QAOpsSettings, client: LLMClient
+        self, input_path: Path, settings: QAOpsSettings
     ) -> tuple[list[Requirement], GapReport, str]:
         """Run the existing analyzer + gap stages only, returning their outputs.
 
         Reuses the exact construction the pipeline builder uses: the analyzer is
         bound to image evidence (40B - only stage 1 sees images), gap analysis is
         text-only. No downstream stage runs; nothing here modifies those stages.
-        The caller supplies the client so analysis and question generation share one.
+
+        Each stage gets its OWN freshly-constructed client. A single provider client
+        (e.g. GroqClient's AsyncOpenAI) binds its httpx connection pool to the first
+        asyncio event loop that uses it, and run_with_deadline (ADR-031) runs every
+        call under its own short-lived loop; reusing one client across those closed
+        loops raises "Connection error" on the second call. Building a fresh client
+        per stage - exactly as the executor's build_stages does on the normal path -
+        guarantees no client is reused across separate event loops.
         """
         source_text = load_document(input_path)
         prompts = PromptLoader(version=settings.prompt_version)
         # Evidence lives beside the output dir (same location DesignService reads).
         evidence = load_evidence_package(settings.output_dir.parent)
 
-        analyzer = ChunkedRequirementAnalyzer(client, prompts, settings, evidence=evidence)
+        analyzer = ChunkedRequirementAnalyzer(
+            create_client(settings), prompts, settings, evidence=evidence
+        )
         analyzed = analyzer.run(RequirementInput(text=source_text, source_name=input_path.name))
-        gaps = GapAnalyzer(client, prompts, settings)
+        gaps = GapAnalyzer(create_client(settings), prompts, settings)
         analyzed = gaps.run(analyzed)
         return list(analyzed.requirements), analyzed.gap_report, analyzed.source_text
 
@@ -104,15 +112,16 @@ class ClarificationService:
     def start(self, run_id: str, input_path: Path, workspace: Path) -> ClarificationState:
         """Run bounded analysis, generate the first question batch, persist state."""
         settings = self._settings.model_copy(update={"output_dir": workspace / "output"})
-        client = create_client(settings)
-        requirements, gap_report, _ = self._analyze(input_path, settings, client)
+        requirements, gap_report, _ = self._analyze(input_path, settings)
 
         # Persist the analyzed requirements so the 41C-2 handoff can apply answers and
         # feed them to the `requirements` entry point without re-running the analyzer.
         _write_requirements_artifact(workspace / _REQUIREMENTS_ARTIFACT, requirements)
 
+        # A fresh client for the agent's call, too: it must not reuse a client whose
+        # httpx pool is bound to a now-closed event loop from the analysis calls.
         agent = ClarificationAgent(
-            client,
+            create_client(settings),
             PromptLoader(version=settings.prompt_version),
             settings,
         )

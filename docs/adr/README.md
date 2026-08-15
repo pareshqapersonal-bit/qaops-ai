@@ -61,5 +61,6 @@
 | [059](059-clarification-api-integration.md) | Clarification API/run-lifecycle integration (41C-1): opt-in clarify=true schedules bounded analysis (composes existing analyzer+gap) + questions, parks in AWAITING_CLARIFICATION; GET clarifications + POST answers endpoints; 2 additive RunStatus values; one-shot flow unchanged | Accepted |
 | [060](060-clarification-test-design-handoff.md) | Clarification->test-design handoff (41C-2): start-test-design endpoint gates on readiness, applies answers to persisted requirements, runs the existing pipeline via the `requirements` entry point (analyzer+gap not re-run); one-shot flow unchanged | Accepted |
 | [061](061-clarification-frontend.md) | Clarification frontend (41D): opt-in checkbox (file+ticket), RunPage branches to ClarificationPanel/ReadinessGate via useClarification, answer widgets by type, Generate Test Cases handoff; one-shot UI unchanged; +ticket clarify backend parity | Accepted |
+| [062](062-clarification-client-lifecycle.md) | Clarification client lifecycle fix (41C-3): build a fresh client per LLM call (analyzer/gap/agent) instead of sharing one across run_with_deadline's per-call event loops, fixing [groq] Connection error on clarify=true; only ClarificationService changed | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

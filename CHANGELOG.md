@@ -8,6 +8,26 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 41C-3: clarification client lifecycle fix
+
+Fixes `[groq] Connection error` on clarify=true runs (ADR-062). The clarification service
+reused one provider client across three sequential LLM calls (analyzer -> gap -> agent);
+because each call runs under its own short-lived asyncio loop (run_with_deadline,
+ADR-031) and a provider client's httpx pool binds to the first loop, the second call
+reused a pool bound to a closed loop and failed. The one-shot flow was immune because the
+executor builds a fresh client per stage-selection.
+
+- **Fix**: `ClarificationService` now builds a FRESH client per LLM call (analyzer, gap,
+  agent), mirroring the executor's per-stage `create_client`. No client is reused across
+  separate event loops.
+- **Unchanged**: provider selection, model, `max_output_tokens`, timeout, retry, and
+  execution strategy (all still flow through settings -> create_client). deadline.py, the
+  Groq transport, provider registry, pipeline stages, and 41A/41B behavior are untouched.
+  Only `qaops/clarification/service.py` changed.
+- **Tests**: +5 Phase 41C-3 regression tests (fresh client per call, no client reused
+  across calls, provider/output-tokens unchanged, full flow still reaches READY, agent
+  remains text-only). ADR-062.
+
 ### Phase 41D: clarification frontend
 
 Completes the clarification feature with the UI (ADR-061). A user can opt into
