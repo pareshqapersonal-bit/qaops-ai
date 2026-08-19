@@ -8,6 +8,40 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 ## [0.18.0-dev] - unreleased
 
+### Phase 41C-4: shared candidate builder + clarification resilient-call
+
+Gives the clarification path (analyzer -> gap -> agent) the same policy-driven provider
+failover the executor applies per stage, so an intermittent NVIDIA "EngineCore" HTTP 500
+(classified NEXT_MODEL) fails over to the next eligible provider instead of aborting the
+run. The normal one-shot flow already had this via AdaptiveExecutor; clarification
+bypasses the executor (ADR-059) and previously had no failover. ADR-063.
+
+- **New `qaops/execution/candidates.py`**: `build_candidate_models()` plus the canonical
+  free/image/synthetic-candidate rules and `MODEL_FIELD`, extracted behaviour-preservingly
+  from the executor so both paths share one source of truth. No rule approximated (Gemini
+  free only for flash tiers, NVIDIA free per ADR-055, local free, else not-free) - fixing
+  a divergence in the earlier draft that treated Gemini as wholesale free.
+- **`executor.py`** delegates its candidate-assembly helpers to the shared primitive;
+  behaviour unchanged, proven by the 245-test executor suite staying green.
+- **New `qaops/execution/resilient_call.py`** (`resilient_structured_call`): builds
+  candidates via the shared primitive, ranks via the unchanged `select_candidates`,
+  classifies via the unchanged `recovery_for_exception`. RETRY_SAME[_WITH_BACKOFF]
+  retries the same candidate per policy; NEXT_MODEL and the provider-level failover
+  actions advance to the next candidate; exhaustion raises a bounded `ResilientCallError`;
+  a fresh client is built per attempt (preserves 41C-3).
+- **`ClarificationService`** runs each call through the helper with correct
+  StageRequirements (analyzer image-aware only with image evidence; gap excludes image
+  providers downstream per 40B; agent text-only).
+- **Unchanged**: selector.py, policy.py, deadline.py, DesignService, pipeline stages,
+  RequirementAnalyzer, GapAnalyzer, provider clients, registry, structured.py, image
+  ingestion, API, frontend, 41A/41B. `fallback_providers` left in DesignService
+  (import-only). No new ClarificationStatus values (deferred).
+- **Tests**: +16 Phase 41C-4 (candidate-builder canonical rules incl. Gemini-flash-free;
+  failover, retry-same, bounded exhaustion, image-only filtering, text-only downstream,
+  free_only, fresh client per attempt, budgets, disable-and-switch advance). Existing 41C
+  integration/handoff/lifecycle tests migrated to the resilient-call seam. Full suite
+  1153 passed; executor boundary 245.
+
 ### Phase 41C-3: clarification client lifecycle fix
 
 Fixes `[groq] Connection error` on clarify=true runs (ADR-062). The clarification service

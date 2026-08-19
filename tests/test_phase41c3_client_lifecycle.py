@@ -10,7 +10,6 @@ backs each call, while all existing 41C behavior/contracts are preserved.
 
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -95,13 +94,34 @@ class _ScriptedFactory:
         return client
 
 
+def _clarify_patch(side_effect):
+    """Patch the resilient-call seam (Phase 41C-4) so each attempt builds its
+    client via the given factory, with a single nvidia candidate."""
+    from contextlib import ExitStack
+    from unittest.mock import patch as _patch
+
+    from qaops.execution.registry import get_provider
+
+    stack = ExitStack()
+    stack.enter_context(
+        _patch("qaops.execution.resilient_call.create_client", side_effect=side_effect)
+    )
+    stack.enter_context(
+        _patch(
+            "qaops.execution.resilient_call.fallback_providers",
+            return_value=[get_provider("nvidia")],
+        )
+    )
+    return stack
+
+
 class TestClientLifecycle:
     def test_fresh_client_per_llm_call(self, tmp_path: Path) -> None:
         # The core regression: analyzer, gap, and agent each get their OWN client.
         ws = _workspace(tmp_path)
         factory = _ScriptedFactory([_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
         svc = ClarificationService(QAOpsSettings(output_dir=ws / "output"))
-        with patch("qaops.clarification.service.create_client", side_effect=factory):
+        with _clarify_patch(factory):
             state = svc.start("run_1", ws / "input" / "ticket.md", ws)
 
         # Three separate clients were constructed (one per LLM call).
@@ -121,7 +141,7 @@ class TestClientLifecycle:
         ws = _workspace(tmp_path)
         factory = _ScriptedFactory([_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
         svc = ClarificationService(QAOpsSettings(output_dir=ws / "output"))
-        with patch("qaops.clarification.service.create_client", side_effect=factory):
+        with _clarify_patch(factory):
             svc.start("run_1", ws / "input" / "ticket.md", ws)
         assert all(c.call_count == 1 for c in factory.clients)
 
@@ -149,7 +169,7 @@ class TestClientLifecycle:
             return c
 
         svc = ClarificationService(settings)
-        with patch("qaops.clarification.service.create_client", side_effect=_factory):
+        with _clarify_patch(_factory):
             svc.start("run_1", ws / "input" / "ticket.md", ws)
 
         # Requests carry settings.max_output_tokens verbatim (no 32768 anywhere).
@@ -164,7 +184,7 @@ class TestBehaviorPreserved:
         ws = _workspace(tmp_path)
         factory = _ScriptedFactory([_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
         svc = ClarificationService(QAOpsSettings(output_dir=ws / "output"))
-        with patch("qaops.clarification.service.create_client", side_effect=factory):
+        with _clarify_patch(factory):
             state = svc.start("run_1", ws / "input" / "ticket.md", ws)
         ans = [
             ClarificationAnswer(
@@ -197,7 +217,7 @@ class TestBehaviorPreserved:
             return c
 
         svc = ClarificationService(QAOpsSettings(output_dir=ws / "output"))
-        with patch("qaops.clarification.service.create_client", side_effect=_factory):
+        with _clarify_patch(_factory):
             svc.start("run_1", ws / "input" / "ticket.md", ws)
         # Every clarification-path request (incl. the agent, the 3rd) carries no images.
         assert all(imgs == [] for imgs in seen)

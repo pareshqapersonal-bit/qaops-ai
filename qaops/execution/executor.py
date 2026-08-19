@@ -28,6 +28,13 @@ from pydantic import BaseModel
 from qaops.config import QAOpsSettings
 from qaops.core.errors import StageError
 from qaops.core.protocols import PipelineStage
+from qaops.execution.candidates import (
+    configured_model,
+    configured_model_is_free,
+    provider_supports_images,
+    settings_for_model,
+    synthetic_candidate,
+)
 from qaops.execution.events import EventType, ExecutionEvent
 from qaops.execution.models import ModelHealth, ModelInfo, ModelRegistry
 from qaops.execution.policy import Action, FailureKind, Recovery, recovery_for_exception
@@ -65,15 +72,6 @@ EventSink = Callable[[ExecutionEvent], None]
 # (stage_name, stage_index, stage_output_model) -> None. Called after a stage
 # completes so the orchestration layer can persist a checkpoint (ADR-040).
 CheckpointSink = Callable[[str, int, BaseModel], None]
-
-# Settings field holding the model name, per provider.
-_MODEL_FIELD: dict[str, str] = {
-    "anthropic": "model",
-    "gemini": "gemini_model",
-    "openrouter": "openrouter_model",
-    "groq": "groq_model",
-    "nvidia": "nvidia_model",
-}
 
 
 @dataclass
@@ -243,29 +241,12 @@ class AdaptiveExecutor:
     def _configured_model_is_free(self, provider: str) -> bool:
         """Free eligibility of a provider's single configured model.
 
-        Gemini's free tier serves its flash models via an API key at no cost, so
-        a configured gemini flash/flash-lite model is free-eligible - Gemini is
-        NOT wholesale paid merely because paid Gemini usage also exists (ADR-034).
-        Anthropic has no free tier, so its configured model is never free.
+        Delegates to the shared canonical rule (Phase 41C-4 extraction): Gemini
+        flash tiers are free, NVIDIA is free (ADR-055), local providers are free,
+        others default to not-free. Behaviour is unchanged from the former inline
+        implementation.
         """
-        configured = self._configured_model(provider).casefold()
-        if provider == "gemini":
-            # Flash / flash-lite tiers are the free-eligible Gemini models.
-            return "flash" in configured
-        if provider == "nvidia":
-            # NVIDIA's Nemotron models are served free (no per-token cost, no card)
-            # through build.nvidia.com's OpenAI-compatible endpoint, like the other
-            # free-tier providers, so a configured NVIDIA model is free-eligible
-            # (ADR-055). CAVEAT: the free hosted tier is RATE-LIMITED (~40 RPM,
-            # credits can exhaust -> 429) and NVIDIA's FAQ restricts it to
-            # development/evaluation, not production traffic. "free" here means
-            # zero monetary cost per call, consistent with this codebase's
-            # cost-based definition - not unlimited throughput or a production SLA.
-            return True
-        # Local providers are always free; everything else defaults to not-free
-        # unless a registry model said otherwise (handled above).
-        info = next((p for p in (self._all_provider_info()) if p.name == provider), None)
-        return bool(info and info.local)
+        return configured_model_is_free(self._settings, provider, self._all_provider_info())
 
     def _all_provider_info(self) -> list[ProviderInfo]:
         # The providers this executor was constructed with (post-strategy filter
@@ -405,34 +386,21 @@ class AdaptiveExecutor:
     def _synthetic_candidate(self, provider: str, name: str) -> ModelInfo:
         """A single-model candidate for a provider with no catalogue.
 
-        Its free flag reflects the provider's configured-model eligibility, so
-        FREE_ONLY/FREE_FIRST treat e.g. a gemini flash model as free and an
-        anthropic model as paid.
+        Delegates to the shared candidates primitive (Phase 41C-4 extraction) so
+        the executor and the clarification path build synthetic candidates by the
+        same canonical rule.
         """
-        return ModelInfo(
-            name=name,
-            provider=provider,
-            free=self._configured_model_is_free(provider),
-            images_supported=self._provider_supports_images(provider),
-        )
+        return synthetic_candidate(self._settings, provider, name, self._all_provider_info())
 
     def _provider_supports_images(self, provider: str) -> bool:
         """Whether the registry marks this provider as image-capable (Phase 38)."""
-        info = next((p for p in self._all_provider_info() if p.name == provider), None)
-        return bool(info and info.images)
+        return provider_supports_images(provider, self._all_provider_info())
 
     def _configured_model(self, provider: str) -> str:
-        field_name = _MODEL_FIELD.get(provider)
-        if field_name is None:
-            return ""
-        return str(getattr(self._settings, field_name, ""))
+        return configured_model(self._settings, provider)
 
     def _settings_for(self, provider: ProviderInfo, model: ModelInfo) -> QAOpsSettings:
-        update: dict[str, object] = {"provider": provider.name}
-        field_name = _MODEL_FIELD.get(provider.name)
-        if field_name is not None and model.name:
-            update[field_name] = model.name
-        return self._settings.model_copy(update=update)
+        return settings_for_model(self._settings, model)
 
     def _healthy_providers(self) -> list[ProviderInfo]:
         return [p for p in self._providers if self.report.health[p.name].available]

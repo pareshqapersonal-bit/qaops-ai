@@ -29,9 +29,10 @@ from qaops.clarification.state_store import (
     load_clarification_state,
     write_clarification_state,
 )
+from qaops.execution.resilient_call import resilient_structured_call
+from qaops.execution.selector import StageRequirements
 from qaops.ingestion.evidence_sidecar import load_evidence_package
 from qaops.ingestion.registry import load_document
-from qaops.llm.factory import create_client
 from qaops.llm.prompt_loader import PromptLoader
 from qaops.models.domain import RequirementInput
 from qaops.models.enums import GapSeverity
@@ -86,25 +87,43 @@ class ClarificationService:
         bound to image evidence (40B - only stage 1 sees images), gap analysis is
         text-only. No downstream stage runs; nothing here modifies those stages.
 
-        Each stage gets its OWN freshly-constructed client. A single provider client
-        (e.g. GroqClient's AsyncOpenAI) binds its httpx connection pool to the first
-        asyncio event loop that uses it, and run_with_deadline (ADR-031) runs every
-        call under its own short-lived loop; reusing one client across those closed
-        loops raises "Connection error" on the second call. Building a fresh client
-        per stage - exactly as the executor's build_stages does on the normal path -
-        guarantees no client is reused across separate event loops.
+        Each call runs through resilient_structured_call (Phase 41C-4), which gives
+        the clarification path the same policy-driven provider failover the executor
+        applies per stage: a transient NVIDIA 500 (NEXT_MODEL) fails over to the next
+        eligible provider instead of aborting the run. The helper builds a FRESH
+        client per attempt, preserving the Phase 41C-3 event-loop fix. The analyzer
+        requires an image-capable provider only when the run actually carries image
+        evidence; gap analysis is always text-only and may fail over to Groq/Gemini/
+        OpenRouter per the existing strategy.
         """
         source_text = load_document(input_path)
         prompts = PromptLoader(version=settings.prompt_version)
         # Evidence lives beside the output dir (same location DesignService reads).
         evidence = load_evidence_package(settings.output_dir.parent)
+        has_images = bool(evidence and evidence.images)
 
-        analyzer = ChunkedRequirementAnalyzer(
-            create_client(settings), prompts, settings, evidence=evidence
+        analyzed = resilient_structured_call(
+            settings=settings,
+            requirements=StageRequirements(
+                needs_structured_output=True,
+                free_only=_is_free_only(settings),
+                needs_images=has_images,
+            ),
+            run_call=lambda client: ChunkedRequirementAnalyzer(
+                client, prompts, settings, evidence=evidence
+            ).run(RequirementInput(text=source_text, source_name=input_path.name)),
         )
-        analyzed = analyzer.run(RequirementInput(text=source_text, source_name=input_path.name))
-        gaps = GapAnalyzer(create_client(settings), prompts, settings)
-        analyzed = gaps.run(analyzed)
+        analyzed = resilient_structured_call(
+            settings=settings,
+            requirements=StageRequirements(
+                needs_structured_output=True,
+                free_only=_is_free_only(settings),
+                # Gap analysis is text-only; on an image run it must exclude the
+                # image provider downstream, matching Phase 40B.
+                exclude_image_providers=has_images,
+            ),
+            run_call=lambda client: GapAnalyzer(client, prompts, settings).run(analyzed),
+        )
         return list(analyzed.requirements), analyzed.gap_report, analyzed.source_text
 
     # -- start clarification --------------------------------------------------
@@ -118,14 +137,19 @@ class ClarificationService:
         # feed them to the `requirements` entry point without re-running the analyzer.
         _write_requirements_artifact(workspace / _REQUIREMENTS_ARTIFACT, requirements)
 
-        # A fresh client for the agent's call, too: it must not reuse a client whose
-        # httpx pool is bound to a now-closed event loop from the analysis calls.
-        agent = ClarificationAgent(
-            create_client(settings),
-            PromptLoader(version=settings.prompt_version),
-            settings,
+        # The agent's question-generation call is text-only and also runs through
+        # the resilient helper: a fresh agent (hence fresh client) per attempt, with
+        # the same provider failover. It never carries images (41B invariant).
+        questions = resilient_structured_call(
+            settings=settings,
+            requirements=StageRequirements(
+                needs_structured_output=True,
+                free_only=_is_free_only(settings),
+            ),
+            run_call=lambda client: ClarificationAgent(
+                client, PromptLoader(version=settings.prompt_version), settings
+            ).generate_questions(requirements, gap_report),
         )
-        questions = agent.generate_questions(requirements, gap_report)
 
         critical_gaps = _count_blocker_gaps(gap_report)
         readiness = compute_readiness(
@@ -240,6 +264,11 @@ class ClarificationService:
         target = workspace / _CLARIFIED_REQUIREMENTS
         _write_requirements_artifact(target, clarified)
         return target
+
+
+def _is_free_only(settings: QAOpsSettings) -> bool:
+    """Whether the free_only execution strategy is active (mirrors the executor)."""
+    return settings.execution_strategy == "free_only"
 
 
 def _count_blocker_gaps(gap_report: GapReport) -> int:

@@ -7,6 +7,7 @@ omitted leaves the one-shot flow unchanged. LLM is mocked; no live calls.
 """
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -85,10 +86,36 @@ def _service(tmp_path: Path, responses: list[str]) -> tuple[ClarificationService
     return svc, ws, client  # type: ignore[return-value]
 
 
+def _patch_clarification_llm(client: object):
+    """Patch the resilient-call seam so clarification LLM calls use `client`.
+
+    Phase 41C-4 moved client construction into resilient_call; the candidate chain
+    comes from fallback_providers (key-gated to nvidia in tests). Patching both
+    reproduces the old single-provider behaviour: one nvidia candidate, one attempt,
+    served by the mock client.
+    """
+    from qaops.execution.registry import get_provider
+
+    return (
+        patch("qaops.execution.resilient_call.create_client", return_value=client),
+        patch(
+            "qaops.execution.resilient_call.fallback_providers",
+            return_value=[get_provider("nvidia")],
+        ),
+    )
+
+
+@contextmanager
+def _clarify_llm(client: object):
+    p1, p2 = _patch_clarification_llm(client)
+    with p1, p2:
+        yield
+
+
 class TestServiceStart:
     def test_start_generates_questions_and_persists(self, tmp_path: Path) -> None:
         svc, ws, client = _service(tmp_path, [_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
-        with patch("qaops.clarification.service.create_client", return_value=client):
+        with _clarify_llm(client):
             state = svc.start("run_1", ws / "input" / "ticket.md", ws)
         assert len(state.questions) == 1
         assert state.status is ClarificationStatus.CLARIFYING
@@ -97,7 +124,7 @@ class TestServiceStart:
 
     def test_start_ready_when_no_blocking_gaps(self, tmp_path: Path) -> None:
         svc, ws, client = _service(tmp_path, [_ANALYZER, _GAP_NONE])
-        with patch("qaops.clarification.service.create_client", return_value=client):
+        with _clarify_llm(client):
             state = svc.start("run_1", ws / "input" / "ticket.md", ws)
         assert state.questions == []
         assert state.status is ClarificationStatus.READY_FOR_TEST_DESIGN
@@ -106,7 +133,7 @@ class TestServiceStart:
     def test_start_uses_single_client(self, tmp_path: Path) -> None:
         # analyzer + gap + agent = exactly 3 LLM calls on one shared client.
         svc, ws, client = _service(tmp_path, [_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
-        with patch("qaops.clarification.service.create_client", return_value=client):
+        with _clarify_llm(client):
             svc.start("run_1", ws / "input" / "ticket.md", ws)
         assert client.call_count == 3
 
@@ -114,7 +141,7 @@ class TestServiceStart:
 class TestServiceAnswers:
     def _started(self, tmp_path: Path):
         svc, ws, client = _service(tmp_path, [_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
-        with patch("qaops.clarification.service.create_client", return_value=client):
+        with _clarify_llm(client):
             state = svc.start("run_1", ws / "input" / "ticket.md", ws)
         return svc, ws, state
 

@@ -62,5 +62,6 @@
 | [060](060-clarification-test-design-handoff.md) | Clarification->test-design handoff (41C-2): start-test-design endpoint gates on readiness, applies answers to persisted requirements, runs the existing pipeline via the `requirements` entry point (analyzer+gap not re-run); one-shot flow unchanged | Accepted |
 | [061](061-clarification-frontend.md) | Clarification frontend (41D): opt-in checkbox (file+ticket), RunPage branches to ClarificationPanel/ReadinessGate via useClarification, answer widgets by type, Generate Test Cases handoff; one-shot UI unchanged; +ticket clarify backend parity | Accepted |
 | [062](062-clarification-client-lifecycle.md) | Clarification client lifecycle fix (41C-3): build a fresh client per LLM call (analyzer/gap/agent) instead of sharing one across run_with_deadline's per-call event loops, fixing [groq] Connection error on clarify=true; only ClarificationService changed | Accepted |
+| [063](063-shared-candidate-builder-clarification-resilience.md) | Shared candidate builder + clarification resilient-call (41C-4): extract build_candidate_models from the executor (behaviour-preserving) so clarification gets policy-driven provider failover on NVIDIA 500 without duplicating selection logic | Accepted |
 
 ADR format: Context → Decision → Consequences. A superseding ADR must link back to the ADR it replaces.

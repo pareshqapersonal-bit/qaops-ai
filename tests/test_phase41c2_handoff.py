@@ -9,6 +9,7 @@ answer -> ready -> start-test-design -> pipeline via the `requirements` entry po
 
 import json
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -78,11 +79,40 @@ def _ws(tmp_path: Path) -> Path:
     return ws
 
 
+def _clarify_patches(*, return_value=None, side_effect=None):
+    """Patch the resilient-call seam (Phase 41C-4) for clarification LLM calls.
+
+    Patches both create_client (the mock client) and fallback_providers (a single
+    nvidia candidate), reproducing the old single-provider clarification behaviour.
+    """
+    from qaops.execution.registry import get_provider
+
+    kw = {}
+    if return_value is not None:
+        kw["return_value"] = return_value
+    if side_effect is not None:
+        kw["side_effect"] = side_effect
+    return (
+        patch("qaops.execution.resilient_call.create_client", **kw),
+        patch(
+            "qaops.execution.resilient_call.fallback_providers",
+            return_value=[get_provider("nvidia")],
+        ),
+    )
+
+
+@contextmanager
+def _clarify_llm(*, return_value=None, side_effect=None):
+    p1, p2 = _clarify_patches(return_value=return_value, side_effect=side_effect)
+    with p1, p2:
+        yield
+
+
 def _ready_service(tmp_path: Path) -> tuple[ClarificationService, Path]:
     ws = _ws(tmp_path)
     svc = ClarificationService(QAOpsSettings(output_dir=ws / "output"))
     client = MockLLMClient([_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
-    with patch("qaops.clarification.service.create_client", return_value=client):
+    with _clarify_llm(return_value=client):
         state = svc.start("run_1", ws / "input" / "t.md", ws)
     ans = [
         ClarificationAnswer(
@@ -116,7 +146,7 @@ class TestServiceHandoff:
         ws = _ws(tmp_path)
         svc = ClarificationService(QAOpsSettings(output_dir=ws / "output"))
         client = MockLLMClient([_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
-        with patch("qaops.clarification.service.create_client", return_value=client):
+        with _clarify_llm(return_value=client):
             svc.start("run_1", ws / "input" / "t.md", ws)
         with pytest.raises(ClarificationNotReadyError):
             svc.prepare_test_design(ws)  # blocker unanswered
@@ -171,7 +201,7 @@ class TestEndToEndHandoff:
 
         with TestClient(app) as c:
             # 1. start clarify=true run
-            with patch("qaops.clarification.service.create_client", side_effect=_clar_client):
+            with _clarify_llm(side_effect=_clar_client):
                 created = c.post(
                     "/api/v1/design",
                     files={"file": ("t.md", b"User checks store availability.", "text/markdown")},
@@ -204,9 +234,7 @@ class TestEndToEndHandoff:
         clar_client = MockLLMClient([_ANALYZER, _GAP_BLOCKER, _AGENT_ONE])
 
         with TestClient(app) as c:
-            with patch(
-                "qaops.clarification.service.create_client", side_effect=lambda _s: clar_client
-            ):
+            with _clarify_llm(side_effect=lambda _s: clar_client):
                 created = c.post(
                     "/api/v1/design",
                     files={"file": ("t.md", b"User checks store availability.", "text/markdown")},
