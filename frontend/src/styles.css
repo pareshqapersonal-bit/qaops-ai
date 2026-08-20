@@ -617,3 +617,116 @@ table.data tr:hover td {
 .ticket-form .field textarea::placeholder {
   color: var(--text-dim);
 }
+
+/* Clarification controls (Phase 41C-5 UI fix).
+   Purely presentational: alignment for the "Clarify requirements first" toggle,
+   and clear selected-state styling for every answer widget. No markup/value
+   changes - the submitted answer strings are unchanged. */
+
+/* --- "Clarify requirements first" toggle alignment --- */
+.clar-toggle {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 500;
+}
+.clar-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.clar-toggle .clar-toggle-hint {
+  grid-column: 2;
+  font-weight: 400;
+  font-size: 12px;
+}
+
+/* --- Answer widgets: shared option layout --- */
+.clar-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.clar-bool {
+  gap: 8px;
+}
+
+/* Boolean Yes/No: reuse the toggle-button idiom with a clear active state. */
+.clar-bool .btn.toggle {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  min-width: 84px;
+}
+.clar-bool .btn.toggle:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.clar-bool .btn.toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.clar-bool .btn.toggle.active::before {
+  content: "\2713\00a0"; /* check mark + nbsp */
+  font-weight: 700;
+}
+
+/* Single- and multi-select: full-width option "cards" that highlight clearly
+   when selected (border + tint + accented control), not colour alone. */
+.clar-radio,
+.clar-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  color: var(--text);
+}
+.clar-radio:hover,
+.clar-check:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.clar-radio input,
+.clar-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* Selected state: accent border + subtle accent tint. :has() lets the whole
+   row react to the native control, keeping the real radio/checkbox as the
+   source of truth (value unchanged) while making selection obvious. */
+.clar-radio:has(input:checked),
+.clar-check:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  font-weight: 600;
+}
+.clar-radio:has(input:focus-visible),
+.clar-check:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Text / numeric / date inputs: clear filled + focused state. */
+.clar-input {
+  width: 100%;
+}
+.clar-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.clar-input:not(:placeholder-shown) {
+  border-color: var(--border-strong);
+}
