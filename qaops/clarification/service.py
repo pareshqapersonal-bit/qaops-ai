@@ -19,6 +19,7 @@ and is intentionally absent here.
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING
 
 from qaops.clarification.agent import ClarificationAgent
@@ -330,6 +331,13 @@ class ClarificationService:
                     GapReport(gaps=new_gaps),
                     settings,
                 )
+                # The agent numbers each batch from Q-001; re-scope the new batch's
+                # ids to be unique across the whole run before merging, so no two
+                # questions share a question_id (which the frontend keys answers and
+                # radio groups on). Existing ids are unchanged; signatures are
+                # derived from gap_reference (not the id), so this does not affect
+                # duplicate-gap suppression.
+                new_questions = _reindex_new_questions(updated_questions, new_questions)
                 asked_signatures.extend(_signatures_for_questions(new_questions))
 
             # Merge: keep the answered/skipped prior questions, append the new batch.
@@ -464,6 +472,47 @@ def _merge_answers(
     for a in (*existing, *incoming):
         merged[a.question_id] = a  # latest wins
     return list(merged.values())
+
+
+# Matches the "Q-###" id convention (e.g. Q-001). Non-matching ids are left alone.
+_Q_ID_RE = re.compile(r"^Q-(\d+)$")
+
+
+def _reindex_new_questions(
+    existing: Sequence[ClarificationQuestion],
+    new_questions: Sequence[ClarificationQuestion],
+) -> list[ClarificationQuestion]:
+    """Give a newly generated batch globally-unique ``Q-###`` ids for the run.
+
+    The agent numbers every batch from Q-001, so merging a new round's batch onto
+    prior questions (41E-3) produces duplicate ids. This continues numbering from
+    the highest existing numeric id, so round 2 -> Q-004.. after round 1's Q-003,
+    etc. Existing question ids are NEVER changed; only the new batch is renumbered,
+    preserving each new question's order, content, priority, answer_type, options,
+    status, and gap_reference (only ``question_id`` changes). Any existing id that
+    does not match ``Q-###`` is ignored when computing the max (its value is left
+    untouched); a still-colliding new id is bumped past the running counter so the
+    result is always collision-free.
+    """
+    existing_ids = {q.question_id for q in existing}
+    highest = 0
+    for q in existing:
+        match = _Q_ID_RE.match(q.question_id)
+        if match:
+            highest = max(highest, int(match.group(1)))
+
+    reindexed: list[ClarificationQuestion] = []
+    counter = highest
+    for q in new_questions:
+        counter += 1
+        candidate = f"Q-{counter:03d}"
+        # Defensive: skip past any residual collision with a non-Q-### existing id.
+        while candidate in existing_ids:
+            counter += 1
+            candidate = f"Q-{counter:03d}"
+        existing_ids.add(candidate)
+        reindexed.append(q.model_copy(update={"question_id": candidate}))
+    return reindexed
 
 
 def _count_blocker_gaps(gap_report: GapReport) -> int:
