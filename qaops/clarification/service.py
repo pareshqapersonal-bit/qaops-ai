@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from qaops.clarification.agent import ClarificationAgent
 from qaops.clarification.enums import ClarificationStatus, QuestionStatus
+from qaops.clarification.gap_diff import diff_gaps, gap_signature
 from qaops.clarification.models import ClarificationState
 from qaops.clarification.readiness import compute_readiness
 from qaops.clarification.state_store import (
@@ -34,7 +35,7 @@ from qaops.execution.selector import StageRequirements
 from qaops.ingestion.evidence_sidecar import load_evidence_package
 from qaops.ingestion.registry import load_document
 from qaops.llm.prompt_loader import PromptLoader
-from qaops.models.domain import RequirementInput
+from qaops.models.domain import GapReport, RequirementAnalysisResult, RequirementInput
 from qaops.models.enums import GapSeverity
 from qaops.pipelines.chunking.analyzer import ChunkedRequirementAnalyzer
 from qaops.pipelines.test_design.gaps import GapAnalyzer
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
 
     from qaops.clarification.models import ClarificationAnswer, ClarificationQuestion
     from qaops.config import QAOpsSettings
-    from qaops.models.domain import GapReport, Requirement
+    from qaops.models.domain import Requirement
 
 # Decision 8(6): at most 5 clarification rounds before proceed-with-assumptions is
 # required/allowed. The cap is a safety valve against a never-ready loop.
@@ -56,6 +57,7 @@ MAX_CLARIFICATION_ROUNDS = 5
 # without re-running the analyzer or gap stages.
 _REQUIREMENTS_ARTIFACT = "analyzed_requirements.json"
 _CLARIFIED_REQUIREMENTS = "clarified_requirements.json"
+_SOURCE_TEXT_ARTIFACT = "analyzed_source_text.txt"
 
 
 class ClarificationNotFoundError(RuntimeError):
@@ -126,16 +128,82 @@ class ClarificationService:
         )
         return list(analyzed.requirements), analyzed.gap_report, analyzed.source_text
 
+    def _load_source_text(self, workspace: Path) -> str:
+        """Load the persisted analyzed source text for the iterative gap re-run.
+
+        Written by start(); absent only for runs created before 41E-3, in which
+        case an empty string is used (gap analysis still runs on the augmented
+        requirements, which carry the meaningful signal).
+        """
+        path = workspace / _SOURCE_TEXT_ARTIFACT
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    def _rerun_gap_analysis(
+        self,
+        requirements: Sequence[Requirement],
+        source_text: str,
+        settings: QAOpsSettings,
+    ) -> GapReport:
+        """Re-run ONLY the gap stage on (augmented) requirements - text-only.
+
+        Used by the iterative loop (41E-3): after answers augment the requirements,
+        gaps are recomputed to discover whether new meaningful gaps remain. This is
+        text-only (requirements already exist; no image analysis), so it excludes
+        image providers on an image run, matching Phase 40B, and never requires
+        NVIDIA. The analyzer is NOT re-run - requirement IDs/descriptions are
+        preserved (only assumptions are appended by augmentation).
+        """
+        prompts = PromptLoader(version=settings.prompt_version)
+        evidence = load_evidence_package(settings.output_dir.parent)
+        has_images = bool(evidence and evidence.images)
+        analyzed = RequirementAnalysisResult(
+            source_name="clarified-requirements",
+            source_text=source_text,
+            requirements=list(requirements),
+            gap_report=GapReport(gaps=[]),
+        )
+        result = resilient_structured_call(
+            settings=settings,
+            requirements=StageRequirements(
+                needs_structured_output=True,
+                free_only=_is_free_only(settings),
+                exclude_image_providers=has_images,
+            ),
+            run_call=lambda client: GapAnalyzer(client, prompts, settings).run(analyzed),
+        )
+        return result.gap_report
+
+    def _generate_questions(
+        self,
+        requirements: Sequence[Requirement],
+        gap_report: GapReport,
+        settings: QAOpsSettings,
+    ) -> list[ClarificationQuestion]:
+        """Generate a clarification question batch from a GapReport (text-only)."""
+        return resilient_structured_call(
+            settings=settings,
+            requirements=StageRequirements(
+                needs_structured_output=True,
+                free_only=_is_free_only(settings),
+            ),
+            run_call=lambda client: ClarificationAgent(
+                client, PromptLoader(version=settings.prompt_version), settings
+            ).generate_questions(list(requirements), gap_report),
+        )
+
     # -- start clarification --------------------------------------------------
 
     def start(self, run_id: str, input_path: Path, workspace: Path) -> ClarificationState:
         """Run bounded analysis, generate the first question batch, persist state."""
         settings = self._settings.model_copy(update={"output_dir": workspace / "output"})
-        requirements, gap_report, _ = self._analyze(input_path, settings)
+        requirements, gap_report, source_text = self._analyze(input_path, settings)
 
         # Persist the analyzed requirements so the 41C-2 handoff can apply answers and
         # feed them to the `requirements` entry point without re-running the analyzer.
         _write_requirements_artifact(workspace / _REQUIREMENTS_ARTIFACT, requirements)
+        # Persist the source text so the 41E-3 iterative loop can re-run gap analysis
+        # on augmented requirements without re-running the (possibly image) analyzer.
+        (workspace / _SOURCE_TEXT_ARTIFACT).write_text(source_text, encoding="utf-8")
 
         # The agent's question-generation call is text-only and also runs through
         # the resilient helper: a fresh agent (hence fresh client) per attempt, with
@@ -166,6 +234,7 @@ class ClarificationService:
             status=status,
             questions=questions,
             readiness=readiness,
+            asked_gap_signatures=_signatures_for_questions(questions),
         )
         write_clarification_state(workspace, state)
         return state
@@ -191,42 +260,91 @@ class ClarificationService:
         if state is None:
             raise ClarificationNotFoundError("No clarification in progress for this run.")
 
-        # Apply answers to the persisted questions (agent handles contradictions).
-        # Requirement augmentation itself lands in 41C-2 at handoff; here we track
-        # answered/skipped status and assumptions on the state. apply_answers and
-        # mark_skipped are pure (no LLM), so no client is created for this path.
+        settings = self._settings.model_copy(update={"output_dir": workspace / "output"})
+
+        # Augment the persisted requirements with the answers (preserves IDs and
+        # descriptions - apply_answers only appends assumptions). Requirements are
+        # reloaded from the artifact written at start(); if absent (older run), fall
+        # back to an empty list so status/assumption tracking still works.
+        artifact = workspace / _REQUIREMENTS_ARTIFACT
+        base_requirements = _load_requirements_artifact(artifact) if artifact.exists() else []
         agent = ClarificationAgent.for_answer_processing()
-        _, updated_questions = agent.apply_answers([], state.questions, answers)
+        augmented_requirements, updated_questions = agent.apply_answers(
+            base_requirements, state.questions, answers
+        )
 
         assumptions = list(state.assumptions)
-        status = ClarificationStatus.CLARIFYING
+        asked_signatures = list(state.asked_gap_signatures)
+        all_answers = [*state.answers, *answers]
+
         if proceed_with_assumptions:
+            # User accepts unresolved gaps: mark remaining questions skipped (their
+            # gaps become accepted assumptions) and go ready. No re-analysis.
             updated_questions, new_assumptions = agent.mark_skipped(updated_questions)
             assumptions.extend(new_assumptions)
-
-        readiness = compute_readiness(
-            updated_questions,
-            critical_gaps=0
-            if proceed_with_assumptions
-            else _unanswered_blocking(updated_questions),
-            requirements_total=state.readiness.requirements_total,
-        )
-        if readiness.ready:
-            status = ClarificationStatus.READY_FOR_TEST_DESIGN
-        elif state.iteration >= MAX_CLARIFICATION_ROUNDS and not proceed_with_assumptions:
-            raise ClarificationRoundLimitError(
-                f"Reached {MAX_CLARIFICATION_ROUNDS} clarification rounds; "
-                "resubmit with proceed_with_assumptions=true to continue."
+            readiness = compute_readiness(
+                updated_questions,
+                critical_gaps=0,
+                requirements_total=state.readiness.requirements_total,
             )
+            status = ClarificationStatus.READY_FOR_TEST_DESIGN
+            new_iteration = state.iteration
+        else:
+            # Iterative loop (41E-3): re-run gap analysis on the augmented
+            # requirements, classify against history, and generate a NEW question
+            # batch only for genuinely new gaps (never re-asking asked/accepted ones).
+            source_text = self._load_source_text(workspace)
+            gap_report = self._rerun_gap_analysis(augmented_requirements, source_text, settings)
+            diff = diff_gaps(
+                gap_report,
+                asked_signatures=asked_signatures,
+                accepted_signatures=_accepted_signatures(updated_questions),
+            )
+            new_gaps = [c.gap for c in diff.new]
+
+            new_questions: list[ClarificationQuestion] = []
+            if new_gaps:
+                new_questions = self._generate_questions(
+                    augmented_requirements,
+                    GapReport(gaps=new_gaps),
+                    settings,
+                )
+                asked_signatures.extend(_signatures_for_questions(new_questions))
+
+            # Merge: keep the answered/skipped prior questions, append the new batch.
+            updated_questions = [*updated_questions, *new_questions]
+
+            readiness = compute_readiness(
+                updated_questions,
+                critical_gaps=_unanswered_blocking(updated_questions),
+                requirements_total=state.readiness.requirements_total,
+            )
+            if readiness.ready:
+                status = ClarificationStatus.READY_FOR_TEST_DESIGN
+                new_iteration = state.iteration
+            else:
+                if state.iteration >= MAX_CLARIFICATION_ROUNDS:
+                    raise ClarificationRoundLimitError(
+                        f"Reached {MAX_CLARIFICATION_ROUNDS} clarification rounds; "
+                        "resubmit with proceed_with_assumptions=true to continue."
+                    )
+                # New meaningful gaps -> another round; otherwise stay clarifying.
+                status = (
+                    ClarificationStatus.RE_ANALYZING
+                    if new_questions
+                    else ClarificationStatus.CLARIFYING
+                )
+                new_iteration = state.iteration + 1
 
         new_state = state.model_copy(
             update={
                 "questions": updated_questions,
-                "answers": [*state.answers, *answers],
+                "answers": all_answers,
                 "assumptions": assumptions,
                 "readiness": readiness,
                 "status": status,
-                "iteration": state.iteration + (0 if readiness.ready else 1),
+                "iteration": new_iteration,
+                "asked_gap_signatures": asked_signatures,
             }
         )
         write_clarification_state(workspace, new_state)
@@ -263,12 +381,50 @@ class ClarificationService:
 
         target = workspace / _CLARIFIED_REQUIREMENTS
         _write_requirements_artifact(target, clarified)
+
+        # Record the explicit user Proceed decision persistently and traceably
+        # (41E-4). This is a clarification-state marker only; READY_FOR_TEST_DESIGN
+        # remains the authoritative run-lifecycle state. Idempotent: re-running the
+        # handoff re-persists PROCEEDED with no other effect.
+        if state.status is not ClarificationStatus.PROCEEDED:
+            write_clarification_state(
+                workspace,
+                state.model_copy(update={"status": ClarificationStatus.PROCEEDED}),
+            )
         return target
 
 
 def _is_free_only(settings: QAOpsSettings) -> bool:
     """Whether the free_only execution strategy is active (mirrors the executor)."""
     return settings.execution_strategy == "free_only"
+
+
+def _signatures_for_questions(
+    questions: Sequence[ClarificationQuestion],
+) -> list[str]:
+    """Gap signatures for a batch of questions (requirement_id + gap description).
+
+    A question's gap_reference is the originating gap's description (agent sets
+    gap_reference=gap.description), so the same signature the 41E-2 layer computes
+    from a Gap can be reconstructed from a persisted question - no extra state.
+    """
+    return [gap_signature(q.requirement_id, q.gap_reference) for q in questions]
+
+
+def _accepted_signatures(
+    questions: Sequence[ClarificationQuestion],
+) -> list[str]:
+    """Signatures of questions accepted as assumptions (status SKIPPED).
+
+    Skipped questions became assumptions (proceed-with-assumptions or explicit
+    skip); their gaps must never be re-asked, so they are fed to diff_gaps as
+    accepted_signatures and can never be reclassified NEW.
+    """
+    return [
+        gap_signature(q.requirement_id, q.gap_reference)
+        for q in questions
+        if q.status is QuestionStatus.SKIPPED
+    ]
 
 
 def _count_blocker_gaps(gap_report: GapReport) -> int:

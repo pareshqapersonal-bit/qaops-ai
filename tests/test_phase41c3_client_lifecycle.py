@@ -193,8 +193,10 @@ class TestBehaviorPreserved:
                 answer="true",
             )
         ]
-        # submit_answers is client-free (pure) - no create_client needed here.
-        new_state = svc.submit_answers(ws, ans)
+        # The answer round re-runs gap analysis (41E-3); supply an empty-gaps
+        # response via a fresh scripted factory so the run reaches READY.
+        with _clarify_patch(_ScriptedFactory([json.dumps({"gaps": []})])):
+            new_state = svc.submit_answers(ws, ans)
         assert new_state.readiness.ready is True
         assert new_state.status is ClarificationStatus.READY_FOR_TEST_DESIGN
 

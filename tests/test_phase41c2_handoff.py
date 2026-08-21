@@ -108,6 +108,9 @@ def _clarify_llm(*, return_value=None, side_effect=None):
         yield
 
 
+_GAP_NONE = json.dumps({"gaps": []})
+
+
 def _ready_service(tmp_path: Path) -> tuple[ClarificationService, Path]:
     ws = _ws(tmp_path)
     svc = ClarificationService(QAOpsSettings(output_dir=ws / "output"))
@@ -121,7 +124,10 @@ def _ready_service(tmp_path: Path) -> tuple[ClarificationService, Path]:
             answer="true",
         )
     ]
-    svc.submit_answers(ws, ans)
+    # The answer round re-runs gap analysis (41E-3); supply an empty-gaps response
+    # so the run reaches readiness with no further questions.
+    with _clarify_llm(return_value=MockLLMClient([_GAP_NONE])):
+        svc.submit_answers(ws, ans)
     return svc, ws
 
 
@@ -212,13 +218,17 @@ class TestEndToEndHandoff:
             clar = c.get(f"/api/v1/runs/{rid}/clarifications").json()
             assert clar["status"] == "clarifying"
             qid = clar["questions"][0]["question_id"]
-            # 3. answer the blocking question -> ready
-            answered = c.post(
-                f"/api/v1/runs/{rid}/clarifications/answers",
-                json={
-                    "answers": [{"question_id": qid, "answer_type": "boolean", "answer": "true"}]
-                },
-            ).json()
+            # 3. answer the blocking question -> ready. The answer round re-runs gap
+            # analysis (41E-3); supply an empty-gaps response so it becomes ready.
+            with _clarify_llm(side_effect=lambda _s: MockLLMClient([_GAP_NONE])):
+                answered = c.post(
+                    f"/api/v1/runs/{rid}/clarifications/answers",
+                    json={
+                        "answers": [
+                            {"question_id": qid, "answer_type": "boolean", "answer": "true"}
+                        ]
+                    },
+                ).json()
             assert answered["readiness"]["ready"] is True
             # 4. start test design -> pipeline runs via requirements entry point
             with patch("qaops.services.design_service.create_client", side_effect=_design_client):

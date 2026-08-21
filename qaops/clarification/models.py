@@ -116,3 +116,10 @@ class ClarificationState(_Strict):
     answers: list[ClarificationAnswer] = Field(default_factory=list)
     assumptions: list[Assumption] = Field(default_factory=list)
     readiness: ReadinessStatus = Field(default_factory=ReadinessStatus)
+    # Phase 41E-1, additive (default empty so pre-41E persisted state still loads):
+    # the signatures of gaps already turned into questions across all iterations,
+    # so a later 41E phase can suppress duplicate questions when gap analysis is
+    # re-run. A list (not a set) to stay JSON-serialisable and deterministic; order
+    # is insertion order. No behaviour reads or writes this yet - 41E-1 only defines
+    # the field.
+    asked_gap_signatures: list[str] = Field(default_factory=list)

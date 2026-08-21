@@ -154,7 +154,10 @@ class TestServiceAnswers:
                 answer="true",
             )
         ]
-        new_state = svc.submit_answers(ws, ans)
+        # The answer round now re-runs gap analysis (41E-3); supply an empty-gaps
+        # response so no new questions are generated and the run becomes ready.
+        with _clarify_llm(MockLLMClient([_GAP_NONE])):
+            new_state = svc.submit_answers(ws, ans)
         assert new_state.readiness.ready is True
         assert new_state.status is ClarificationStatus.READY_FOR_TEST_DESIGN
         assert new_state.questions[0].status is QuestionStatus.ANSWERED
@@ -168,7 +171,8 @@ class TestServiceAnswers:
                 answer="yes",
             )
         ]
-        svc.submit_answers(ws, ans)
+        with _clarify_llm(MockLLMClient([_GAP_NONE])):
+            svc.submit_answers(ws, ans)
         reloaded = load_clarification_state(ws)
         assert len(reloaded.answers) == 1
 
@@ -202,7 +206,12 @@ class TestServiceAnswers:
 
         capped = state.model_copy(update={"iteration": MAX_CLARIFICATION_ROUNDS})
         write_clarification_state(ws, capped)
-        with pytest.raises(ClarificationRoundLimitError):
+        # The re-run finds the blocker still open (a persisting gap), readiness stays
+        # false, and the cap is enforced. Supply the gap re-run response.
+        with (
+            pytest.raises(ClarificationRoundLimitError),
+            _clarify_llm(MockLLMClient([_GAP_BLOCKER])),
+        ):
             svc.submit_answers(ws, [])  # unanswered blocker, not proceeding
 
 

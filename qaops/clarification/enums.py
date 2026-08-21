@@ -56,6 +56,12 @@ class ClarificationStatus(StrEnum):
     CLARIFYING = "clarifying"
     RE_ANALYZING = "re_analyzing"
     READY_FOR_TEST_DESIGN = "ready_for_test_design"
+    # Phase 41E-1, additive: the user explicitly chose to proceed to test design
+    # (either after readiness or by accepting unresolved gaps). Distinct from
+    # READY_FOR_TEST_DESIGN, which is a computed/system state - PROCEEDED records an
+    # explicit human approval. Behaviour that acts on this status is a later 41E
+    # phase; here it is only defined.
+    PROCEEDED = "proceeded"
 
 
 class AssumptionSource(StrEnum):
@@ -63,3 +69,8 @@ class AssumptionSource(StrEnum):
 
     USER_SKIP = "user_skip"
     AGENT_DEFAULT = "agent_default"
+    # Phase 41E-1, additive: the user chose to proceed to test design with
+    # unresolved (blocking) gaps outstanding; each such gap becomes a recorded,
+    # traceable assumption. Distinct from USER_SKIP (skipping a recommended/optional
+    # question). Behaviour that produces this source is a later 41E phase.
+    USER_PROCEED_UNRESOLVED = "user_proceed_unresolved"

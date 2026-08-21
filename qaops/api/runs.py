@@ -37,6 +37,13 @@ class RunStatus(StrEnum):
     # READY_FOR_TEST_DESIGN. One-shot runs never enter these states.
     AWAITING_CLARIFICATION = "awaiting_clarification"
     READY_FOR_TEST_DESIGN = "ready_for_test_design"
+    # Phase 41E-1 (iterative clarification), additive: the user has explicitly
+    # approved proceeding to test design - separate from the computed
+    # READY_FOR_TEST_DESIGN so system readiness and human approval are distinct.
+    # The transition/lifecycle wiring for this status is a later 41E phase; here it
+    # is only defined so persisted/emitted values are stable. One-shot runs never
+    # enter this state.
+    USER_PROCEEDED = "user_proceeded"
 
 
 @dataclass
