@@ -149,14 +149,17 @@ class ClarificationService:
 
         Used by the iterative loop (41E-3): after answers augment the requirements,
         gaps are recomputed to discover whether new meaningful gaps remain. This is
-        text-only (requirements already exist; no image analysis), so it excludes
-        image providers on an image run, matching Phase 40B, and never requires
-        NVIDIA. The analyzer is NOT re-run - requirement IDs/descriptions are
-        preserved (only assumptions are appended by augmentation).
+        a plain text request: it does NOT set needs_images (requirements already
+        exist; no image analysis) and does NOT exclude image-capable providers, so
+        the normal text-provider chain is used AND an image-capable provider such as
+        NVIDIA remains available as a fallback. This matters when the deployment's
+        text providers are unavailable and NVIDIA is the only reachable one -
+        excluding it would leave no candidate and fail the whole answer round.
+        The analyzer is NOT re-run - requirement IDs/descriptions are preserved
+        (only assumptions are appended by augmentation). Phase 40B downstream-stage
+        image exclusion in the normal pipeline is unaffected by this.
         """
         prompts = PromptLoader(version=settings.prompt_version)
-        evidence = load_evidence_package(settings.output_dir.parent)
-        has_images = bool(evidence and evidence.images)
         analyzed = RequirementAnalysisResult(
             source_name="clarified-requirements",
             source_text=source_text,
@@ -168,7 +171,6 @@ class ClarificationService:
             requirements=StageRequirements(
                 needs_structured_output=True,
                 free_only=_is_free_only(settings),
-                exclude_image_providers=has_images,
             ),
             run_call=lambda client: GapAnalyzer(client, prompts, settings).run(analyzed),
         )
