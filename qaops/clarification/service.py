@@ -275,7 +275,10 @@ class ClarificationService:
 
         assumptions = list(state.assumptions)
         asked_signatures = list(state.asked_gap_signatures)
-        all_answers = [*state.answers, *answers]
+        # Merge answers latest-wins by question_id so a retry (after a failed LLM
+        # round persisted the checkpoint below) re-submitting the same answers
+        # replaces rather than duplicates them, keeping state.answers idempotent.
+        all_answers = _merge_answers(state.answers, answers)
 
         if proceed_with_assumptions:
             # User accepts unresolved gaps: mark remaining questions skipped (their
@@ -290,6 +293,24 @@ class ClarificationService:
             status = ClarificationStatus.READY_FOR_TEST_DESIGN
             new_iteration = state.iteration
         else:
+            # Persist-first durability fix: the iterative loop below makes LLM calls
+            # (gap re-run + question generation) that can be slow or fail. Write the
+            # merged answers and their answered-question statuses to state BEFORE any
+            # LLM work, so a timeout/provider failure never loses the user's answers
+            # and the run stays safely retryable (status left CLARIFYING). This
+            # checkpoint carries the same answers/questions the final write will,
+            # minus the not-yet-computed new batch/readiness, so a retry re-applies
+            # answers idempotently rather than duplicating them.
+            checkpoint = state.model_copy(
+                update={
+                    "questions": updated_questions,
+                    "answers": all_answers,
+                    "assumptions": assumptions,
+                    "status": ClarificationStatus.CLARIFYING,
+                }
+            )
+            write_clarification_state(workspace, checkpoint)
+
             # Iterative loop (41E-3): re-run gap analysis on the augmented
             # requirements, classify against history, and generate a NEW question
             # batch only for genuinely new gaps (never re-asking asked/accepted ones).
@@ -425,6 +446,24 @@ def _accepted_signatures(
         for q in questions
         if q.status is QuestionStatus.SKIPPED
     ]
+
+
+def _merge_answers(
+    existing: Sequence[ClarificationAnswer],
+    incoming: Sequence[ClarificationAnswer],
+) -> list[ClarificationAnswer]:
+    """Merge answer batches latest-wins by question_id, preserving first-seen order.
+
+    Keeps state.answers idempotent across retries: if the persist-first checkpoint
+    saved a batch and the user resubmits the same questions (e.g. after an LLM
+    failure), the resubmission replaces the prior answer for that question instead
+    of appending a duplicate. Order follows first appearance so the answer list
+    stays stable/deterministic.
+    """
+    merged: dict[str, ClarificationAnswer] = {}
+    for a in (*existing, *incoming):
+        merged[a.question_id] = a  # latest wins
+    return list(merged.values())
 
 
 def _count_blocker_gaps(gap_report: GapReport) -> int:
