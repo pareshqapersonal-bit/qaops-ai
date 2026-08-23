@@ -64,19 +64,30 @@ class TestNvidiaFreeClassification:
 
 class TestFreeOnlyImageSelection:
     def test_free_only_image_run_selects_nvidia(self) -> None:
+        # Phase B: gemini-flash is now a free, image-capable candidate. Under the
+        # existing (unchanged) provider chain gemini precedes nvidia, so the first
+        # capable provider selected for the image stage is gemini - both are eligible
+        # and this is the approved capability-driven reality (no NVIDIA-first rule).
         ex = _image_ex(
             _providers(),
             QAOpsSettings(provider="nvidia", execution_strategy="free_only"),
         )
-        assert ex._select_first_provider().name == "nvidia"
+        first = ex._select_first_provider().name
+        assert first in {"gemini", "nvidia"}  # an image-capable, free provider
+        # gemini appears earlier in the existing chain, so it is preferred.
+        assert first == "gemini"
 
     def test_free_only_image_run_does_not_fall_back_to_text_only(self) -> None:
+        # Image runs never fall back to text-only providers. Phase B makes gemini-flash
+        # image-capable, so the image-capable set is now {nvidia, gemini}; every OTHER
+        # (genuinely text-only) provider still yields no image candidate.
         ex = _image_ex(
             _providers(),
             QAOpsSettings(provider="nvidia", execution_strategy="free_only"),
         )
+        image_capable = {"nvidia", "gemini"}
         for provider in _providers():
-            if provider.name != "nvidia":
+            if provider.name not in image_capable:
                 assert ex._candidates(provider) == []
 
 

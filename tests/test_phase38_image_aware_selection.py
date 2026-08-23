@@ -137,20 +137,23 @@ class TestExecutorSelection:
         assert ex._select_first_provider().name == "nvidia"
 
     def test_image_run_without_capable_provider_fails_clearly(self) -> None:
-        providers = [get_provider("gemini"), get_provider("groq")]
+        # gemini-flash is now image-capable (Phase B), so a "no image provider"
+        # case must use providers that are genuinely text-only.
+        providers = [get_provider("groq"), get_provider("openrouter")]
         ex = _image_executor(providers, self._settings())
         with pytest.raises(StageError) as exc:
             ex._select_first_provider()
         message = str(exc.value)
         assert "image evidence" in message
-        assert "nvidia" in message.lower()
 
     def test_image_run_never_recovers_onto_text_only(self) -> None:
-        # With image capability required, text-only providers yield no candidates,
-        # so they can never be selected as recovery targets.
+        # With image capability required, genuinely text-only providers yield no
+        # candidates, so they can never be selected as recovery targets. gemini-flash
+        # is now image-capable (Phase B), so it DOES yield an image candidate - the
+        # image stage recovers onto it, never onto a text-only provider.
         providers = [get_provider("gemini"), get_provider("groq")]
         ex = _image_executor(providers, self._settings())
-        assert ex._candidates(get_provider("gemini")) == []  # type: ignore[arg-type]
+        assert ex._candidates(get_provider("gemini")) != []  # type: ignore[arg-type]
         assert ex._candidates(get_provider("groq")) == []  # type: ignore[arg-type]
 
     def test_text_run_uses_existing_fallback_unchanged(self) -> None:
@@ -191,7 +194,7 @@ class _CapturingMock(MockLLMClient):
 
 
 class TestEndToEndSelection:
-    def test_image_run_selects_nvidia_and_transport_reaches_client(
+    def test_image_run_selects_capable_provider_and_transport_reaches_client(
         self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from unittest.mock import patch
@@ -232,15 +235,18 @@ class TestEndToEndSelection:
                 QAOpsSettings(provider="nvidia", output_dir=ws / "output"),
             )
 
-        # Phase 40B: the image-consuming stage ran on nvidia; downstream stages ran
-        # on a text provider (nvidia excluded downstream).
-        assert "nvidia" in captured["providers"]  # analyzer used nvidia
-        assert any(p != "nvidia" for p in captured["providers"])  # downstream on text
-        # The image transport reached the nvidia client's (analyzer) request,
-        # byte-identical.
-        nvidia_client = clients_by_provider["nvidia"]
-        assert nvidia_client.first_request is not None
-        images = nvidia_client.first_request.messages[0].images
+        # Capability-driven (Phase C): the image-consuming stage runs on an
+        # image-capable provider selected by the existing chain order (gemini
+        # precedes nvidia, so gemini leads). NVIDIA is no longer forced, and image-
+        # capable providers are no longer excluded downstream.
+        providers_used = captured["providers"]
+        image_capable_used = [p for p in providers_used if p in {"nvidia", "gemini"}]
+        assert image_capable_used  # the image stage ran on an image-capable provider
+        # The image transport reached that image-analyzing client byte-identically.
+        image_provider = image_capable_used[0]
+        image_client = clients_by_provider[image_provider]
+        assert image_client.first_request is not None
+        images = image_client.first_request.messages[0].images
         assert len(images) == 1
         assert base64.b64decode(images[0].data) == png
 

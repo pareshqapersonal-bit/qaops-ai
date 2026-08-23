@@ -8,6 +8,31 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 ## [0.18.0-dev] - unreleased
 
+### Phase C: capability-driven provider eligibility (removes image-provider exclusion)
+
+Removes the obsolete `exclude_image_providers` rule so provider selection is purely
+capability-driven: a provider/model is eligible for a stage if and only if it satisfies
+that stage's real requirements (text, images, structured output, context/output size).
+Capability determines eligibility, the existing provider chain order determines
+preference, and the existing resilient mechanism handles failover — with no
+provider-specific branching and no hard-coded NVIDIA→Gemini chain.
+
+Building on Phase A (Gemini client image support) and Phase B (`gemini-flash-latest`
+marked image-capable), a multimodal provider now participates in both image-consuming
+stages and downstream text/structured stages, instead of being excluded from the latter
+merely for supporting images. Image stages still require image capability, so text-only
+providers remain correctly excluded from them; text/PRD runs are functionally unchanged;
+an image run no longer restricts downstream stages to image providers. Because the chain
+order is unchanged, Gemini may be selected before NVIDIA for image stages — this is
+accepted, and failover moves generically to the next capable provider.
+
+Production changes are limited to `qaops/execution/selector.py` (field + filter removed),
+`qaops/execution/executor.py` (`_requirements()` sets only `needs_images`; synthetic
+exclusion guards removed), and `qaops/clarification/service.py` (gap-analysis call drops
+the exclusion; initial image analysis keeps `needs_images`). The Gemini client, Gemini
+catalogue, NVIDIA client, provider priorities, chain order, image transport, and all
+clarification state/agent/readiness logic are unchanged. See ADR-064.
+
 ### Phase 41C-4: shared candidate builder + clarification resilient-call
 
 Gives the clarification path (analyzer -> gap -> agent) the same policy-driven provider

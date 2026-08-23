@@ -59,14 +59,15 @@ class TestReanalysisRequirements:
         # Text request: no image need AND no image-provider exclusion (so an
         # image-capable provider stays available as a fallback).
         assert req.needs_images is False
-        assert req.exclude_image_providers is False
+        # Phase C: exclude_image_providers removed - the request is purely
+        # capability-driven (no image need, no image-provider exclusion).
 
     def test_question_generation_uses_text_path(self, tmp_path: Path) -> None:
         svc, _ws_ = _svc(tmp_path)
         settings = QAOpsSettings(output_dir=tmp_path / "out")
         req = self._capture(svc._generate_questions, [], GapReport(gaps=[]), settings)
         assert req.needs_images is False
-        assert req.exclude_image_providers is False
+        # Phase C: no exclude_image_providers - capability-driven text request.
 
     def test_initial_image_analysis_still_requires_images(self, tmp_path: Path) -> None:
         # With image evidence present, the INITIAL requirement analysis must still
@@ -112,16 +113,16 @@ class TestFallbackSelection:
         assert len(cands) >= 1
         assert any(c.model.provider == "nvidia" for c in cands)
 
-    def test_old_exclusion_would_have_left_no_candidate(self) -> None:
-        # Regression guard documenting the bug: excluding image providers with only
-        # NVIDIA reachable leaves zero candidates (the 500 cause). The new routing
-        # must NOT do this.
+    def test_nvidia_only_env_still_yields_text_candidate(self) -> None:
+        # Capability-driven (Phase C): with only NVIDIA reachable, a text/structured
+        # call still yields NVIDIA as a candidate - image capability is never a
+        # reason to exclude it. (This is what previously broke: the old
+        # exclude_image_providers rule dropped NVIDIA here, leaving zero candidates.)
         models = self._models([get_provider("nvidia")])
-        excluded_req = StageRequirements(needs_structured_output=True, exclude_image_providers=True)
-        cands = select_candidates(
-            models, excluded_req, limit=10, configured="nvidia", excluded=set()
-        )
-        assert len(cands) == 0  # proves why the exclusion was wrong for clarification
+        req = StageRequirements(needs_structured_output=True)
+        cands = select_candidates(models, req, limit=10, configured="nvidia", excluded=set())
+        assert len(cands) >= 1
+        assert any(c.model.provider == "nvidia" for c in cands)
 
     def test_text_run_ranks_text_providers_first(self) -> None:
         # With a full provider set, the text re-analysis request still prefers text

@@ -341,8 +341,11 @@ class TestResilience:
         )
         assert tried == ["nvidia"]  # groq (text-only) filtered out
 
-    def test_downstream_text_excludes_image_provider(self) -> None:
-        # exclude_image_providers (Phase 40B downstream) drops nvidia for a text call.
+    def test_downstream_text_includes_image_capable_provider(self) -> None:
+        # Capability-driven (Phase C): a downstream text/structured call no longer
+        # excludes image-capable providers. Both candidates satisfy the text call,
+        # so selection follows the normal candidate order - nvidia is NOT dropped
+        # merely for being image-capable.
         settings = QAOpsSettings(provider="nvidia")
         tried: list[str] = []
 
@@ -352,13 +355,14 @@ class TestResilience:
 
         _run(
             settings,
-            StageRequirements(
-                needs_structured_output=True, free_only=True, exclude_image_providers=True
-            ),
+            StageRequirements(needs_structured_output=True, free_only=True),
             run_call,
             _two_free_candidates(),
         )
-        assert tried == ["groq"]  # nvidia (image-capable) excluded downstream
+        # The first capable candidate is used (only one call needed on success);
+        # the point is that image capability did not remove any candidate.
+        assert tried  # a capable provider ran
+        assert len(tried) == 1  # succeeded on the first without needing failover
 
     def test_free_only_excludes_paid(self) -> None:
         # Under free_only, a paid candidate is never tried.

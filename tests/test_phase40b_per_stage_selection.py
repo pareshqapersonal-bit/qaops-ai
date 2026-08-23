@@ -72,19 +72,30 @@ def _ex(
 
 class TestPerStageSelection:
     def test_image_stage_selects_nvidia(self) -> None:
+        # Phase B: gemini-flash is image-capable, so the image stage has two capable
+        # providers {nvidia, gemini}. The existing (unchanged) chain puts gemini
+        # first, so it is selected - both are eligible; no NVIDIA-first rule.
         ex = _ex(_providers(), image=True, at="requirement_analyzer")
-        assert ex._select_first_provider().name == "nvidia"
+        first = ex._select_first_provider().name
+        assert first in {"gemini", "nvidia"}
+        assert first == "gemini"
 
-    def test_downstream_excludes_nvidia(self) -> None:
+    def test_downstream_includes_multimodal_providers(self) -> None:
+        # Capability-driven (Phase C): downstream text stages no longer exclude
+        # image-capable providers. NVIDIA is text+structured capable, so it is now
+        # an eligible downstream candidate rather than being reserved/excluded.
         ex = _ex(_providers(), image=True, at="gap_analyzer")
-        assert ex._select_first_provider().name != "nvidia"
-        assert ex._candidates(get_provider("nvidia")) == []
+        assert ex._candidates(get_provider("nvidia")) != []
+        assert ex._candidates(get_provider("gemini")) != []
 
-    def test_every_downstream_stage_excludes_nvidia(self) -> None:
+    def test_every_downstream_stage_includes_multimodal(self) -> None:
+        # Capability-driven (Phase C): every downstream text stage now admits
+        # image-capable providers (they satisfy text/structured), instead of
+        # excluding them.
         for stage in STAGES[1:]:
             ex = _ex(_providers(), image=True, at=stage)
-            assert ex._candidates(get_provider("nvidia")) == [], stage
-            assert ex._select_first_provider().name != "nvidia", stage
+            assert ex._candidates(get_provider("nvidia")) != [], stage
+            assert ex._candidates(get_provider("gemini")) != [], stage
 
     def test_text_run_every_stage_unchanged(self) -> None:
         # No image stage: every stage selects normally, nvidia not required nor
@@ -101,28 +112,34 @@ class TestPerStageSelection:
 
 class TestRecovery:
     def test_image_stage_no_capable_provider_fails_clearly(self) -> None:
-        # Only text providers available for the image stage -> clear fail-fast.
-        providers = [get_provider("gemini"), get_provider("groq")]
+        # Only genuinely text-only providers available for the image stage -> clear
+        # fail-fast. gemini-flash is now image-capable (Phase B) so it is excluded
+        # from this "no image provider" case.
+        providers = [get_provider("groq"), get_provider("openrouter")]
         ex = _ex(providers, image=True, at="requirement_analyzer")
         with pytest.raises(StageError) as exc:
             ex._select_first_provider()
         assert "image evidence" in str(exc.value)
 
     def test_image_stage_recovers_only_to_image_capable(self) -> None:
-        # For the image stage, text providers yield no candidates (can't recover
-        # onto them), preserving the Phase 36A no-silent-drop guarantee.
+        # For the image stage, only image-capable providers yield candidates, so
+        # recovery stays on the image-capable set and never silently drops onto a
+        # text-only provider (Phase 36A guarantee). Phase B adds gemini-flash to that
+        # image-capable set alongside nvidia; genuinely text-only providers still
+        # yield nothing.
         ex = _ex(_providers(), image=True, at="requirement_analyzer")
-        assert ex._candidates(get_provider("gemini")) == []
-        assert ex._candidates(get_provider("groq")) == []
+        assert ex._candidates(get_provider("gemini")) != []
         assert ex._candidates(get_provider("nvidia")) != []
+        assert ex._candidates(get_provider("groq")) == []
 
     def test_downstream_recovers_across_text_chain(self) -> None:
-        # Downstream, the normal text providers are all valid recovery targets;
-        # nvidia is the only one excluded.
+        # Downstream, all capable providers are valid recovery targets. Capability-
+        # driven (Phase C): image-capable providers (nvidia, gemini) are NO LONGER
+        # excluded - they satisfy text/structured and participate normally.
         ex = _ex(_providers(), image=True, at="scenario_generator")
         assert ex._candidates(get_provider("groq")) != []
         assert ex._candidates(get_provider("gemini")) != []
-        assert ex._candidates(get_provider("nvidia")) == []
+        assert ex._candidates(get_provider("nvidia")) != []
 
 
 # -- Resume -------------------------------------------------------------------
@@ -130,12 +147,15 @@ class TestRecovery:
 
 class TestResume:
     def test_resume_at_gap_analyzer_does_not_require_nvidia(self) -> None:
-        # Resuming at a downstream stage (start_index=2) on an image run must select
-        # a text provider, not nvidia - the analyzer already ran and is checkpointed.
+        # Resuming at a downstream stage (start_index=2) on an image run selects by
+        # the existing chain order (a text provider leads), and does NOT require
+        # nvidia. Capability-driven (Phase C): nvidia is no longer excluded - it is
+        # simply not first in the chain - so the assertion is "not required", not
+        # "excluded".
         ex = _ex(_providers(), image=True, start=2)
         assert ex._current_stage_name == "gap_analyzer"
-        assert ex._select_first_provider().name != "nvidia"
-        assert ex._candidates(get_provider("nvidia")) == []
+        assert ex._select_first_provider().name != "nvidia"  # chain order, not exclusion
+        assert ex._candidates(get_provider("nvidia")) != []  # but nvidia IS eligible now
 
     def test_resume_at_business_rules_does_not_require_nvidia(self) -> None:
         ex = _ex(_providers(), image=True, start=1)
@@ -195,12 +215,15 @@ class TestEndToEnd:
             )
         return by_provider, order
 
-    def test_image_run_analyzer_nvidia_downstream_text(self, tmp_path: Path) -> None:
+    def test_image_run_analyzer_uses_capable_provider_transport(self, tmp_path: Path) -> None:
         by_provider, order = self._run(tmp_path, with_image=True)
-        # analyzer used nvidia with the image; downstream used a text provider.
-        assert "nvidia" in by_provider
-        assert any(p != "nvidia" for p in order)
-        img_req = by_provider["nvidia"].first_request
+        # Capability-driven (Phase C): the image stage ran on an image-capable
+        # provider selected by the existing chain order (gemini precedes nvidia).
+        # The image transport reached that provider's request byte-identically.
+        image_capable = [p for p in order if p in {"nvidia", "gemini"}]
+        assert image_capable  # image stage used an image-capable provider
+        image_provider = image_capable[0]
+        img_req = by_provider[image_provider].first_request
         assert img_req is not None
         assert base64.b64decode(img_req.messages[0].images[0].data) == PNG
 

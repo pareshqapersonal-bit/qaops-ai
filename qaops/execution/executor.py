@@ -317,10 +317,6 @@ class AdaptiveExecutor:
             # synthetic candidate (e.g. a text-only provider used as failover).
             if self._requirements().needs_images and not candidate.images_supported:
                 return []
-            # Phase 40B: a downstream text stage of an image run must not run on
-            # the image provider (NVIDIA), even synthetically.
-            if self._requirements().exclude_image_providers and candidate.images_supported:
-                return []
             return [candidate]
         scored = select_candidates(
             models,
@@ -349,8 +345,6 @@ class AdaptiveExecutor:
                 return []
             if self._requirements().needs_images and not candidate.images_supported:
                 return []
-            if self._requirements().exclude_image_providers and candidate.images_supported:
-                return []
             return [candidate]
         scored = select_candidates(
             models,
@@ -362,25 +356,24 @@ class AdaptiveExecutor:
         return [entry.model for entry in scored]
 
     def _requirements(self) -> StageRequirements:
-        """Per-stage requirements (Phase 40B).
+        """Per-stage requirements (capability-driven).
 
-        Text runs (no image stage) are unchanged: needs_images=False and no
-        exclusion, so selection and fallback match pre-image behavior exactly.
-        For an image run, the image-consuming stage requires an image-capable
-        provider (needs_images=True); every other stage excludes the image
-        provider so downstream text stages never select NVIDIA.
+        Text runs (no image stage) are unchanged: needs_images=False, so selection
+        and fallback match pre-image behavior exactly. For an image run, ONLY the
+        image-consuming stage requires an image-capable provider (needs_images=True);
+        every other stage expresses only its real requirements (text/structured via
+        the defaults) and does NOT exclude image-capable providers. A multimodal
+        provider is therefore eligible wherever its capabilities satisfy the stage -
+        image stage AND downstream text stages - selected by the existing chain
+        order and failover, with no provider-specific rules.
         """
-        needs_images = False
-        exclude_image = False
-        if self._image_stage_name is not None:
-            if self._current_stage_name == self._image_stage_name:
-                needs_images = True
-            else:
-                exclude_image = True
+        needs_images = (
+            self._image_stage_name is not None
+            and self._current_stage_name == self._image_stage_name
+        )
         return StageRequirements(
             free_only=self._strategy.requires_free,
             needs_images=needs_images,
-            exclude_image_providers=exclude_image,
         )
 
     def _synthetic_candidate(self, provider: str, name: str) -> ModelInfo:

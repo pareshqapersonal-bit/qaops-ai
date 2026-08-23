@@ -104,7 +104,13 @@ _STATIC_MODELS: dict[str, tuple[ModelInfo, ...]] = {
             max_output_tokens=8_192,
             free=True,
             priority=10,
-            notes="Stable alias to the current Gemini Flash GA model",
+            images_supported=True,
+            notes=(
+                "Stable alias to the current Gemini Flash GA model. Natively "
+                "multimodal: the SAME model serves text, image, and structured "
+                "stages (model-level capability; the provider-level images flag "
+                "stays False so only this model is image-eligible)."
+            ),
         ),
         ModelInfo(
             name="gemini-flash-lite-latest",

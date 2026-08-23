@@ -121,9 +121,10 @@ class ClarificationService:
             requirements=StageRequirements(
                 needs_structured_output=True,
                 free_only=_is_free_only(settings),
-                # Gap analysis is text-only; on an image run it must exclude the
-                # image provider downstream, matching Phase 40B.
-                exclude_image_providers=has_images,
+                # Gap analysis is text-only (no image payload), so it expresses only
+                # its real requirements. Capability-driven: image-capable providers
+                # are NOT excluded - a multimodal provider may serve this stage if
+                # the existing chain/order selects it.
             ),
             run_call=lambda client: GapAnalyzer(client, prompts, settings).run(analyzed),
         )

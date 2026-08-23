@@ -12,7 +12,9 @@ construction and fails fast with ConfigurationError when absent
 injected for testing.
 """
 
+import base64
 import os
+from typing import TYPE_CHECKING
 
 from google import genai
 from google.genai import errors as genai_errors
@@ -23,7 +25,32 @@ from qaops.llm.errors import LLMProviderError
 from qaops.llm.models import LLMRequest, LLMResponse, LLMUsage
 from qaops.llm.timeouts import normalize_timeout_message
 
+if TYPE_CHECKING:
+    from qaops.llm.models import LLMMessage
+
 _KEY_ENV_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+
+
+def _message_parts(message: "LLMMessage") -> list[genai_types.Part]:
+    """Build the Gemini Part list for one message: text first, then any images.
+
+    Text-only messages produce a single text Part - byte-identical to the prior
+    behavior. When the message carries ImageParts (the shared LLMMessage.images
+    transport, unchanged), each is appended as a Gemini inline-data Part via the
+    SDK's native Part.from_bytes: the base64 ImagePart.data is decoded to raw bytes
+    (exact, no re-encode) and media_type is passed through as mime_type. Image list
+    order is preserved, matching the NVIDIA client. ImagePart/EvidencePackage/
+    LLMMessage are only read here, never modified.
+    """
+    parts: list[genai_types.Part] = [genai_types.Part(text=message.content)]
+    for image in message.images:
+        parts.append(
+            genai_types.Part.from_bytes(
+                data=base64.b64decode(image.data),
+                mime_type=image.media_type,
+            )
+        )
+    return parts
 
 
 def _resolve_api_key() -> str:
@@ -65,6 +92,18 @@ class GeminiClient:
     def model(self) -> str:
         return self._model
 
+    @property
+    def supports_images(self) -> bool:
+        """Gemini can consume image inputs via the SDK's inline-data parts.
+
+        The structured-output layer gates image requests on this flag. Gemini's
+        Flash models are natively multimodal, so the client can genuinely transport
+        image payloads (see _message_parts). Whether a given run actually routes
+        images to Gemini is decided upstream by capability-based candidate selection
+        (a model's images_supported flag), not here.
+        """
+        return True
+
     def complete(self, request: LLMRequest) -> LLMResponse:
         # Gemini's conversation roles are "user" and "model". The variable
         # element type is the SDK ContentUnionDict union because list
@@ -72,7 +111,7 @@ class GeminiClient:
         contents: list[genai_types.ContentUnionDict] = [
             genai_types.Content(
                 role="user" if message.role == "user" else "model",
-                parts=[genai_types.Part(text=message.content)],
+                parts=_message_parts(message),
             )
             for message in request.messages
         ]
