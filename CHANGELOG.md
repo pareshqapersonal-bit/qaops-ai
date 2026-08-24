@@ -8,6 +8,25 @@ Pre-1.0, minor versions may contain breaking changes; each is called out explici
 
 ## [0.18.0-dev] - unreleased
 
+### Phase QA-Manual-1: manual-QA-focused clarification prompts
+
+Refines the two clarification prompts so the gap engine reasons like an experienced
+manual QA analyst rather than an automation/frontend engineer. `gap_analyzer_v1.md` now
+evaluates requirements for manual-QA coverage across functional behavior, UI/UX states
+(empty/loading/error/disabled/selected), responsive/device, navigation/user journey,
+data/content states (zero/one/many, boundaries), error/negative behavior, business
+rules, and integration/dependencies - each only when it materially affects coverage and
+a tester cannot derive it from the document, design, or evidence. Both prompts add an
+explicit guardrail against implementation/automation-location questions (CSS selectors,
+DOM, data-testid, z-index, CSS values, internal structure, locators) unless the
+requirement makes such a value part of the acceptance criteria, and prefer validating
+against an approved design over asking for visual specifics. `clarification_agent_v1.md`
+keeps its yes/no-first, least-typing answer-type strategy unchanged.
+
+Prompt-content only: the JSON output contract, placeholders, severity vocabulary, answer
+types, severity->priority mapping, readiness, state, persistence, and all clarification
+machinery are unchanged. No code, schema, or provider/capability (Phase C) changes.
+
 ### Phase C: capability-driven provider eligibility (removes image-provider exclusion)
 
 Removes the obsolete `exclude_image_providers` rule so provider selection is purely
