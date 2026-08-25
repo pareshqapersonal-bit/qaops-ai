@@ -42,10 +42,14 @@ export function ClarificationPanel({
   );
 
   const blockingRemaining = data.readiness.blocking_unanswered;
-  // If only recommended/optional questions are unanswered, the user may proceed
-  // with assumptions rather than answering everything.
-  const canProceedWithAssumptions =
-    !data.readiness.ready && blockingRemaining === 0;
+  // Proceeding with assumptions is a valid escape hatch whenever the run is not
+  // ready - including when blocking questions remain (e.g. the clarification round
+  // cap has been reached). The backend's proceed_with_assumptions path marks every
+  // remaining question (blocking included) as an accepted assumption and moves the
+  // run to ready, so the button must be available in that state, not only when the
+  // sole remaining questions are recommended/optional.
+  const canProceedWithAssumptions = !data.readiness.ready;
+  const proceedBypassesBlocking = blockingRemaining > 0;
 
   if (ordered.length === 0) {
     return (
@@ -99,7 +103,11 @@ export function ClarificationPanel({
             className="btn secondary"
             onClick={() => onSubmit(true)}
             disabled={submitting}
-            title="Proceed without answering the remaining recommended/optional questions; assumptions will be recorded."
+            title={
+              proceedBypassesBlocking
+                ? "Proceed without answering the remaining questions (including blocking ones); each will be recorded as an assumption."
+                : "Proceed without answering the remaining recommended/optional questions; assumptions will be recorded."
+            }
           >
             Proceed with assumptions
           </button>

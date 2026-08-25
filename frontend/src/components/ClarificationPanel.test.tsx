@@ -179,9 +179,31 @@ describe("ClarificationPanel", () => {
     expect(screen.getByRole("alert").textContent).toContain("Contradictory answers");
   });
 
-  it("offers proceed-with-assumptions only when no blocking questions remain", () => {
-    // blocking remaining -> no proceed button
-    renderPanel(response());
+  it("offers proceed-with-assumptions when blocking questions remain (round cap)", () => {
+    // Blocking questions still open (e.g. the clarification round cap was reached):
+    // the proceed-with-assumptions button MUST be available so the user can move
+    // forward, accepting the remaining gaps as assumptions.
+    const { onSubmit } = renderPanel(response()); // default: blocking_unanswered: 1
+    const proceed = screen.getByRole("button", {
+      name: /proceed with assumptions/i,
+    });
+    fireEvent.click(proceed);
+    expect(onSubmit).toHaveBeenCalledWith(true);
+  });
+
+  it("hides proceed-with-assumptions once the run is ready", () => {
+    const data = response({
+      readiness: {
+        ready: true,
+        requirements_total: 1,
+        blocking_unanswered: 0,
+        recommended_unanswered: 0,
+        optional_unanswered: 0,
+        critical_gaps: 0,
+        blocking_reasons: [],
+      },
+    });
+    renderPanel(data);
     expect(
       screen.queryByRole("button", { name: /proceed with assumptions/i }),
     ).not.toBeInTheDocument();
