@@ -207,7 +207,11 @@ class TestModelFailover:
         assert result.trace == [f"scenarios@{GEM_FIRST}"]
         assert len(agent.report.model_switches) >= 1
         assert agent.report.provider_switches == [("scenarios", "openrouter", "gemini")]
-        assert agent.report.health["openrouter"].available is False
+        # Phase G: exhausting the per-stage model budget is STAGE-LOCAL - it must
+        # NOT run-disable the provider (that would leak into later stages).
+        # insufficient_credit is a model-local failure, so provider health stays
+        # available; the provider was skipped this stage via the stage-local set.
+        assert agent.report.health["openrouter"].available is True
 
     def test_model_unavailable_is_dropped_and_next_tried(self) -> None:
         factory, _ = make_factory([("scenarios", {OR_FIRST: "Error code: 404 - unknown model"})])

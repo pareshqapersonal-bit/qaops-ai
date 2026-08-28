@@ -217,8 +217,23 @@ class AdaptiveExecutor:
         self.report = ExecutionReport(
             health={info.name: ProviderHealth(name=info.name) for info in providers}
         )
-        # Models already ruled out this run, keyed by provider.
+        # Models ruled out for the REMAINDER OF THE RUN, keyed by provider. Only
+        # genuinely run-sticky model conditions land here (today none: every
+        # disables_model FailureKind is stage-local per Phase G, so this stays a
+        # structural hook rather than being populated - kept so a future run-sticky
+        # model condition has a home without re-plumbing).
         self._excluded: dict[str, set[str]] = {info.name: set() for info in providers}
+        # Models ruled out for the CURRENT STAGE only (transient/model-local
+        # failures: server error, invalid/empty output, context limit, model-
+        # unavailable, insufficient credit). Reset at each stage boundary so a
+        # model that flaked in one stage is reconsidered in the next (Phase G).
+        self._excluded_stage: dict[str, set[str]] = {info.name: set() for info in providers}
+        # Providers skipped for the CURRENT STAGE only because their per-stage model
+        # budget (max_models_per_provider_per_stage) was spent. Reset each stage, so
+        # exhausting the budget in one stage does NOT retire the provider for the run
+        # (Phase G - the scope-leak fix). Run-sticky provider disables live in
+        # report.health.available instead.
+        self._provider_stage_disabled: set[str] = set()
         # Distinct models tried on each provider for the CURRENT stage; reset at
         # each stage boundary. Enforces the per-provider-per-stage model cap.
         self._models_tried: dict[str, set[str]] = {info.name: set() for info in providers}
@@ -291,6 +306,13 @@ class AdaptiveExecutor:
             for a in self.report.attempts
         ]
 
+    def _ruled_out(self, provider: str) -> set[str]:
+        """Models unavailable for THIS stage: run-sticky exclusions plus the
+        stage-local ones. Read at every candidate-selection site so both scopes
+        are honoured; the stage-local set is cleared at each stage boundary while
+        the run-sticky set persists (Phase G)."""
+        return self._excluded[provider] | self._excluded_stage[provider]
+
     def _candidates(self, provider: ProviderInfo) -> list[ModelInfo]:
         """Bounded, ranked, compatible models for a provider (ADR-029).
 
@@ -306,7 +328,7 @@ class AdaptiveExecutor:
             # configured model name if set, else a single synthetic candidate so
             # the provider is still executable - one attempt, no model failover.
             configured = self._configured_model(provider.name)
-            if provider.name in self._excluded and configured in self._excluded[provider.name]:
+            if configured in self._ruled_out(provider.name):
                 return []
             name = configured or f"{provider.name}-default"
             candidate = self._synthetic_candidate(provider.name, name)
@@ -323,7 +345,7 @@ class AdaptiveExecutor:
             self._requirements(),
             limit=self._max_models_per_provider,
             configured=self._configured_model(provider.name) or None,
-            excluded=self._excluded[provider.name],
+            excluded=self._ruled_out(provider.name),
         )
         return [entry.model for entry in scored]
 
@@ -351,7 +373,7 @@ class AdaptiveExecutor:
             self._requirements(),
             limit=self._max_models_per_provider,
             configured=self._configured_model(provider.name) or None,
-            excluded=self._excluded[provider.name] | exclude,
+            excluded=self._ruled_out(provider.name) | exclude,
         )
         return [entry.model for entry in scored]
 
@@ -396,7 +418,16 @@ class AdaptiveExecutor:
         return settings_for_model(self._settings, model)
 
     def _healthy_providers(self) -> list[ProviderInfo]:
-        return [p for p in self._providers if self.report.health[p.name].available]
+        # A provider is usable this stage iff it is not run-disabled (auth /
+        # PROVIDER_RATE_LIMIT, in report.health) AND has not spent its per-stage
+        # model budget (self._provider_stage_disabled, cleared each stage). The
+        # latter is stage-local so budget exhaustion never leaks into later stages
+        # (Phase G).
+        return [
+            p
+            for p in self._providers
+            if self.report.health[p.name].available and p.name not in self._provider_stage_disabled
+        ]
 
     def _next_provider(self, current: ProviderInfo) -> ProviderInfo | None:
         for candidate in self._healthy_providers():
@@ -465,6 +496,14 @@ class AdaptiveExecutor:
             # Reset the per-provider model budget for this stage.
             for tried in self._models_tried.values():
                 tried.clear()
+            # Reset stage-local failure scope (Phase G): models that failed with a
+            # transient/model-local error in a prior stage, and providers that spent
+            # their per-stage model budget, are reconsidered fresh this stage.
+            # Run-sticky state (report.health disables from auth/PROVIDER_RATE_LIMIT,
+            # and self._excluded) is deliberately NOT reset here.
+            for staged in self._excluded_stage.values():
+                staged.clear()
+            self._provider_stage_disabled.clear()
             # Reset the per-stage provider-call budget.
             self._stage_provider_calls = 0
             self._emit(EventType.STAGE_STARTED, stage, index, len(stages), provider, model)
@@ -818,9 +857,16 @@ class AdaptiveExecutor:
     ) -> tuple[ProviderInfo, ModelInfo] | None:
         """Decide the next provider/model, or None to retry the current one."""
         if recovery.disables_provider:
+            # Run-sticky: auth / PROVIDER_RATE_LIMIT (incl. Phase F daily-quota).
+            # The provider is skipped for the rest of the run.
             self.report.health[provider.name].mark_unavailable(recovery.explanation)
         elif recovery.disables_model:
-            self._excluded[provider.name].add(model.name)
+            # Stage-local (Phase G): a transient/model-local failure (server error,
+            # invalid/empty output, context limit, model-unavailable, insufficient
+            # credit) rules the model out for THIS stage only. It is reconsidered in
+            # later stages, since none of these conditions is provider-wide or
+            # necessarily permanent across the whole run.
+            self._excluded_stage[provider.name].add(model.name)
             self._health_for(provider.name, model.name).mark_unavailable(recovery.explanation)
 
         retrying_same = recovery.action in {
@@ -830,7 +876,10 @@ class AdaptiveExecutor:
         if retrying_same and attempts < self._max_attempts:
             return None
 
-        if self.report.health[provider.name].available:
+        if (
+            self.report.health[provider.name].available
+            and provider.name not in self._provider_stage_disabled
+        ):
             # The per-provider cap counts distinct models tried for this stage
             # on this provider. Once that many have been attempted, the
             # provider's budget is spent even if more discovered models remain -
@@ -838,7 +887,7 @@ class AdaptiveExecutor:
             self._models_tried[provider.name].add(model.name)
             budget_left = len(self._models_tried[provider.name]) < self._max_models_per_provider
             if budget_left:
-                already = self._excluded[provider.name] | self._models_tried[provider.name]
+                already = self._ruled_out(provider.name) | self._models_tried[provider.name]
                 siblings = self._candidates_excluding(provider, already)
                 if recovery.action is Action.LARGER_CONTEXT_MODEL:
                     siblings = [
@@ -853,12 +902,14 @@ class AdaptiveExecutor:
                         f"  trying {provider.name}/{replacement.name} ({recovery.explanation})"
                     )
                     return provider, replacement
-            self.report.health[provider.name].mark_unavailable(
-                f"model budget spent ({self._max_models_per_provider} models tried)"
-            )
+            # Budget spent for THIS stage only (Phase G): mark the provider
+            # stage-disabled, NOT run-unavailable, so it is eligible again next
+            # stage. Run-sticky disables (auth / PROVIDER_RATE_LIMIT) still use
+            # report.health above.
+            self._provider_stage_disabled.add(provider.name)
             self._report_line(
                 f"  {provider.name} exhausted after "
-                f"{len(self._models_tried[provider.name])} model(s)"
+                f"{len(self._models_tried[provider.name])} model(s) this stage"
             )
 
         replacement_provider = self._next_provider(provider)
