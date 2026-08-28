@@ -91,14 +91,23 @@ _PATTERNS: tuple[tuple[FailureKind, tuple[str, ...]], ...] = (
         # transient rate limit. OpenRouter's free daily cap is shared across ALL
         # :free models, so its "free-models-per-day" 429 means no further free
         # call on this provider will succeed this run - retrying other models
-        # only wastes calls (ADR-034). Matched BEFORE the generic RATE_LIMIT
-        # patterns so it wins. Kept deliberately specific to daily/account
+        # only wastes calls (ADR-034). Gemini's free-tier daily cap is the same
+        # shape: a 429 whose quota id is "GenerateRequestsPerDayPerProject-FreeTier"
+        # (metric generate_content_free_tier_requests) is a per-project/day limit
+        # shared across every Gemini model, so the provider is done for the run.
+        # The needles below are the daily-specific wording only ("requestsperday",
+        # "perday"); they deliberately do NOT include "resource_exhausted" (which
+        # also appears on transient per-MINUTE limits like RequestsPerMinutePer
+        # Project) so a short-window 429 stays transient. Matched BEFORE the generic
+        # RATE_LIMIT patterns so it wins. Kept deliberately specific to daily/account
         # exhaustion wording, never plain "429" or "rate limited".
         FailureKind.PROVIDER_RATE_LIMIT,
         (
             "free-models-per-day",
             "free model requests per day",
             "requests per day",
+            "requestsperday",
+            "perday",
             "daily limit",
             "quota exceeded for",
         ),
