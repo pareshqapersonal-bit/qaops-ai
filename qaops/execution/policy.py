@@ -219,8 +219,13 @@ def classify_failure(message: str) -> FailureKind:
 # a rate limit, a 402 insufficient credit, a 404 an unavailable model, a
 # 401/403 authentication. 5xx is a transient server error (retry as timeout-like
 # backoff). We deliberately do NOT map 429 to provider-wide exhaustion - scope
-# is decided separately below.
+# is decided separately below. A 400 (bad request) is rejected by this specific
+# model/request; there is no dedicated request-invalid kind, so it maps to
+# MODEL_UNAVAILABLE (drop this model, try the next) - the closest honest label,
+# and it shares UNKNOWN's action/scope so recovery behaviour is unchanged; the
+# only difference is that a 400 is no longer lumped into opaque UNKNOWN.
 _STATUS_TO_KIND: dict[int, FailureKind] = {
+    400: FailureKind.MODEL_UNAVAILABLE,
     401: FailureKind.AUTHENTICATION,
     403: FailureKind.AUTHENTICATION,
     402: FailureKind.INSUFFICIENT_CREDIT,
