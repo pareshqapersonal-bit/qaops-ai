@@ -27,6 +27,13 @@ Materiality rule (important - do not over-question):
 - The goal is COMPLETE manual-QA coverage, NOT the maximum number of gaps. If the requirement is already sufficiently testable, return no gap for it. An empty list is a valid, correct answer for a fully specified requirement.
 - Do not ask the user to describe something already clearly stated in the requirement.
 
+Accepted clarifications (a requirement's "assumptions"):
+- Each requirement may carry an "assumptions" list. Some entries are answers already supplied through the clarification workflow (typically phrased like "Clarification (<question>) -> <answer>"). Treat these as AUTHORITATIVE additional context, exactly as if the document itself stated them.
+- You MUST incorporate a requirement's assumptions when deciding whether that requirement is still under-specified. If an assumption supplies the specific information a gap would ask for, that information is now COVERED - do not report it as a gap.
+- Do NOT report a gap solely because the original source document lacks a detail that has since been supplied by an accepted clarification in that requirement's assumptions.
+- This does NOT mean assumptions blanket-resolve gaps. An assumption closes a gap ONLY when its content actually supplies the missing information relevant to that gap. Keep reporting genuinely unresolved gaps, and do not treat an unrelated assumption as satisfying an unrelated requirement.
+- Do not infer information the clarification does not actually provide; only what it explicitly states is covered.
+
 Do NOT raise implementation or automation-location gaps. Unless the requirement itself makes the value part of the acceptance criteria, never treat as a gap: CSS selectors, DOM selectors, data-testid, DOM attributes, CSS class names, z-index, CSS properties/values, exact padding/margins, internal component structure, or automation locators. For example, asking which page Trending Searches should appear on is a valid QA gap; asking what CSS selector identifies it is not. Asking whether Proceed to Checkout stays visible while scrolling is valid; asking what z-index it uses is not.
 
 Rules:
