@@ -266,7 +266,9 @@ def discover_openrouter_models() -> list[ModelInfo]:
         if isinstance(pricing, dict):
             prompt_cost = pricing.get("prompt")
             free = str(prompt_cost) in {"0", "0.0", "-1"} or name.endswith(":free")
-        text_capable = _is_text_capable(entry.get("architecture"))
+        architecture = entry.get("architecture")
+        text_capable = _is_text_capable(architecture)
+        images_supported = _is_image_capable(architecture)
         models.append(
             ModelInfo(
                 name=name,
@@ -275,6 +277,7 @@ def discover_openrouter_models() -> list[ModelInfo]:
                 max_output_tokens=max_output,
                 free=free,
                 text_capable=text_capable,
+                images_supported=images_supported,
                 priority=100,
             )
         )
@@ -307,6 +310,27 @@ def _is_text_capable(architecture: object) -> bool:
 
     # Output must be text (a QA artifact is text/JSON); input must accept text.
     return _has_text(inputs, default=True) and _has_text(outputs, default=True)
+
+
+def _is_image_capable(architecture: object) -> bool:
+    """Whether a discovered model accepts image input, from OpenRouter's
+    ``architecture.input_modalities`` metadata.
+
+    Mirrors ``_is_text_capable`` but reads the ``image`` input modality. Unlike
+    text (which defaults True when metadata is absent), image capability defaults
+    False when the metadata is missing or malformed: routing an image to a model
+    we cannot confirm is multimodal would fail, so we only mark a model
+    image-capable when OpenRouter explicitly lists ``image`` among its input
+    modalities (e.g. nvidia/nemotron-nano-12b-v2-vl:free). This never widens the
+    text-stage pool - it only lets a genuinely multimodal free model become
+    eligible for image stages under the existing capability filter.
+    """
+    if not isinstance(architecture, dict):
+        return False
+    inputs = architecture.get("input_modalities")
+    if not isinstance(inputs, list) or not inputs:
+        return False
+    return any(isinstance(item, str) and item.casefold() == "image" for item in inputs)
 
 
 def discover_ollama_models(host: str = "http://localhost:11434") -> list[ModelInfo]:
