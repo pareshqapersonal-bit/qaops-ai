@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from qaops.clarification.agent import ClarificationAgent
 from qaops.clarification.enums import ClarificationStatus, QuestionStatus
-from qaops.clarification.gap_diff import diff_gaps, gap_signature
+from qaops.clarification.gap_diff import GapDiff, diff_gaps, gap_signature
 from qaops.clarification.models import ClarificationState
 from qaops.clarification.readiness import compute_readiness
 from qaops.clarification.state_store import (
@@ -348,7 +348,13 @@ class ClarificationService:
 
             readiness = compute_readiness(
                 updated_questions,
-                critical_gaps=_unanswered_blocking(updated_questions),
+                # Critical gaps keeping the run not-ready = unanswered blocking
+                # questions PLUS blocker gaps that re-analysis still reports after an
+                # answer (PERSISTING). The latter (Option A) ensures an answered-but-
+                # unresolved blocker drives another round within the 5-round budget
+                # instead of the run proceeding as ready.
+                critical_gaps=_unanswered_blocking(updated_questions)
+                + _persisting_blocker_gaps(diff),
                 requirements_total=state.readiness.requirements_total,
             )
             if readiness.ready:
@@ -520,6 +526,19 @@ def _reindex_new_questions(
 
 def _count_blocker_gaps(gap_report: GapReport) -> int:
     return sum(1 for g in gap_report.gaps if g.severity is GapSeverity.BLOCKER)
+
+
+def _persisting_blocker_gaps(diff: GapDiff) -> int:
+    """Blocker-severity gaps that re-analysis still reports and that were already
+    asked but not accepted (classification PERSISTING).
+
+    Such a gap is still open: the prior answer did not make it disappear from the
+    gap report, so it must keep the run not-ready and drive another clarification
+    round (within the 5-round budget), rather than being silently suppressed just
+    because its question was answered. Option A: readiness treats a persisting
+    blocker as an open critical gap. Does not touch gap_diff or lexical identity.
+    """
+    return sum(1 for c in diff.persisting if c.gap.severity is GapSeverity.BLOCKER)
 
 
 def _write_requirements_artifact(path: Path, requirements: Sequence[Requirement]) -> None:

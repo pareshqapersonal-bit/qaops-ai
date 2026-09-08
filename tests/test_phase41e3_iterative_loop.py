@@ -168,8 +168,11 @@ class TestIterativeLoop:
         with _clarify(MockLLMClient([_gap_report("retry policy undefined")])):
             new = svc.submit_answers(ws, _answer_first(state))
         assert len(new.questions) == 1  # no duplicate appended
-        # The blocker was answered, and no new gap -> ready.
-        assert new.readiness.ready is True
+        # Option A: the persisting gap is a BLOCKER that re-analysis still reports,
+        # so the run must NOT go ready just because its question was answered - it
+        # stays in clarification (the answer did not make the blocker disappear).
+        assert new.readiness.ready is False
+        assert new.status is ClarificationStatus.CLARIFYING
 
     def test_asked_signatures_accumulate(self, tmp_path: Path) -> None:
         svc, ws, state = _start(tmp_path)
